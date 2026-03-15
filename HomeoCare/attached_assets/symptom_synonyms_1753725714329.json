@@ -1,0 +1,141 @@
+{
+  "headache": [
+    "pain in head",
+    "migraine",
+    "head pain",
+    "temple ache",
+    "forehead pain",
+    "ache in skull"
+  ],
+  "fever": [
+    "high temperature",
+    "chills",
+    "shivering",
+    "raised body heat",
+    "pyrexia"
+  ],
+  "cough": [
+    "dry cough",
+    "wet cough",
+    "hacking cough",
+    "tickling throat",
+    "whooping",
+    "throat irritation"
+  ],
+  "cold": [
+    "runny nose",
+    "blocked nose",
+    "sneezing",
+    "nasal discharge",
+    "stuffed nose"
+  ],
+  "sore throat": [
+    "throat pain",
+    "throat inflammation",
+    "pharyngitis",
+    "irritated throat",
+    "raw throat"
+  ],
+  "diarrhea": [
+    "loose motion",
+    "frequent stools",
+    "watery stools",
+    "bowel urgency",
+    "runny stool"
+  ],
+  "constipation": [
+    "hard stool",
+    "difficulty in passing stool",
+    "infrequent stool",
+    "dry stool",
+    "no bowel movement"
+  ],
+  "abdominal pain": [
+    "stomach ache",
+    "belly pain",
+    "tummy ache",
+    "cramping",
+    "gut pain"
+  ],
+  "vomiting": [
+    "throwing up",
+    "nausea with expulsion",
+    "retching",
+    "emesis",
+    "projectile vomit"
+  ],
+  "nausea": [
+    "urge to vomit",
+    "sick feeling",
+    "queasiness",
+    "stomach upset"
+  ],
+  "anxiety": [
+    "nervousness",
+    "restlessness",
+    "panic",
+    "worry",
+    "mental tension"
+  ],
+  "fatigue": [
+    "tiredness",
+    "exhaustion",
+    "weakness",
+    "lack of energy",
+    "lethargy"
+  ],
+  "itching": [
+    "skin irritation",
+    "pruritus",
+    "urge to scratch",
+    "scratchy feeling"
+  ],
+  "rash": [
+    "skin eruption",
+    "spots",
+    "red patches",
+    "bumps",
+    "hives"
+  ],
+  "burning sensation": [
+    "heat in skin",
+    "burning pain",
+    "hot feeling",
+    "stinging",
+    "irritation"
+  ],
+  "acidity": [
+    "heartburn",
+    "gastric reflux",
+    "sour belching",
+    "acid reflux",
+    "burning in stomach"
+  ],
+  "indigestion": [
+    "bloating",
+    "gas",
+    "heaviness after food",
+    "dyspepsia",
+    "upset stomach"
+  ],
+  "back pain": [
+    "lower backache",
+    "spinal pain",
+    "ache in back",
+    "lumbar pain",
+    "back stiffness"
+  ],
+  "joint pain": [
+    "arthritis",
+    "swollen joints",
+    "pain in knee",
+    "pain in elbow",
+    "joint stiffness"
+  ],
+  "insomnia": [
+    "sleeplessness",
+    "difficulty sleeping",
+    "cannot fall asleep",
+    "restless sleep"
+  ]
+}

@@ -1,0 +1,132 @@
+[
+  {
+    "term": "Aggravation",
+    "definition": "An increase in the intensity of symptoms after a remedy, often considered a sign the remedy is acting.",
+    "category": "Remedy Action",
+    "synonyms": [
+      "Worsening",
+      "Symptom intensification"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "उलझन या लक्षणों में वृद्धि"
+    }
+  },
+  {
+    "term": "Antidote",
+    "definition": "A substance or remedy that counteracts the effect of another remedy.",
+    "category": "Remedy Action",
+    "synonyms": [
+      "Neutralizer",
+      "Opposing remedy"
+    ],
+    "related_remedies": [
+      "Camphora",
+      "Nux Vomica"
+    ],
+    "translations": {
+      "hi": "एक पदार्थ या उपाय जो किसी अन्य उपाय के प्रभाव को निष्क्रिय करता है।"
+    }
+  },
+  {
+    "term": "Modalities",
+    "definition": "Factors that make a symptom better or worse, such as time of day, position, weather, etc.",
+    "category": "Symptom Descriptor",
+    "synonyms": [
+      "Conditions affecting symptoms"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "ऐसे कारण जो लक्षणों को बेहतर या खराब बनाते हैं।"
+    }
+  },
+  {
+    "term": "Concomitant",
+    "definition": "A symptom that accompanies the main complaint but is seemingly unrelated.",
+    "category": "Symptom Descriptor",
+    "synonyms": [
+      "Accompanying symptom"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "मुख्य समस्या के साथ होने वाला, परंतु असंबंधित लक्षण।"
+    }
+  },
+  {
+    "term": "Potency",
+    "definition": "The strength of a homeopathic remedy, indicated by scales such as X, C, or LM.",
+    "category": "Remedy Preparation",
+    "synonyms": [
+      "Dilution level",
+      "Remedy strength"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "होम्योपैथिक उपाय की शक्ति, जैसे X, C, या LM स्केल में।"
+    }
+  },
+  {
+    "term": "Miasm",
+    "definition": "A theory in homeopathy referring to underlying chronic disease tendencies.",
+    "category": "Theory",
+    "synonyms": [
+      "Chronic predisposition"
+    ],
+    "related_remedies": [
+      "Psorinum",
+      "Medorrhinum",
+      "Syphilinum"
+    ],
+    "translations": {
+      "hi": "गंभीर रोगों की गहरी प्रवृत्तियों को दर्शाने वाला सिद्धांत।"
+    }
+  },
+  {
+    "term": "Repertory",
+    "definition": "A reference book or software listing symptoms with corresponding remedies.",
+    "category": "Reference Tool",
+    "synonyms": [
+      "Symptom index"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "लक्षणों और संबंधित औषधियों की सूची वाली संदर्भ पुस्तक।"
+    }
+  },
+  {
+    "term": "Materia Medica",
+    "definition": "A detailed book of remedy profiles and their indications.",
+    "category": "Reference Tool",
+    "synonyms": [
+      "Remedy guide"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "औषधि जानकारी और उपयोगों का विस्तृत विवरण।"
+    }
+  },
+  {
+    "term": "Rubric",
+    "definition": "A specific symptom entry in a repertory.",
+    "category": "Reference Tool",
+    "synonyms": [
+      "Symptom category"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "रिपर्टरी में किसी विशेष लक्षण का प्रविष्टि।"
+    }
+  },
+  {
+    "term": "Law of Similars",
+    "definition": "The principle that a substance causing symptoms in a healthy person can cure similar symptoms in a sick person.",
+    "category": "Principle",
+    "synonyms": [
+      "Like cures like"
+    ],
+    "related_remedies": [],
+    "translations": {
+      "hi": "जो लक्षण किसी स्वस्थ व्यक्ति में उत्पन्न करता है, वही औषधि रोगी के समान लक्षणों को ठीक कर सकती है।"
+    }
+  }
+]

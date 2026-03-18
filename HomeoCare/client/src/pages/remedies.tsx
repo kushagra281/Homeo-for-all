@@ -1,4 +1,4 @@
- import { useParams } from "wouter";
+import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Brain, Heart, Book, Users, Stethoscope } from "lucide-react";
 import Header from "@/components/header";

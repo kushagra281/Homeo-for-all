@@ -56,7 +56,7 @@ export class MemStorage implements IStorage {
               symptom_mappings: this.createSymptomMappings([symptomObj.Head, ...(symptomObj.Chest ? [symptomObj.Chest] : [])]),
               modalities: { better: ["rest", "pressure"], worse: ["movement", "light"] },
               potencies: ["6C", "30C", "200C"],
-              age_groups: index % 3 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"], // Some remedies not for children
+              age_groups: index % 3 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"],
               genders: index % 4 === 0 ? ["male"] : index % 4 === 1 ? ["female"] : ["male", "female", "any"],
               synonym_names: [remedyName.toLowerCase()]
             };
@@ -82,7 +82,7 @@ export class MemStorage implements IStorage {
               symptom_mappings: this.createSymptomMappings([symptomObj.Mind, ...(symptomObj.Head ? [symptomObj.Head] : [])]),
               modalities: { better: ["company", "warmth"], worse: ["alone", "cold"] },
               potencies: ["30C", "200C", "1M"],
-              age_groups: index % 2 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"], // Some mind remedies not for children
+              age_groups: index % 2 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"],
               genders: index % 3 === 0 ? ["female"] : index % 3 === 1 ? ["male"] : ["male", "female", "any"],
               synonym_names: [remedyName.toLowerCase()]
             };
@@ -95,7 +95,6 @@ export class MemStorage implements IStorage {
       Object.entries(headSectionData).forEach(([symptom, remedyList]) => {
         if (Array.isArray(remedyList)) {
           remedyList.forEach(remedyName => {
-            // Check if this remedy doesn't already exist
             const existingRemedy = Array.from(this.remedies.values()).find(r => r.name === remedyName && r.category === "HEAD");
             if (!existingRemedy) {
               const remedy: Remedy = {
@@ -124,7 +123,6 @@ export class MemStorage implements IStorage {
       Object.entries(mindSectionData).forEach(([symptom, remedyList]) => {
         if (Array.isArray(remedyList)) {
           remedyList.forEach(remedyName => {
-            // Check if this remedy doesn't already exist
             const existingRemedy = Array.from(this.remedies.values()).find(r => r.name === remedyName && r.category === "MIND");
             if (!existingRemedy) {
               const remedy: Remedy = {
@@ -149,10 +147,44 @@ export class MemStorage implements IStorage {
         }
       });
 
+      // ── NEW: Load 5000 symptoms database ──────────────────────────
+      const symptomsData = JSON.parse(readFileSync(join(process.cwd(), 'attached_assets/homeopathy_5000_symptoms.json'), 'utf-8'));
+      symptomsData.symptoms.forEach((sym: any) => {
+        sym.remedies.forEach((r: any) => {
+          const remedy: Remedy = {
+            id: randomUUID(),
+            name: r.name,
+            category: sym.category.toUpperCase(),
+            condition: sym.rubric,
+            description: `${r.name} is indicated for: ${sym.rubric}. Location: ${sym.location}.`,
+            dosage: "30C potency, 3 pellets under tongue as needed",
+            symptoms: [sym.rubric, sym.location],
+            keywords: [
+              r.name.toLowerCase(),
+              sym.category.toLowerCase(),
+              sym.location.toLowerCase(),
+              ...sym.rubric.toLowerCase().split(/[\s\-]+/).filter((w: string) => w.length > 2),
+              ...sym.modalities.worse.map((w: string) => w.toLowerCase()),
+              ...sym.modalities.better.map((b: string) => b.toLowerCase()),
+            ],
+            symptom_mappings: this.createSymptomMappings([sym.rubric, sym.location]),
+            modalities: {
+              better: sym.modalities.better,
+              worse: sym.modalities.worse,
+            },
+            potencies: ["6C", "30C", "200C"],
+            age_groups: ["child", "adult", "senior"],
+            genders: ["male", "female", "any"],
+            synonym_names: [r.name.toLowerCase()],
+          };
+          this.remedies.set(remedy.id, remedy);
+        });
+      });
+      // ── END: 5000 symptoms database ───────────────────────────────
+
       console.log(`Loaded ${this.remedies.size} authentic homeopathy remedies from database`);
     } catch (error) {
       console.error('Error loading remedy database:', error);
-      // Fallback to basic remedies if database loading fails
       this.loadFallbackRemedies();
     }
   }
@@ -170,7 +202,7 @@ export class MemStorage implements IStorage {
         symptom_mappings: this.createSymptomMappings(["Sudden onset", "Throbbing pain", "Heat sensation"]),
         modalities: { better: ["rest", "darkness"], worse: ["light", "noise"] },
         potencies: ["6C", "30C", "200C"],
-        age_groups: ["adult", "senior"], // Not safe for children
+        age_groups: ["adult", "senior"],
         genders: ["male", "female", "any"],
         synonym_names: ["belladonna", "deadly nightshade"]
       },
@@ -185,16 +217,16 @@ export class MemStorage implements IStorage {
         symptom_mappings: this.createSymptomMappings(["Restlessness", "Anxiety", "Perfectionism"]),
         modalities: { better: ["warmth", "company"], worse: ["cold", "alone"] },
         potencies: ["30C", "200C", "1M"],
-        age_groups: ["adult", "senior"], // Not safe for children
-        genders: ["female"], // Female-specific remedy
+        age_groups: ["adult", "senior"],
+        genders: ["female"],
         synonym_names: ["arsenicum album", "arsenic"]
       }
     ];
 
     basicRemedies.forEach(remedy => {
       const id = randomUUID();
-      const fullRemedy: Remedy = { 
-        ...remedy, 
+      const fullRemedy: Remedy = {
+        ...remedy,
         id,
         keywords: remedy.keywords || [],
         symptom_mappings: remedy.symptom_mappings || {},
@@ -207,8 +239,6 @@ export class MemStorage implements IStorage {
       this.remedies.set(id, fullRemedy);
     });
   }
-
-
 
   async getRemediesByCategory(category: string): Promise<Remedy[]> {
     return Array.from(this.remedies.values()).filter(
@@ -223,13 +253,12 @@ export class MemStorage implements IStorage {
   private createSymptomMappings(symptoms: string[]): Record<string, number> {
     const mappings: Record<string, number> = {};
     symptoms.forEach((symptom, index) => {
-      const weight = Math.max(0.3, 1 - (index * 0.1)); // Higher weight for primary symptoms
+      const weight = Math.max(0.3, 1 - (index * 0.1));
       mappings[symptom.toLowerCase()] = weight;
-      
-      // Add synonym mappings
+
       const synonyms = this.getSymptomSynonyms(symptom);
       synonyms.forEach(synonym => {
-        mappings[synonym.toLowerCase()] = weight * 0.8; // Slightly lower weight for synonyms
+        mappings[synonym.toLowerCase()] = weight * 0.8;
       });
     });
     return mappings;
@@ -244,7 +273,7 @@ export class MemStorage implements IStorage {
       "throbbing": ["pulsating", "beating", "hammering", "pounding"],
       "sudden onset": ["acute", "rapid", "quick", "immediate"]
     };
-    
+
     const lowerSymptom = symptom.toLowerCase();
     return synonymMap[lowerSymptom] || [];
   }
@@ -252,32 +281,24 @@ export class MemStorage implements IStorage {
   async searchRemediesByKeyword(keyword: string, category?: string): Promise<Remedy[]> {
     const searchTerm = keyword.toLowerCase().trim();
     if (!searchTerm) return [];
-    
+
     let filteredRemedies = Array.from(this.remedies.values());
-    
-    // Filter by category if specified
+
     if (category) {
-      filteredRemedies = filteredRemedies.filter(remedy => 
+      filteredRemedies = filteredRemedies.filter(remedy =>
         remedy.category.toLowerCase() === category.toLowerCase()
       );
     }
-    
+
     return filteredRemedies.filter(remedy => {
-      // Search in keywords array
       const keywordMatch = remedy.keywords?.some(k => k.includes(searchTerm));
-      
-      // Search in name, condition, description, and symptoms
       const nameMatch = remedy.name.toLowerCase().includes(searchTerm);
       const conditionMatch = remedy.condition.toLowerCase().includes(searchTerm);
       const descriptionMatch = remedy.description.toLowerCase().includes(searchTerm);
       const symptomMatch = remedy.symptoms.some(s => s.toLowerCase().includes(searchTerm));
-      
-      // Search in synonym names
       const synonymMatch = remedy.synonym_names?.some(s => s.includes(searchTerm));
-      
-      // Search in symptom mappings
       const mappingMatch = remedy.symptom_mappings && Object.keys(remedy.symptom_mappings).some(s => s.includes(searchTerm));
-      
+
       return keywordMatch || nameMatch || conditionMatch || descriptionMatch || symptomMatch || synonymMatch || mappingMatch;
     });
   }
@@ -285,21 +306,16 @@ export class MemStorage implements IStorage {
   async scoreRemediesBySymptoms(symptoms: string[], filters?: RemedyFilters): Promise<RemedyScore[]> {
     const allRemedies = Array.from(this.remedies.values());
     const scoredRemedies: RemedyScore[] = [];
-    
+
     for (const remedy of allRemedies) {
-      // Apply filters first
       if (!this.passesFilters(remedy, filters)) continue;
-      
+
       let totalScore = 0;
       let matchingSymptoms: string[] = [];
-      let maxPossibleScore = 0;
-      
-      // Calculate symptom matching score
+
       for (const inputSymptom of symptoms) {
         const inputLower = inputSymptom.toLowerCase();
-        maxPossibleScore += 1;
-        
-        // Check direct symptom matches
+
         for (const remedySymptom of remedy.symptoms) {
           if (remedySymptom.toLowerCase().includes(inputLower) || inputLower.includes(remedySymptom.toLowerCase())) {
             totalScore += 0.9;
@@ -307,8 +323,7 @@ export class MemStorage implements IStorage {
             break;
           }
         }
-        
-        // Check symptom mappings with weights
+
         if (remedy.symptom_mappings) {
           for (const [mappedSymptom, weight] of Object.entries(remedy.symptom_mappings)) {
             if (mappedSymptom.includes(inputLower) || inputLower.includes(mappedSymptom)) {
@@ -318,8 +333,7 @@ export class MemStorage implements IStorage {
             }
           }
         }
-        
-        // Check keywords
+
         if (remedy.keywords) {
           for (const keyword of remedy.keywords) {
             if (keyword.includes(inputLower) || inputLower.includes(keyword)) {
@@ -330,65 +344,63 @@ export class MemStorage implements IStorage {
           }
         }
       }
-      
+
       if (totalScore > 0) {
         const normalizedScore = Math.min(100, (totalScore / Math.max(symptoms.length, 1)) * 100);
         const confidence = Math.min(100, (matchingSymptoms.length / symptoms.length) * 100);
-        
+
         scoredRemedies.push({
           remedy,
           score: Math.round(normalizedScore),
-          matching_symptoms: [...new Set(matchingSymptoms)], // Remove duplicates
+          matching_symptoms: [...new Set(matchingSymptoms)],
           confidence: Math.round(confidence)
         });
       }
     }
-    
-    // Sort by score descending
+
     return scoredRemedies.sort((a, b) => b.score - a.score);
   }
 
   private passesFilters(remedy: Remedy, filters?: RemedyFilters): boolean {
     if (!filters) return true;
-    
+
     if (filters.age_group && remedy.age_groups && !remedy.age_groups.includes(filters.age_group)) {
       return false;
     }
-    
+
     if (filters.gender && remedy.genders && !remedy.genders.includes(filters.gender) && !remedy.genders.includes("any")) {
       return false;
     }
-    
+
     if (filters.potency && remedy.potencies && !remedy.potencies.includes(filters.potency)) {
       return false;
     }
-    
+
     if (filters.symptom_location && remedy.symptoms) {
-      const hasLocationMatch = remedy.symptoms.some(symptom => 
+      const hasLocationMatch = remedy.symptoms.some(symptom =>
         symptom.toLowerCase().includes(filters.symptom_location!.toLowerCase())
-      ) || remedy.keywords?.some(keyword => 
+      ) || remedy.keywords?.some(keyword =>
         keyword.includes(filters.symptom_location!.toLowerCase())
       );
       if (!hasLocationMatch) return false;
     }
-    
+
     if (filters.condition_type) {
-      const isAcute = remedy.keywords?.some(k => 
+      const isAcute = remedy.keywords?.some(k =>
         ["acute", "sudden", "rapid", "immediate", "emergency"].includes(k.toLowerCase())
       );
-      const isChronic = remedy.keywords?.some(k => 
+      const isChronic = remedy.keywords?.some(k =>
         ["chronic", "constitutional", "long-term", "persistent"].includes(k.toLowerCase())
       );
-      
+
       if (filters.condition_type === "acute" && !isAcute) return false;
       if (filters.condition_type === "chronic" && !isChronic) return false;
     }
-    
+
     return true;
   }
 
   async getQuestionTree(bodySystem: string): Promise<DiagnosticQuestion[]> {
-    // Return diagnostic questions specific to body system
     const questionTrees: Record<string, DiagnosticQuestion[]> = {
       "HEAD": [
         {
@@ -402,7 +414,7 @@ export class MemStorage implements IStorage {
         {
           id: "head_quality",
           question: "How would you describe the pain quality?",
-          type: "single", 
+          type: "single",
           options: ["Throbbing", "Sharp", "Dull", "Pressing", "Burning"],
           weight: 0.9,
           body_system: "HEAD"
@@ -435,14 +447,14 @@ export class MemStorage implements IStorage {
         }
       ]
     };
-    
+
     return questionTrees[bodySystem.toUpperCase()] || [];
   }
 
   async createRemedy(insertRemedy: InsertRemedy): Promise<Remedy> {
     const id = randomUUID();
-    const remedy: Remedy = { 
-      ...insertRemedy, 
+    const remedy: Remedy = {
+      ...insertRemedy,
       id,
       keywords: insertRemedy.keywords || [],
       symptom_mappings: insertRemedy.symptom_mappings || {},

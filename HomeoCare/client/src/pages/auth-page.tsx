@@ -12,35 +12,26 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: ""
-  })
+  const [form, setForm] = useState({ name: "", email: "", password: "" })
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
     setError("")
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError("")
-
     try {
       if (isLogin) {
         await signIn(form.email, form.password)
       } else {
-        if (!form.name.trim()) {
-          setError("Name is required")
-          setLoading(false)
-          return
-        }
+        if (!form.name.trim()) { setError("Name is required"); setLoading(false); return }
         await signUp(form.email, form.password, form.name)
       }
       setLocation("/")
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message || "Something went wrong")
     } finally {
       setLoading(false)
@@ -51,10 +42,10 @@ export default function AuthPage() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center px-4">
       <Card className="w-full max-w-md p-8 shadow-lg">
 
-        {/* Logo / Title */}
+        {/* Logo — also a home button */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl">🌿</span>
+            <span className="text-white text-3xl">🌿</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">HomeoWell</h1>
           <p className="text-gray-500 text-sm mt-1">Homeopathic Remedy Finder</p>
@@ -86,13 +77,11 @@ export default function AuthPage() {
             <div>
               <Label htmlFor="name">Full Name</Label>
               <Input
-                id="name"
-                name="name"
+                id="name" name="name"
                 placeholder="Enter your name"
                 value={form.name}
                 onChange={handleChange}
-                className="mt-1"
-                required
+                className="mt-1" required
               />
             </div>
           )}
@@ -100,29 +89,22 @@ export default function AuthPage() {
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
-              id="email"
-              name="email"
-              type="email"
+              id="email" name="email" type="email"
               placeholder="Enter your email"
               value={form.email}
               onChange={handleChange}
-              className="mt-1"
-              required
+              className="mt-1" required
             />
           </div>
 
           <div>
             <Label htmlFor="password">Password</Label>
             <Input
-              id="password"
-              name="password"
-              type="password"
+              id="password" name="password" type="password"
               placeholder="Enter your password"
               value={form.password}
               onChange={handleChange}
-              className="mt-1"
-              required
-              minLength={6}
+              className="mt-1" required minLength={6}
             />
           </div>
 
@@ -134,14 +116,13 @@ export default function AuthPage() {
 
           <Button
             type="submit"
-            className="w-full bg-green-600 hover:bg-green-700 text-white py-2"
+            className="w-full bg-green-600 hover:bg-green-700 text-white py-5"
             disabled={loading}
           >
             {loading ? "Please wait..." : isLogin ? "Login" : "Create Account"}
           </Button>
         </form>
 
-        {/* Switch mode */}
         <p className="text-center text-sm text-gray-500 mt-6">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
@@ -149,16 +130,6 @@ export default function AuthPage() {
             className="text-green-600 font-medium hover:underline"
           >
             {isLogin ? "Sign Up" : "Login"}
-          </button>
-        </p>
-
-        {/* Skip login */}
-        <p className="text-center mt-3">
-          <button
-            onClick={() => setLocation("/")}
-            className="text-xs text-gray-400 hover:text-gray-600"
-          >
-            Continue without login →
           </button>
         </p>
       </Card>

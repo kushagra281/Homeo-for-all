@@ -1,72 +1,37 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage, type RemedyFilters } from "./storage";
-import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Search remedies by keyword with optional category filter
-  app.get("/api/remedies/search/:keyword", async (req, res) => {
-    try {
-      const keyword = req.params.keyword;
-      const category = req.query.category as string;
-      const remedies = await storage.searchRemediesByKeyword(keyword, category);
-      res.json(remedies);
-    } catch (error) {
-      console.error("Error searching remedies:", error);
-      res.status(500).json({ message: "Failed to search remedies" });
-    }
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", message: "HomeoWell API running", database: "supabase" });
   });
 
-  // Score remedies by symptoms with filters
+  // Keep this endpoint for compatibility but it now just returns empty
+  // Real scoring happens in frontend via Supabase directly
   app.post("/api/remedies/score", async (req, res) => {
     try {
       const { symptoms, filters } = req.body;
-      
-      if (!symptoms || !Array.isArray(symptoms)) {
-        return res.status(400).json({ message: "Symptoms array is required" });
+      if (!symptoms || symptoms.length === 0) {
+        return res.json([]);
       }
-
-      const scoredRemedies = await storage.scoreRemediesBySymptoms(symptoms, filters);
-      res.json(scoredRemedies);
+      // Return a signal to frontend to use Supabase directly
+      res.json({ useSupabase: true, symptoms, filters });
     } catch (error) {
-      console.error("Error scoring remedies:", error);
-      res.status(500).json({ message: "Failed to score remedies" });
+      console.error("Score error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // Get diagnostic questions for body system
-  app.get("/api/questions/:bodySystem", async (req, res) => {
-    try {
-      const bodySystem = req.params.bodySystem;
-      const questions = await storage.getQuestionTree(bodySystem);
-      res.json(questions);
-    } catch (error) {
-      console.error("Error fetching questions:", error);
-      res.status(500).json({ message: "Failed to fetch questions" });
-    }
-  });
-
-  // Get remedies by category
+  // Remedies by category
   app.get("/api/remedies/:category", async (req, res) => {
-    try {
-      const category = req.params.category.toUpperCase();
-      const remedies = await storage.getRemediesByCategory(category);
-      res.json(remedies);
-    } catch (error) {
-      console.error("Error fetching remedies:", error);
-      res.status(500).json({ message: "Failed to fetch remedies" });
-    }
+    res.json({ message: "Use Supabase client directly", category: req.params.category });
   });
 
-  // Get all remedies
-  app.get("/api/remedies", async (req, res) => {
-    try {
-      const remedies = await storage.getAllRemedies();
-      res.json(remedies);
-    } catch (error) {
-      console.error("Error fetching all remedies:", error);
-      res.status(500).json({ message: "Failed to fetch remedies" });
-    }
+  // Search
+  app.get("/api/remedies/search", async (req, res) => {
+    res.json({ message: "Use Supabase client directly" });
   });
 
   const httpServer = createServer(app);

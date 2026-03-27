@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useLocation } from "wouter"
-import { Search, LogOut, User, Clock, ChevronRight, Paperclip, ArrowLeft, Languages } from "lucide-react"
+import { Search, LogOut, User, Clock, ChevronRight, Paperclip, ArrowLeft, Globe, X } from "lucide-react"
 import { getCurrentUser, signOut, getSearchHistory } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 
 const RUBRIC_CATEGORIES = [
   { name: "Mind", icon: "🧠", desc: "Mental & Emotional" },
@@ -44,10 +45,11 @@ function getCommonSymptoms(category: string): string[] {
     "Hands, Legs & Back": ["Joint pain", "Back pain", "Stiffness", "Swollen joints"],
     "Urinary System": ["Burning urination", "Frequent urination", "UTI symptoms"],
     "Heart": ["Palpitations", "Chest pain", "High BP symptoms"],
-    "Eye": ["Redness", "Itching", "Watering", "Pain"],
-    "Ear": ["Earache", "Tinnitus", "Discharge"],
-    "Nose": ["Blocked nose", "Running nose", "Sneezing"],
+    "Eye": ["Redness", "Itching eyes", "Watering", "Pain in eye"],
+    "Ear": ["Earache", "Ringing in ear", "Ear discharge"],
+    "Nose": ["Blocked nose", "Running nose", "Sneezing fits"],
     "Throat": ["Sore throat", "Difficulty swallowing", "Hoarseness"],
+    "Female Genitalia": ["Irregular menses", "Painful periods", "White discharge", "PMS"],
   }
   return map[category] || ["Pain", "Swelling", "Discharge", "Weakness", "Fever"]
 }
@@ -60,33 +62,39 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [categoryQuery, setCategoryQuery] = useState("")
+  const [showTranslate, setShowTranslate] = useState(false)
+  const translateRef = useRef<HTMLDivElement>(null)
 
-  // Google Translate init
+  // Load Google Translate script
   useEffect(() => {
-    const addGoogleTranslate = () => {
-      if (!(window as any).google?.translate) {
-        const script = document.createElement("script")
-        script.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
-        script.async = true
-        document.body.appendChild(script)
-        ;(window as any).googleTranslateElementInit = () => {
-          new (window as any).google.translate.TranslateElement(
-            { pageLanguage: "en", includedLanguages: "hi,en,ur,gu,mr,pa,bn,ta,te,kn,ml", layout: 0 },
-            "google_translate_element"
-          )
-        }
-      }
+    if ((window as any).googleTranslateLoaded) return
+    ;(window as any).googleTranslateLoaded = true
+    ;(window as any).googleTranslateElementInit = () => {
+      new (window as any).google.translate.TranslateElement({
+        pageLanguage: "en",
+        includedLanguages: "hi,en,ur,gu,mr,pa,bn,ta,te,kn,ml,ar,fr,de,es,zh-CN",
+        layout: (window as any).google?.translate?.TranslateElement?.InlineLayout?.SIMPLE,
+        autoDisplay: false,
+      }, "google_translate_element")
     }
-    addGoogleTranslate()
+    const script = document.createElement("script")
+    script.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+    script.async = true
+    document.head.appendChild(script)
   }, [])
 
   useEffect(() => {
     getCurrentUser().then(u => {
       if (!u) { setLocation("/auth"); return }
       setUser(u)
-      getSearchHistory().then(h => setHistory(h || []))
+      loadHistory()
     })
   }, [])
+
+  const loadHistory = async () => {
+    const h = await getSearchHistory()
+    setHistory(h || [])
+  }
 
   const handleSearch = (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -101,7 +109,11 @@ export default function Home() {
     setLocation(`/symptom-analysis?${params.toString()}`)
   }
 
-  const handleFileUpload = () => setLocation(`/symptom-analysis?category=Clinical`)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      setLocation(`/symptom-analysis?category=Clinical`)
+    }
+  }
 
   const handleLogout = async () => {
     await signOut()
@@ -117,13 +129,13 @@ export default function Home() {
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <button onClick={() => { setSelectedCategory(null); setCategoryQuery("") }}
               className="flex items-center gap-2 hover:opacity-80">
-              <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center">
-                <span className="text-xl">🌿</span>
+              <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
+                <span className="text-lg">🌿</span>
               </div>
               <span className="font-bold text-green-700 text-lg">HomeoWell</span>
             </button>
             <button onClick={() => { setSelectedCategory(null); setCategoryQuery("") }}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100">
               <ArrowLeft size={15} /> Back
             </button>
           </div>
@@ -144,9 +156,13 @@ export default function Home() {
               <div className="flex gap-2 mb-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
-                  <Input value={categoryQuery} onChange={e => setCategoryQuery(e.target.value)}
-                    placeholder={`Describe your ${cat.name.toLowerCase()} symptom...`}
-                    className="pl-10 py-5 border-2 border-green-200 focus:border-green-500" autoFocus />
+                  <Input
+                    value={categoryQuery}
+                    onChange={e => setCategoryQuery(e.target.value)}
+                    placeholder=""
+                    className="pl-10 py-5 border-2 border-green-200 focus:border-green-500"
+                    autoFocus
+                  />
                 </div>
                 <Button type="submit" className="bg-green-600 hover:bg-green-700 px-5">Search</Button>
               </div>
@@ -179,12 +195,12 @@ export default function Home() {
   // ── MAIN HOME ────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-      {/* Google Translate hidden element */}
-      <div id="google_translate_element" className="hidden" />
+      {/* Google Translate hidden container */}
+      <div id="google_translate_element" className="hidden" ref={translateRef} />
 
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          {/* Logo as home button — white leaf on green bg */}
+          {/* Logo */}
           <button onClick={() => { setQuery(""); setSelectedCategory(null) }}
             className="flex items-center gap-2 hover:opacity-80 transition">
             <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
@@ -194,32 +210,36 @@ export default function Home() {
           </button>
 
           <div className="flex items-center gap-1.5">
-            {/* Google Translate button */}
+            {/* Translate button */}
             <button
-              onClick={() => {
-                const el = document.getElementById("google_translate_element")
-                if (el) el.classList.toggle("hidden")
-              }}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-green-700 px-2 py-1.5 rounded-lg hover:bg-green-50 border border-gray-200"
+              onClick={() => setShowTranslate(prev => !prev)}
+              className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${showTranslate ? "bg-green-50 border-green-300 text-green-700" : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"}`}
               title="Translate page"
             >
-              <Languages size={14} />
+              <Globe size={14} />
               <span className="hidden sm:inline">Translate</span>
             </button>
 
             {user && (
               <>
                 {/* History button */}
-                <button onClick={() => setShowHistory(!showHistory)}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-green-700 px-2 py-1.5 rounded-lg hover:bg-green-50 border border-gray-200">
+                <button
+                  onClick={() => { setShowHistory(prev => !prev); if (!showHistory) loadHistory() }}
+                  className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${showHistory ? "bg-green-50 border-green-300 text-green-700" : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"}`}
+                >
                   <Clock size={14} />
                   <span className="hidden sm:inline">History</span>
+                  {history.length > 0 && (
+                    <span className="bg-green-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                      {Math.min(history.length, 9)}
+                    </span>
+                  )}
                 </button>
 
-                {/* User info */}
+                {/* User */}
                 <div className="flex items-center gap-1 bg-green-50 px-2 py-1.5 rounded-full border border-green-200">
                   <User size={13} className="text-green-600" />
-                  <span className="hidden sm:inline text-xs text-gray-700 max-w-20 truncate">
+                  <span className="hidden sm:inline text-xs text-gray-700 max-w-24 truncate">
                     {user.user_metadata?.name || user.email?.split("@")[0]}
                   </span>
                 </div>
@@ -233,9 +253,18 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Google Translate widget container */}
-        <div id="google_translate_element"
-          className="hidden bg-gray-50 border-t px-4 py-2 text-xs text-gray-500" />
+        {/* Google Translate dropdown */}
+        {showTranslate && (
+          <div className="bg-green-50 border-t border-green-100 px-4 py-3">
+            <div className="max-w-4xl mx-auto flex items-center gap-3">
+              <Globe size={16} className="text-green-600 shrink-0" />
+              <div id="google_translate_element" className="flex-1" />
+              <button onClick={() => setShowTranslate(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
@@ -250,16 +279,23 @@ export default function Home() {
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={19} />
-                <Input value={query} onChange={e => setQuery(e.target.value)}
-                  placeholder="e.g. headache with fever, anxiety at night, joint pain..."
-                  className="pl-12 pr-4 py-6 text-base rounded-xl border-2 border-green-200 focus:border-green-500 shadow-sm" />
+                <Input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder=""
+                  className="pl-12 pr-4 py-6 text-base rounded-xl border-2 border-green-200 focus:border-green-500 shadow-sm"
+                />
               </div>
 
               {/* Clinical upload */}
               <div className="relative">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  multiple
                   onChange={handleFileUpload}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                />
                 <Button type="button" variant="outline"
                   className="h-full px-3 rounded-xl border-2 border-green-200 hover:border-green-400 flex flex-col items-center justify-center gap-0.5"
                   title="Upload Clinical Report">
@@ -273,34 +309,38 @@ export default function Home() {
               </Button>
             </div>
           </form>
-
-          <div className="flex flex-wrap gap-2 mt-3">
-            {["Headache", "Anxiety", "Fever", "Joint pain", "Insomnia", "Cold"].map(s => (
-              <button key={s}
-                onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(s)}`)}
-                className="text-xs bg-white border border-green-200 text-green-700 px-3 py-1 rounded-full hover:bg-green-50 transition">
-                {s}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* History Panel */}
         {showHistory && (
-          <Card className="mb-6 p-4">
-            <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2 text-sm">
-              <Clock size={15} /> Recent Searches
-            </h3>
+          <Card className="mb-6 p-4 border-green-200">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2 text-sm">
+                <Clock size={15} className="text-green-600" /> Consultation History
+              </h3>
+              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
             {history.length === 0 ? (
-              <p className="text-xs text-gray-400">No search history yet</p>
+              <p className="text-sm text-gray-400 text-center py-4">No history yet. Search for remedies to save history.</p>
             ) : (
-              <div className="space-y-1">
-                {history.slice(0, 5).map((h, i) => (
+              <div className="space-y-2">
+                {history.slice(0, 8).map((h, i) => (
                   <button key={i}
-                    onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(h.symptoms?.join(", ") || "")}`)}
-                    className="w-full text-left flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 group">
-                    <span className="text-sm text-gray-600 truncate">{h.symptoms?.slice(0, 3).join(", ")}</span>
-                    <ChevronRight size={13} className="text-gray-400 group-hover:text-green-600 shrink-0" />
+                    onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(h.symptoms?.slice(0, 3).join(", ") || "")}`)}
+                    className="w-full text-left flex items-center justify-between p-2.5 rounded-lg hover:bg-green-50 group border border-transparent hover:border-green-200 transition">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700 truncate">
+                        {h.symptoms?.slice(0, 3).join(", ")}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {h.created_at ? new Date(h.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}
+                        {h.results?.length > 0 ? ` · ${Math.min(h.results.length, 3)} remedies found` : ""}
+                      </p>
+                    </div>
+                    <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600 shrink-0 ml-2" />
                   </button>
                 ))}
               </div>
@@ -318,7 +358,7 @@ export default function Home() {
                 <div className="text-2xl mb-1">{cat.icon}</div>
                 <div className="font-medium text-sm text-gray-800 group-hover:text-green-700">{cat.name}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{cat.desc}</div>
-                <div className="text-xs text-green-500 mt-1 opacity-0 group-hover:opacity-100 transition">Tap to explore →</div>
+                <div className="text-xs text-green-500 mt-1 opacity-0 group-hover:opacity-100 transition">Tap →</div>
               </button>
             ))}
           </div>

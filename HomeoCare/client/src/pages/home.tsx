@@ -10,62 +10,78 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 
 const RUBRIC_CATEGORIES = [
-  { name: "Mind", icon: "🧠", desc: "Mental & Emotional" },
-  { name: "Head", icon: "👤", desc: "Headache, Vertigo" },
-  { name: "Eye", icon: "👁️", desc: "Vision, Pain" },
-  { name: "Ear", icon: "👂", desc: "Hearing, Tinnitus" },
-  { name: "Nose", icon: "👃", desc: "Cold, Sinusitis" },
-  { name: "Face", icon: "😬", desc: "Facial Pain" },
-  { name: "Mouth", icon: "👄", desc: "Ulcers, Dryness" },
-  { name: "Tongue", icon: "👅", desc: "Coating, Pain" },
-  { name: "Taste", icon: "🫧", desc: "Bitter, Metallic" },
-  { name: "Gums", icon: "🦷", desc: "Swelling, Bleeding" },
-  { name: "Teeth", icon: "🦷", desc: "Toothache, Decay" },
-  { name: "Throat", icon: "🗣️", desc: "Pain, Infection" },
-  { name: "Stomach", icon: "🍽️", desc: "Digestion, Nausea" },
-  { name: "Abdomen", icon: "🫃", desc: "Pain, Bloating" },
-  { name: "Urinary System", icon: "🚻", desc: "Infection, Burning" },
-  { name: "Male Genitalia", icon: "🧬", desc: "Male Complaints" },
-  { name: "Female Genitalia", icon: "🧬", desc: "Female Complaints" },
-  { name: "Heart", icon: "❤️", desc: "Palpitations, Pain" },
-  { name: "Hands, Legs & Back", icon: "🦴", desc: "Joints, Spine" },
-  { name: "Respiration", icon: "🫁", desc: "Breathing, Cough" },
-  { name: "Skin", icon: "🧴", desc: "Rashes, Eruptions" },
-  { name: "Fever", icon: "🌡️", desc: "Temperature, Chills" },
-  { name: "Nervous System", icon: "⚡", desc: "Nerves, Neurological" },
-  { name: "Others", icon: "🔵", desc: "General, Misc" },
+  { name: "Mind",              icon: "🧠", desc: "Mental & Emotional" },
+  { name: "Head",              icon: "👤", desc: "Headache, Vertigo" },
+  { name: "Eye",               icon: "👁️", desc: "Vision, Pain" },
+  { name: "Ear",               icon: "👂", desc: "Hearing, Tinnitus" },
+  { name: "Nose",              icon: "👃", desc: "Cold, Sinusitis" },
+  { name: "Face",              icon: "😬", desc: "Facial Pain" },
+  { name: "Mouth",             icon: "👄", desc: "Ulcers, Dryness" },
+  { name: "Tongue",            icon: "👅", desc: "Coating, Pain" },
+  { name: "Taste",             icon: "🫧", desc: "Bitter, Metallic" },
+  { name: "Gums",              icon: "🦷", desc: "Swelling, Bleeding" },
+  { name: "Teeth",             icon: "🦷", desc: "Toothache, Decay" },
+  { name: "Throat",            icon: "🗣️", desc: "Pain, Infection" },
+  { name: "Stomach",           icon: "🍽️", desc: "Digestion, Nausea" },
+  { name: "Abdomen",           icon: "🫃", desc: "Pain, Bloating" },
+  { name: "Urinary System",    icon: "🚻", desc: "Infection, Burning" },
+  { name: "Male Genitalia",    icon: "🧬", desc: "Male Complaints" },
+  { name: "Female Genitalia",  icon: "🧬", desc: "Female Complaints" },
+  { name: "Heart",             icon: "❤️", desc: "Palpitations, Pain" },
+  { name: "Hands, Legs & Back",icon: "🦴", desc: "Joints, Spine" },
+  { name: "Respiration",       icon: "🫁", desc: "Breathing, Cough" },
+  { name: "Skin",              icon: "🧴", desc: "Rashes, Eruptions" },
+  { name: "Fever",             icon: "🌡️", desc: "Temperature, Chills" },
+  { name: "Nervous System",    icon: "⚡", desc: "Nerves, Neurological" },
+  { name: "Others",            icon: "🔵", desc: "General, Misc" },
 ]
 
 function getCommonSymptoms(category: string): string[] {
   const map: Record<string, string[]> = {
-    "Mind": ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Sleeplessness"],
-    "Head": ["Throbbing headache", "One-sided headache", "Headache with nausea", "Vertigo"],
-    "Fever": ["High fever", "Fever with chills", "Fever with sweating", "Low-grade fever"],
-    "Stomach": ["Nausea", "Acidity", "Bloating", "Loss of appetite", "Vomiting"],
-    "Respiration": ["Dry cough", "Wet cough", "Breathlessness", "Wheezing"],
-    "Skin": ["Itching", "Rash", "Eczema", "Dry skin", "Hives"],
+    "Mind":               ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Sleeplessness"],
+    "Head":               ["Throbbing headache", "One-sided headache", "Headache with nausea", "Vertigo"],
+    "Fever":              ["High fever", "Fever with chills", "Fever with sweating", "Low-grade fever"],
+    "Stomach":            ["Nausea", "Acidity", "Bloating", "Loss of appetite", "Vomiting"],
+    "Respiration":        ["Dry cough", "Wet cough", "Breathlessness", "Wheezing"],
+    "Skin":               ["Itching", "Rash", "Eczema", "Dry skin", "Hives"],
     "Hands, Legs & Back": ["Joint pain", "Back pain", "Stiffness", "Swollen joints"],
-    "Urinary System": ["Burning urination", "Frequent urination", "UTI symptoms"],
-    "Heart": ["Palpitations", "Chest pain", "High BP symptoms"],
-    "Eye": ["Redness", "Itching eyes", "Watering", "Pain in eye"],
-    "Ear": ["Earache", "Ringing in ear", "Ear discharge"],
-    "Nose": ["Blocked nose", "Running nose", "Sneezing fits"],
-    "Throat": ["Sore throat", "Difficulty swallowing", "Hoarseness"],
-    "Female Genitalia": ["Irregular menses", "Painful periods", "White discharge", "PMS"],
-    "Nervous System": ["Numbness", "Tingling", "Weakness", "Trembling"],
+    "Urinary System":     ["Burning urination", "Frequent urination", "UTI symptoms"],
+    "Heart":              ["Palpitations", "Chest pain", "High BP symptoms"],
+    "Eye":                ["Redness", "Itching eyes", "Watering", "Pain in eye"],
+    "Ear":                ["Earache", "Ringing in ear", "Ear discharge"],
+    "Nose":               ["Blocked nose", "Running nose", "Sneezing fits"],
+    "Throat":             ["Sore throat", "Difficulty swallowing", "Hoarseness"],
+    "Female Genitalia":   ["Irregular menses", "Painful periods", "White discharge", "PMS"],
+    "Nervous System":     ["Numbness", "Tingling", "Weakness", "Trembling"],
   }
   return map[category] || ["Pain", "Swelling", "Discharge", "Weakness", "Fever"]
 }
 
+// Language options for translate
+const LANGUAGES = [
+  { code: "hi", name: "हिंदी (Hindi)" },
+  { code: "ur", name: "اردو (Urdu)" },
+  { code: "gu", name: "ગુજરાતી (Gujarati)" },
+  { code: "mr", name: "मराठी (Marathi)" },
+  { code: "pa", name: "ਪੰਜਾਬੀ (Punjabi)" },
+  { code: "bn", name: "বাংলা (Bengali)" },
+  { code: "ta", name: "தமிழ் (Tamil)" },
+  { code: "te", name: "తెలుగు (Telugu)" },
+  { code: "kn", name: "ಕನ್ನಡ (Kannada)" },
+  { code: "ar", name: "العربية (Arabic)" },
+  { code: "en", name: "English" },
+]
+
 export default function Home() {
-  const [, setLocation] = useLocation()
-  const [user, setUser] = useState<any>(null)
-  const [query, setQuery] = useState("")
+  const [, setLocation]       = useLocation()
+  const [user, setUser]       = useState<any>(null)
+  const [query, setQuery]     = useState("")
   const [history, setHistory] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [showHistory, setShowHistory]       = useState(false)
+  const [showTranslate, setShowTranslate]   = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [categoryQuery, setCategoryQuery] = useState("")
+  const [categoryQuery, setCategoryQuery]       = useState("")
 
   useEffect(() => {
     getCurrentUser().then(u => {
@@ -80,7 +96,6 @@ export default function Home() {
       const h = await getSearchHistory()
       setHistory(h || [])
     } catch (e) {
-      console.error("History error:", e)
       setHistory([])
     } finally {
       setHistoryLoading(false)
@@ -115,9 +130,16 @@ export default function Home() {
     if (e.target.files?.length) setLocation(`/symptom-analysis?category=Clinical`)
   }
 
-  const handleTranslate = () => {
-    const translateUrl = `https://translate.google.com/translate?sl=en&tl=hi&u=${encodeURIComponent(window.location.href)}`
-    window.open(translateUrl, "_blank")
+  // Google Translate — opens in new tab with selected language
+  const handleTranslateTo = (langCode: string) => {
+    const url = window.location.href
+    if (langCode === 'en') {
+      window.location.href = url  // reload in English
+      return
+    }
+    const translateUrl = `https://translate.google.com/translate?sl=en&tl=${langCode}&u=${encodeURIComponent(url)}`
+    window.open(translateUrl, '_blank')
+    setShowTranslate(false)
   }
 
   const handleLogout = async () => {
@@ -125,19 +147,14 @@ export default function Home() {
     setLocation("/auth")
   }
 
-  // Format history display
   const formatSymptoms = (h: any) => {
     const syms = Array.isArray(h.symptoms) ? h.symptoms : []
     return syms
       .filter((s: string) =>
-        !s.startsWith("category:") &&
-        !s.startsWith("health history:") &&
-        !s.startsWith("age") &&
-        !s.startsWith("gender:") &&
-        !s.startsWith("disease duration:")
+        !s.startsWith("category:") && !s.startsWith("health history:") &&
+        !s.startsWith("age") && !s.startsWith("gender:") && !s.startsWith("disease")
       )
-      .slice(0, 3)
-      .join(", ") || "Consultation"
+      .slice(0, 3).join(", ") || "Consultation"
   }
 
   const formatTopRemedy = (h: any) => {
@@ -189,7 +206,7 @@ export default function Home() {
             </form>
 
             <p className="text-xs text-gray-400 mb-2">Common symptoms:</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 mb-5">
               {getCommonSymptoms(cat.name).map(s => (
                 <button key={s} onClick={() => handleCategorySearch(selectedCategory, s)}
                   className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-full hover:bg-green-100 transition">
@@ -198,12 +215,10 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="mt-5 pt-4 border-t">
-              <Button onClick={() => handleCategorySearch(selectedCategory)} variant="outline"
-                className="w-full border-green-300 text-green-700 hover:bg-green-50">
-                Browse all {cat.name} remedies with AI questions →
-              </Button>
-            </div>
+            <Button onClick={() => handleCategorySearch(selectedCategory)} variant="outline"
+              className="w-full border-green-300 text-green-700 hover:bg-green-50">
+              Browse all {cat.name} remedies with AI questions →
+            </Button>
           </Card>
         </main>
       </div>
@@ -228,13 +243,44 @@ export default function Home() {
 
           <div className="flex items-center gap-1.5">
 
-            {/* Translate — opens Google Translate */}
-            <button onClick={handleTranslate}
-              className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50 hover:border-green-300 transition"
-              title="Translate page to Hindi or any language">
-              <Globe size={14} />
-              <span className="hidden sm:inline">Translate</span>
-            </button>
+            {/* Translate button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowTranslate(prev => !prev)}
+                className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
+                  showTranslate
+                    ? "bg-green-50 border-green-300 text-green-700"
+                    : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
+                }`}
+                title="Translate to your language"
+              >
+                <Globe size={14} />
+                <span className="hidden sm:inline">Translate</span>
+              </button>
+
+              {/* Language dropdown */}
+              {showTranslate && (
+                <div className="absolute right-0 top-10 bg-white border border-gray-200 rounded-xl shadow-xl z-50 w-52 overflow-hidden">
+                  <div className="px-3 py-2 bg-green-50 border-b border-green-100 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-green-700">Select Language</span>
+                    <button onClick={() => setShowTranslate(false)} className="text-gray-400 hover:text-gray-600">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {LANGUAGES.map(lang => (
+                      <button
+                        key={lang.code}
+                        onClick={() => handleTranslateTo(lang.code)}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition border-b border-gray-50 last:border-0"
+                      >
+                        {lang.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {user && (
               <>
@@ -243,9 +289,8 @@ export default function Home() {
                   className={`relative flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
                     showHistory
                       ? "bg-green-50 border-green-300 text-green-700"
-                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50 hover:border-green-300"
-                  }`}
-                  title="View your consultation history">
+                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
+                  }`}>
                   <Clock size={14} />
                   <span className="hidden sm:inline">History</span>
                   {history.length > 0 && (
@@ -264,13 +309,19 @@ export default function Home() {
                 </div>
 
                 {/* Logout */}
-                <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 p-1.5 transition" title="Logout">
+                <button onClick={handleLogout}
+                  className="text-gray-400 hover:text-red-500 p-1.5 transition" title="Logout">
                   <LogOut size={16} />
                 </button>
               </>
             )}
           </div>
         </div>
+
+        {/* Close translate on outside click */}
+        {showTranslate && (
+          <div className="fixed inset-0 z-40" onClick={() => setShowTranslate(false)} />
+        )}
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
@@ -290,20 +341,17 @@ export default function Home() {
                   placeholder=""
                   className="pl-12 pr-4 py-6 text-base rounded-xl border-2 border-green-200 focus:border-green-500 shadow-sm" />
               </div>
-
-              {/* Clinical upload */}
               <div className="relative">
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple
                   onChange={handleFileUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
                 <Button type="button" variant="outline"
                   className="h-full px-3 rounded-xl border-2 border-green-200 hover:border-green-400 flex flex-col items-center justify-center gap-0.5"
-                  title="Upload Clinical Report / Photo">
+                  title="Upload Clinical Report">
                   <Paperclip size={17} className="text-green-600" />
                   <span className="text-xs text-green-600 leading-none">Clinical</span>
                 </Button>
               </div>
-
               <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-6 rounded-xl font-medium">
                 Search
               </Button>
@@ -335,8 +383,8 @@ export default function Home() {
             ) : history.length === 0 ? (
               <div className="text-center py-6">
                 <Clock size={32} className="text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">No consultation history yet.</p>
-                <p className="text-xs text-gray-300 mt-1">Your remedy searches will appear here automatically.</p>
+                <p className="text-sm text-gray-400">No history yet.</p>
+                <p className="text-xs text-gray-300 mt-1">Searches save automatically after each consultation.</p>
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -367,8 +415,7 @@ export default function Home() {
                     <div className="flex items-center gap-1.5 ml-2 shrink-0">
                       <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
                       <button onClick={e => handleDeleteHistory(h.id, e)}
-                        className="text-transparent group-hover:text-red-400 hover:!text-red-600 transition p-0.5"
-                        title="Delete">
+                        className="text-transparent group-hover:text-red-400 hover:!text-red-600 transition p-0.5">
                         <Trash2 size={13} />
                       </button>
                     </div>

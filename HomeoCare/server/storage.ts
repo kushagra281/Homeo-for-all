@@ -1,4 +1,17 @@
-import { type Remedy, type InsertRemedy } from "@shared/schema";
+// ================================================================
+// storage.ts — MINIMAL PLACEHOLDER
+// All data is served from Supabase online database.
+// This file exists only for Express API compatibility.
+//
+// Online Database (Supabase):
+//   remedies          476  rows  — scraper materia medica
+//   remedy_symptoms   17,678 rows — scraper symptoms
+//   remedy_sections   4,644  rows — scraper full text
+//   symptoms          15,000 rows — repertory rubrics
+//   patients                    — user profiles
+//   search_history              — consultation history
+// ================================================================
+import type { Remedy, InsertRemedy } from "@shared/schema";
 import { randomUUID } from "crypto";
 import type { DiagnosticQuestion, RemedyScore } from "@shared/schema";
 
@@ -18,51 +31,30 @@ export interface RemedyFilters {
   condition_type?: string;
 }
 
-// NOTE: Real scoring is done via Supabase on the frontend.
-// This backend storage is kept minimal for API compatibility only.
 export class MemStorage implements IStorage {
-  private remedies: Map<string, Remedy> = new Map();
-
   constructor() {
-    console.log("HomeoWell: Using Supabase as primary database");
-    console.log("Scoring is handled by frontend Supabase client");
+    console.log("HomeoWell: 100% Supabase online database");
+    console.log("Tables: remedies(476) | remedy_symptoms(17678) | symptoms(15000)");
   }
 
-  async getRemediesByCategory(category: string): Promise<Remedy[]> {
-    return [];
-  }
-
-  async getAllRemedies(): Promise<Remedy[]> {
-    return [];
-  }
-
-  async searchRemediesByKeyword(keyword: string, category?: string): Promise<Remedy[]> {
-    return [];
-  }
-
-  async scoreRemediesBySymptoms(symptoms: string[], filters?: RemedyFilters): Promise<RemedyScore[]> {
-    // Real scoring happens in frontend via Supabase
-    return [];
-  }
-
-  async getQuestionTree(bodySystem: string): Promise<DiagnosticQuestion[]> {
-    return [];
-  }
+  async getRemediesByCategory(_category: string): Promise<Remedy[]>          { return [] }
+  async getAllRemedies():                          Promise<Remedy[]>          { return [] }
+  async searchRemediesByKeyword(_kw: string):     Promise<Remedy[]>          { return [] }
+  async scoreRemediesBySymptoms(_s: string[]):    Promise<RemedyScore[]>     { return [] }
+  async getQuestionTree(_sys: string):            Promise<DiagnosticQuestion[]> { return [] }
 
   async createRemedy(insertRemedy: InsertRemedy): Promise<Remedy> {
     const id = randomUUID();
-    const remedy: Remedy = {
+    return {
       ...insertRemedy, id,
-      keywords: insertRemedy.keywords || [],
+      keywords:         insertRemedy.keywords         || [],
       symptom_mappings: insertRemedy.symptom_mappings || {},
-      modalities: insertRemedy.modalities || { better: [], worse: [] },
-      potencies: insertRemedy.potencies || ["30C"],
-      age_groups: insertRemedy.age_groups || ["adult"],
-      genders: insertRemedy.genders || ["any"],
-      synonym_names: insertRemedy.synonym_names || []
+      modalities:       insertRemedy.modalities       || { better: [], worse: [] },
+      potencies:        insertRemedy.potencies        || ["30C"],
+      age_groups:       insertRemedy.age_groups       || ["adult"],
+      genders:          insertRemedy.genders          || ["any"],
+      synonym_names:    insertRemedy.synonym_names    || []
     };
-    this.remedies.set(id, remedy);
-    return remedy;
   }
 }
 

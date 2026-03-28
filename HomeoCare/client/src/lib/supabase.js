@@ -7,23 +7,26 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export default supabase
 
 // ================================================================
-// AUTH FUNCTIONS
+// DATABASE SUMMARY (all online — no local storage)
+// ----------------------------------------------------------------
+// remedies          → 476  rows  (scraper: remedy names)
+// remedy_symptoms   → 17,678 rows (scraper: detailed materia medica)
+// remedy_sections   → 4,644  rows (scraper: full text sections)
+// symptoms          → 15,000 rows (our import: rubrics + grades)
+// patients          → user profiles
+// search_history    → consultation history
+// ================================================================
+
+// ================================================================
+// AUTH
 // ================================================================
 export async function signUp(email, password, name) {
   const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { name } }
+    email, password, options: { data: { name } }
   })
   if (error) throw error
-
-  // Save to patients table
   if (data.user) {
-    await supabase.from('patients').upsert({
-      id: data.user.id,
-      email,
-      name
-    })
+    await supabase.from('patients').upsert({ id: data.user.id, email, name })
   }
   return data
 }
@@ -44,65 +47,48 @@ export async function getCurrentUser() {
   return user
 }
 
-export function onAuthStateChange(callback) {
-  return supabase.auth.onAuthStateChange((event, session) => {
-    callback(session?.user || null)
-  })
-}
-
 // ================================================================
-// SEARCH HISTORY — save & get consultation history
-// Table: search_history (id, patient_id, symptoms, results, health_history, created_at)
+// SEARCH HISTORY
 // ================================================================
 export async function saveSearchHistory(symptoms, results, healthHistory = '') {
   const user = await getCurrentUser()
   if (!user) return null
-
-  const { data, error } = await supabase.from('search_history').insert({
-    patient_id: user.id,
-    symptoms: symptoms,
-    results: results,
+  const { error } = await supabase.from('search_history').insert({
+    patient_id:     user.id,
+    symptoms:       symptoms,
+    results:        results,
     health_history: healthHistory ? { text: healthHistory } : null
   })
-
-  if (error) console.error('saveSearchHistory error:', error)
-  return data
+  if (error) console.error('saveSearchHistory:', error)
 }
 
 export async function getSearchHistory() {
   const user = await getCurrentUser()
   if (!user) return []
-
   const { data, error } = await supabase
     .from('search_history')
     .select('id, symptoms, results, health_history, created_at')
     .eq('patient_id', user.id)
     .order('created_at', { ascending: false })
     .limit(20)
-
-  if (error) {
-    console.error('getSearchHistory error:', error)
-    return []
-  }
+  if (error) { console.error('getSearchHistory:', error); return [] }
   return data || []
 }
 
 export async function deleteHistoryItem(id) {
   const user = await getCurrentUser()
   if (!user) return
-
-  await supabase.from('search_history').delete().eq('id', id).eq('patient_id', user.id)
+  await supabase.from('search_history').delete()
+    .eq('id', id).eq('patient_id', user.id)
 }
 
 // ================================================================
-// SCORING — uses symptoms table + remedy_symptoms table
-// Table: symptoms (id, remedy, symptom, category, intensity)
-// Table: remedy_symptoms (from scraped materia medica)
+// MAIN SCORING — 3 strategies, all from Supabase
 // ================================================================
 export async function scoreRemediesFromSupabase(symptoms, filters = {}) {
   if (!symptoms || symptoms.length === 0) return []
 
-  // Clean search terms — remove metadata prefixes
+  // Clean search terms
   const searchTerms = symptoms
     .map(s => s.toLowerCase().trim())
     .filter(s =>
@@ -111,194 +97,168 @@ export async function scoreRemediesFromSupabase(symptoms, filters = {}) {
       !s.startsWith('clinical report:') &&
       !s.startsWith('health history:') &&
       !s.startsWith('age group:') &&
+      !s.startsWith('age:') &&
       !s.startsWith('gender:') &&
-      !s.startsWith('disease duration:') &&
-      !s.startsWith('age:')
+      !s.startsWith('disease duration:')
     )
 
   if (searchTerms.length === 0) return []
 
   const category = filters.symptom_location || filters.category || ''
 
-  // ── STRATEGY 1: Search in symptoms table (5000 rubrics if imported) ──
-  const strategy1Results = await searchInSymptomsTable(searchTerms, category)
-  if (strategy1Results.length > 0) return strategy1Results
+  // Strategy 1: remedy_symptoms (17,678 rows — scraper materia medica)
+  const s1 = await searchRemedySymptoms(searchTerms, category)
+  if (s1.length >= 3) return s1
 
-  // ── STRATEGY 2: Search in remedy_symptoms table (scraped materia medica) ──
-  const strategy2Results = await searchInRemedySymptoms(searchTerms, category)
-  if (strategy2Results.length > 0) return strategy2Results
+  // Strategy 2: symptoms table (15,000 rows — our rubric import)
+  const s2 = await searchSymptomsTable(searchTerms, category)
+  if (s2.length >= 3) return s2
 
-  // ── STRATEGY 3: Search in remedies table by name ──
-  return await searchInRemediesTable(searchTerms)
+  // Strategy 3: merge both
+  return mergeScoredResults(s1, s2)
 }
 
-// Strategy 1: symptoms table (id, remedy, symptom, category, intensity)
-async function searchInSymptomsTable(searchTerms, category) {
+// ── Strategy 1: remedy_symptoms (scraper data — most detailed) ──
+async function searchRemedySymptoms(searchTerms, category) {
   try {
-    // Build OR conditions for each search term
-    const conditions = searchTerms.map(t => `symptom.ilike.%${t}%`).join(',')
+    // Build OR conditions
+    const orParts = searchTerms.map(t => `symptom.ilike.%${t}%`).join(',')
 
     let query = supabase
-      .from('symptoms')
-      .select('id, remedy, symptom, category, intensity')
-      .or(conditions)
-      .limit(300)
+      .from('remedy_symptoms')
+      .select('remedy_name, heading, symptom')
+      .or(orParts)
+      .limit(500)
 
-    if (category) {
-      query = query.ilike('category', `%${category}%`)
-    }
+    if (category) query = query.ilike('heading', `%${category}%`)
 
     const { data, error } = await query
+    if (error || !data?.length) return []
 
-    if (error || !data || data.length === 0) return []
-
-    // Score remedies
     const scoreMap = {}
     data.forEach(row => {
-      const name = row.remedy
-      const matchCount = searchTerms.filter(t => row.symptom?.toLowerCase().includes(t)).length
-      if (matchCount === 0) return
+      const name = row.remedy_name
+      const termMatches = searchTerms.filter(t =>
+        row.symptom?.toLowerCase().includes(t) ||
+        row.heading?.toLowerCase().includes(t)
+      ).length
+      if (!termMatches) return
 
       if (!scoreMap[name]) {
         scoreMap[name] = {
-          name,
-          totalScore: 0,
-          matchCount: 0,
-          matchedSymptoms: [],
-          category: row.category || category || 'General'
+          name, totalScore: 0, matchCount: 0,
+          matchedSymptoms: [], headings: new Set(),
+          modalities: { better: [], worse: [] }
         }
       }
-      scoreMap[name].totalScore += (row.intensity || 1) * matchCount
-      scoreMap[name].matchCount += 1
+      scoreMap[name].totalScore  += 3 * termMatches   // weight 3 for scraper data
+      scoreMap[name].matchCount  += 1
       scoreMap[name].matchedSymptoms.push(row.symptom)
+      scoreMap[name].headings.add(row.heading)
     })
 
-    return buildResults(scoreMap, category)
+    return buildResults(scoreMap, category, 'scraper')
   } catch (e) {
     console.error('Strategy 1 error:', e)
     return []
   }
 }
 
-// Strategy 2: remedy_symptoms table (from scraped data)
-async function searchInRemedySymptoms(searchTerms, category) {
+// ── Strategy 2: symptoms table (our 15k rubric import) ──
+async function searchSymptomsTable(searchTerms, category) {
   try {
-    const conditions = searchTerms.map(t =>
-      `symptom.ilike.%${t}%,heading.ilike.%${t}%`
-    ).join(',')
+    const orParts = searchTerms.map(t => `symptom.ilike.%${t}%`).join(',')
 
     let query = supabase
-      .from('remedy_symptoms')
-      .select('remedy_name, heading, symptom')
-      .or(conditions)
-      .limit(300)
+      .from('symptoms')
+      .select('id, remedy, symptom, category, intensity')
+      .or(orParts)
+      .limit(400)
 
-    if (category) {
-      query = query.ilike('heading', `%${category}%`)
-    }
+    if (category) query = query.ilike('category', `%${category}%`)
 
     const { data, error } = await query
-
-    if (error || !data || data.length === 0) return []
+    if (error || !data?.length) return []
 
     const scoreMap = {}
     data.forEach(row => {
-      const name = row.remedy_name
-      const matchCount = searchTerms.filter(t =>
-        row.symptom?.toLowerCase().includes(t) ||
-        row.heading?.toLowerCase().includes(t)
+      const name = row.remedy
+      const termMatches = searchTerms.filter(t =>
+        row.symptom?.toLowerCase().includes(t)
       ).length
-      if (matchCount === 0) return
+      if (!termMatches) return
 
       if (!scoreMap[name]) {
-        scoreMap[name] = { name, totalScore: 0, matchCount: 0, matchedSymptoms: [], category: row.heading || category }
+        scoreMap[name] = {
+          name, totalScore: 0, matchCount: 0,
+          matchedSymptoms: [], headings: new Set(),
+          modalities: { better: [], worse: [] }
+        }
       }
-      scoreMap[name].totalScore += 2 * matchCount
-      scoreMap[name].matchCount += 1
+      scoreMap[name].totalScore  += (row.intensity || 1) * termMatches * 2
+      scoreMap[name].matchCount  += 1
       scoreMap[name].matchedSymptoms.push(row.symptom)
+      scoreMap[name].headings.add(row.category || '')
     })
 
-    return buildResults(scoreMap, category)
+    return buildResults(scoreMap, category, 'rubrics')
   } catch (e) {
     console.error('Strategy 2 error:', e)
     return []
   }
 }
 
-// Strategy 3: remedies table
-async function searchInRemediesTable(searchTerms) {
-  try {
-    const conditions = searchTerms.map(t =>
-      `name.ilike.%${t}%,common_name.ilike.%${t}%`
-    ).join(',')
-
-    const { data, error } = await supabase
-      .from('remedies')
-      .select('id, name, common_name, slug')
-      .or(conditions)
-      .limit(10)
-
-    if (error || !data || data.length === 0) return []
-
-    return data.map((r, idx) => ({
-      remedy: {
-        id: r.id || r.slug,
-        name: r.name,
-        category: 'General',
-        condition: r.common_name || r.name,
-        description: `${r.name} matches your search terms.`,
-        dosage: '30C potency, 3 pellets three times daily',
-        symptoms: searchTerms,
-        keywords: searchTerms,
-        modalities: { better: [], worse: [] },
-        potencies: ['30C', '200C'],
-        age_groups: ['child', 'adult', 'senior'],
-        genders: ['male', 'female', 'any'],
-        synonym_names: []
-      },
-      score: Math.max(30, 80 - (idx * 15)),
-      matching_symptoms: searchTerms,
-      confidence: 40
-    }))
-  } catch (e) {
-    console.error('Strategy 3 error:', e)
-    return []
-  }
+// ── Merge two result arrays ──
+function mergeScoredResults(arr1, arr2) {
+  const merged = {}
+  ;[...arr1, ...arr2].forEach(r => {
+    const name = r.remedy.name
+    if (!merged[name]) {
+      merged[name] = r
+    } else {
+      merged[name].score = Math.min(100, merged[name].score + Math.floor(r.score * 0.3))
+      merged[name].matching_symptoms = [
+        ...new Set([...merged[name].matching_symptoms, ...r.matching_symptoms])
+      ].slice(0, 6)
+    }
+  })
+  return Object.values(merged).sort((a, b) => b.score - a.score).slice(0, 10)
 }
 
-// Build formatted results from scoreMap
-function buildResults(scoreMap, category) {
-  if (Object.keys(scoreMap).length === 0) return []
+// ── Build result objects ──
+function buildResults(scoreMap, category, source) {
+  if (!Object.keys(scoreMap).length) return []
 
   const maxScore = Math.max(...Object.values(scoreMap).map(r => r.totalScore))
 
   return Object.values(scoreMap)
     .map(r => {
-      const pct = Math.round((r.totalScore / maxScore) * 100)
-      const grade = pct >= 80 ? 3 : pct >= 50 ? 2 : 1
+      const pct   = Math.round((r.totalScore / maxScore) * 100)
+      const grade = pct >= 75 ? 3 : pct >= 45 ? 2 : 1
+      const headingsList = [...r.headings].filter(Boolean).slice(0, 2).join(', ')
+
       return {
         remedy: {
-          id: r.name.toLowerCase().replace(/\s+/g, '-'),
-          name: r.name,
-          category: r.category || category || 'General',
-          condition: [...new Set(r.matchedSymptoms)].slice(0, 2).join('; '),
-          description: `${r.name} matches ${r.matchCount} symptom(s) in the database.`,
-          dosage: grade === 3
-            ? '200C potency — 3 pellets twice daily for 3 days, then once weekly'
-            : grade === 2
-              ? '30C potency — 3 pellets three times daily for 5 days'
-              : '6C potency — 3 pellets four times daily for 7 days',
-          symptoms: [...new Set(r.matchedSymptoms)].slice(0, 5),
-          keywords: [],
-          modalities: { better: [], worse: [] },
-          potencies: ['6C', '30C', '200C'],
-          age_groups: ['child', 'adult', 'senior'],
-          genders: ['male', 'female', 'any'],
-          synonym_names: []
+          id:          r.name.toLowerCase().replace(/\s+/g, '-'),
+          name:        r.name,
+          category:    headingsList || category || 'General',
+          condition:   [...new Set(r.matchedSymptoms)].slice(0, 2).join('; '),
+          description: `${r.name} matched ${r.matchCount} symptom(s) in ${source === 'scraper' ? 'Materia Medica' : 'Repertory'}.`,
+          dosage:
+            grade === 3 ? '200C — 3 pellets twice daily for 3 days, then once weekly' :
+            grade === 2 ? '30C — 3 pellets three times daily for 5 days' :
+                          '6C — 3 pellets four times daily for 7 days',
+          symptoms:        [...new Set(r.matchedSymptoms)].slice(0, 5),
+          keywords:        [],
+          modalities:      { better: [], worse: [] },
+          potencies:       ['6C', '30C', '200C'],
+          age_groups:      ['child', 'adult', 'senior'],
+          genders:         ['male', 'female', 'any'],
+          synonym_names:   []
         },
-        score: pct,
-        matching_symptoms: [...new Set(r.matchedSymptoms)].slice(0, 5),
-        confidence: Math.min(100, r.matchCount * 12)
+        score:               pct,
+        matching_symptoms:   [...new Set(r.matchedSymptoms)].slice(0, 5),
+        confidence:          Math.min(100, r.matchCount * 10)
       }
     })
     .sort((a, b) => b.score - a.score)
@@ -306,21 +266,15 @@ function buildResults(scoreMap, category) {
 }
 
 // ================================================================
-// MATERIA MEDICA (400+ remedies from scraped data)
+// MATERIA MEDICA — full remedy details from scraper
 // ================================================================
-export async function getAllRemedies() {
-  const { data, error } = await supabase
-    .from('remedies')
-    .select('id, slug, name, common_name, section_count')
-    .order('name')
-  if (error) console.error('getAllRemedies:', error)
-  return data || []
-}
-
-export async function getRemedyBySlug(slug) {
+export async function getRemedyDetail(remedyName) {
   const { data: remedy, error } = await supabase
-    .from('remedies').select('*').eq('slug', slug).single()
-  if (error) return null
+    .from('remedies')
+    .select('*')
+    .ilike('name', remedyName)
+    .single()
+  if (error || !remedy) return null
 
   const { data: sections } = await supabase
     .from('remedy_sections')
@@ -328,7 +282,22 @@ export async function getRemedyBySlug(slug) {
     .eq('remedy_id', remedy.id)
     .order('heading_order')
 
-  return { ...remedy, sections: sections || [] }
+  const { data: symptoms } = await supabase
+    .from('remedy_symptoms')
+    .select('heading, symptom, symptom_order')
+    .eq('remedy_id', remedy.id)
+    .order('symptom_order')
+
+  return { ...remedy, sections: sections || [], symptoms: symptoms || [] }
+}
+
+export async function getAllRemedies() {
+  const { data, error } = await supabase
+    .from('remedies')
+    .select('id, slug, name, common_name, section_count')
+    .order('name')
+  if (error) console.error('getAllRemedies:', error)
+  return data || []
 }
 
 export async function searchRemediesByName(query) {

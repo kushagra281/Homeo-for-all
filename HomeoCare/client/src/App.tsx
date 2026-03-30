@@ -10,6 +10,7 @@ import PotencyGuidePage from "@/pages/potency-guide-page";
 import DiagnosticWizardPage from "@/pages/diagnostic-wizard-page";
 import AuthPage from "@/pages/auth-page";
 import Community from "@/pages/community";
+import ProfilePage from "@/pages/profile";
 import DictionaryPage from "@/pages/dictionary";
 import ModalitiesPage from "@/pages/modalities";
 import NotFound from "@/pages/not-found";

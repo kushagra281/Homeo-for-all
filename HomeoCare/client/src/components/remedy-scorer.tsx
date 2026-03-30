@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, TrendingUp, ArrowLeft, HelpCircle, Camera, Paperclip, X, CheckCircle, Heart } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Search, TrendingUp, ArrowLeft, HelpCircle, Camera, Paperclip, X, CheckCircle, FileText } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,329 +8,324 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
+import type { RemedyScore } from "@shared/schema";
 import AdvancedFilters, { FilterState } from "./advanced-filters";
-import { scoreRemediesFromSupabase, saveSearchHistory } from "@/lib/supabase";
+import RemedyCardEnhanced from "./remedy-card-enhanced";
+import { saveSearchHistory } from "@/lib/supabase";
 
-// ── 18 MIND QUESTIONS ──────────────────────────────────────
-const MIND_QUESTIONS = [
-  { q: "Primary emotional state?", options: ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Restlessness", "Irritability", "Sadness"] },
-  { q: "Duration of complaint?", options: ["Few days", "Few weeks", "Few months", "Over a year", "Years"] },
-  { q: "When is it worse?", options: ["Night", "Morning", "Alone", "In company", "After eating", "Before menses", "On waking"] },
-  { q: "Associated physical symptoms?", options: ["Palpitations", "Sweating", "Trembling", "Insomnia", "Loss of appetite", "Headache", "None"] },
-  { q: "What triggered it?", options: ["Grief/Loss", "Work stress", "Relationship issues", "Health concern", "Financial stress", "No trigger", "Unknown"] },
-  { q: "Sleep pattern?", options: ["Cannot fall asleep", "Wake frequently", "Early waking", "Nightmares", "Sleep too much", "Normal"] },
-  { q: "Appetite changes?", options: ["Decreased", "Increased", "Craving sweets", "Craving salt", "No appetite", "Normal"] },
-  { q: "Social behavior?", options: ["Wants to be alone", "Craves company", "Irritable with family", "Withdrawn", "Clingy", "Normal"] },
-  { q: "Memory & concentration?", options: ["Forgetful", "Cannot concentrate", "Confused thoughts", "Racing thoughts", "Slow thinking", "Normal"] },
-  { q: "Weeping tendency?", options: ["Cries easily", "Cannot cry (wants to)", "Cries alone", "Cries with others", "Never cries", "N/A"] },
-  { q: "Fear type (if any)?", options: ["Fear of death", "Fear of disease", "Fear of being alone", "Fear of crowd", "Fear of dark", "No fear"] },
-  { q: "What makes you feel better?", options: ["Consolation", "Being alone", "Music", "Open air", "Company", "Warmth", "Work/Keeping busy"] },
-  { q: "Energy level?", options: ["Exhausted", "Low energy", "Worse after exertion", "Normal morning-tired evening", "Normal", "Hyperactive"] },
-  { q: "Irritability pattern?", options: ["Easily angered", "Angry from contradiction", "Angry then regret", "Suppressed anger", "Never angry", "N/A"] },
-  { q: "Any obsessive thoughts?", options: ["About health", "About cleanliness", "About work/duty", "Intrusive thoughts", "No obsessive thoughts"] },
-  { q: "Relationship with others?", options: ["Quarrelsome", "Jealous/Suspicious", "Over-sensitive", "Indifferent to loved ones", "Very attached", "Normal"] },
-  { q: "Self-perception?", options: ["Very low self-esteem", "Self-critical", "Feeling worthless/guilty", "Over-confident", "Normal", "N/A"] },
-  { q: "Any thoughts of self-harm?", options: ["No", "Passive thoughts (life not worth living)", "Active thoughts (seek help now)", "Prefer not to say"] },
-]
-
+// AI Questions per category
 const CATEGORY_QUESTIONS: Record<string, Array<{ q: string; options: string[] }>> = {
-  "Mind": MIND_QUESTIONS,
+  "Mind": [
+    { q: "Primary emotional state?", options: ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Restlessness", "Irritability"] },
+    { q: "When is it worse?", options: ["Night", "Morning", "Alone", "In company", "After eating", "Before menses", "No pattern"] },
+    { q: "Associated symptoms?", options: ["Sleeplessness", "Palpitations", "Weeping", "Forgetfulness", "Mood swings", "None"] },
+  ],
   "Head": [
-    { q: "Type of headache?", options: ["Throbbing/Pulsating", "Pressing/Heavy", "Burning", "Shooting/Lightning", "Dull ache", "Band-like tightness"] },
-    { q: "Location?", options: ["Forehead", "Right temple", "Left temple", "Back of head", "Top of head", "Whole head"] },
-    { q: "Time?", options: ["Morning on waking", "Afternoon", "Evening", "Night", "After eating", "Continuous"] },
-    { q: "Worse from?", options: ["Bright light", "Loud noise", "Movement/Shaking", "Heat", "Cold wind", "Bending down", "Stress"] },
-    { q: "Better from?", options: ["Rest in dark room", "Firm pressure", "Cold compress", "Warmth", "Fresh air", "Vomiting", "Sleep"] },
-    { q: "Associated symptoms?", options: ["Nausea/Vomiting", "Visual disturbance/Aura", "Vertigo/Dizziness", "Neck stiffness", "Sensitivity to light", "None"] },
+    { q: "Type of headache?", options: ["Throbbing", "Pressing", "Burning", "Shooting", "Dull ache", "Band-like"] },
+    { q: "Location of pain?", options: ["Forehead", "Temples", "Back of head", "Top of head", "One side", "Whole head"] },
+    { q: "What makes it worse?", options: ["Light", "Noise", "Movement", "Heat", "Cold", "Morning", "Evening"] },
+    { q: "What makes it better?", options: ["Rest", "Pressure", "Cold compress", "Lying down", "Open air", "Nothing"] },
   ],
   "Fever": [
-    { q: "Fever pattern?", options: ["Chill first then heat", "Heat only (no chill)", "Sweating after heat", "All three stages", "Irregular"] },
-    { q: "Time of fever?", options: ["Morning", "Afternoon (1-3 PM)", "Evening", "Night (after midnight)", "Irregular"] },
-    { q: "Thirst?", options: ["Very thirsty - large quantities", "Thirsty for cold drinks", "Thirsty for warm drinks", "No thirst at all"] },
-    { q: "Perspiration?", options: ["Profuse sweating", "No sweating even in heat", "Sweating relieves fever", "Sweating does not relieve", "Night sweats only"] },
-    { q: "Associated symptoms?", options: ["Severe body ache", "Headache", "Skin rash", "Vomiting", "Delirium/Confusion", "Fits/Convulsions"] },
+    { q: "Stage of fever?", options: ["Chill stage", "Heat stage", "Sweating stage", "All stages"] },
+    { q: "Time pattern?", options: ["Morning", "Afternoon", "Evening", "Night", "Irregular"] },
+    { q: "Associated symptoms?", options: ["Thirst", "No thirst", "Body ache", "Rash", "Vomiting", "Headache"] },
   ],
   "Stomach": [
-    { q: "Main complaint?", options: ["Nausea", "Vomiting", "Acidity/Heartburn/GERD", "Bloating/Gas", "Pain/Cramps", "Complete loss of appetite"] },
-    { q: "Relation to eating?", options: ["Better immediately after eating", "Worse immediately after", "Worse 1-2 hours after", "Better with fasting", "No relation to food"] },
-    { q: "Nature of pain?", options: ["Burning", "Cramping/Spasmodic", "Cutting/Sharp", "Pressing/Heavy feeling", "Colicky (comes and goes)", "No pain"] },
-    { q: "Vomiting (if any)?", options: ["Sour vomiting", "Bitter vomiting", "Undigested food", "Blood or coffee-ground", "Only water/mucus", "No vomiting"] },
-    { q: "Thirst?", options: ["Very thirsty", "Thirsty for cold drinks", "Thirsty for warm drinks", "No thirst", "Aversion to water"] },
+    { q: "Main complaint?", options: ["Nausea", "Vomiting", "Acidity/Heartburn", "Bloating", "Pain", "Loss of appetite"] },
+    { q: "After eating?", options: ["Better after eating", "Worse after eating", "Worse immediately", "No change"] },
+    { q: "Type of pain?", options: ["Burning", "Cramping", "Cutting", "Pressing", "No pain"] },
   ],
   "Respiration": [
-    { q: "Type of cough?", options: ["Dry/Hacking", "Wet/Productive", "Barking/Croupy", "Spasmodic/Whooping", "Night cough only", "Morning cough with expectoration"] },
-    { q: "Sputum color/type?", options: ["None (dry cough)", "Clear/White/Frothy", "Yellow", "Green/Purulent", "Blood-streaked", "Rusty/Brown"] },
-    { q: "Breathlessness?", options: ["Worse lying flat", "Worse on any exertion", "Sudden attacks", "Constant difficulty", "Only at night", "None"] },
-    { q: "Cough worse from?", options: ["Cold air", "Warm room", "Talking/Laughing", "Lying down", "Eating", "Night", "Morning"] },
-    { q: "Associated symptoms?", options: ["Wheezing/Whistling", "Chest pain", "Hoarse voice", "High fever", "Rattling in chest", "Night sweats"] },
+    { q: "Type of cough?", options: ["Dry", "Wet/Productive", "Barking", "Spasmodic", "Night cough", "Morning cough"] },
+    { q: "Breathing difficulty?", options: ["Worse lying down", "Worse on exertion", "At night", "During attack", "No difficulty"] },
+    { q: "Sputum?", options: ["None", "Clear", "Yellow/Green", "Blood-tinged", "Thick/sticky"] },
   ],
   "Skin": [
-    { q: "Type of eruption?", options: ["Hives/Urticaria", "Blisters/Vesicles", "Dry scaly patches", "Weeping/Oozing discharge", "Red raised bumps", "Discoloration only"] },
-    { q: "Main sensation?", options: ["Intense itching", "Burning sensation", "Stinging/Pricking", "No sensation", "Bleeds on scratching", "Crawling feeling"] },
-    { q: "Location?", options: ["Face/Scalp", "Arms/Hands", "Legs/Feet", "Trunk/Chest", "Folds of skin", "Widespread all over"] },
-    { q: "Skin worse from?", options: ["Heat/Warmth", "Cold", "Night", "Scratching (spreads)", "Water/Washing", "Wool/Synthetic fabric"] },
-    { q: "Skin better from?", options: ["Cold application", "Warmth", "Scratching (temporarily)", "Open air", "Nothing helps"] },
+    { q: "Type of eruption?", options: ["Rash", "Blisters", "Dry/Scaly", "Weeping/Moist", "Itching only", "Discoloration"] },
+    { q: "Sensation?", options: ["Itching", "Burning", "Stinging", "No sensation", "Bleeding on scratch"] },
+    { q: "What makes it worse?", options: ["Heat", "Cold", "Night", "Scratching", "Washing", "Nothing specific"] },
   ],
   "Hands, Legs & Back": [
-    { q: "Main complaint?", options: ["Joint pain", "Muscle pain/Soreness", "Morning stiffness", "Swelling/Edema", "Weakness/Heaviness", "Numbness/Tingling"] },
-    { q: "Joints involved?", options: ["Fingers/Wrists", "Elbows/Shoulders", "Knees", "Ankles/Feet/Toes", "Hip", "Spine/Back", "Multiple joints"] },
-    { q: "Nature of pain?", options: ["Tearing/Rending", "Stitching/Stabbing", "Bruised/Sore", "Drawing/Pulling", "Burning", "Cramping"] },
-    { q: "When worse?", options: ["Morning stiffness on waking", "First motion (gets better moving)", "Continued motion (gets worse)", "At rest/Night", "Cold/Damp weather", "Warmth/Summer"] },
-    { q: "When better?", options: ["Continued movement", "Complete rest", "External warmth/Heat", "Cold application", "Firm pressure", "Elevation of limb"] },
-    { q: "Associated?", options: ["Redness and heat in joint", "Swelling", "Cracking sounds", "Muscle weakness", "None of these"] },
+    { q: "Type of complaint?", options: ["Joint pain", "Muscle pain", "Stiffness", "Swelling", "Weakness", "Numbness"] },
+    { q: "When is it worse?", options: ["Morning stiffness", "After rest", "On movement", "At night", "In cold", "In damp"] },
+    { q: "Better by?", options: ["Continued movement", "Rest", "Warmth", "Cold application", "Pressure", "Elevation"] },
   ],
 }
 
 const DEFAULT_QUESTIONS = [
-  { q: "Severity of complaint?", options: ["Mild - not limiting", "Moderate - affects daily life", "Severe - disabling", "Unbearable/Emergency"] },
-  { q: "How did it start?", options: ["Suddenly (acute)", "Gradually", "After cold/wet exposure", "After emotional stress", "After eating", "After injury", "Unknown"] },
-  { q: "What makes it better?", options: ["Rest", "Movement", "Warmth", "Cold application", "Pressure/Touch", "Fresh open air", "Eating", "Nothing helps"] },
-  { q: "What makes it worse?", options: ["Morning", "Night", "Cold weather", "Heat", "Physical exertion", "After eating", "Mental stress", "Touch/Pressure"] },
-  { q: "Thirst?", options: ["Very thirsty - large amounts", "Thirsty - small frequent sips", "No thirst", "Aversion to water"] },
-  { q: "Sleep?", options: ["Normal", "Cannot fall asleep", "Frequent waking", "Unrefreshing sleep", "Oversleeping"] },
+  { q: "How severe is the complaint?", options: ["Mild", "Moderate", "Severe", "Unbearable"] },
+  { q: "Pattern of complaints?", options: ["Sudden onset", "Gradual", "After cold exposure", "After emotional stress", "After eating", "Recurring"] },
+  { q: "What makes it better?", options: ["Rest", "Movement", "Heat", "Cold", "Pressure", "Open air", "Nothing"] },
+  { q: "What makes it worse?", options: ["Morning", "Night", "Cold", "Heat", "Exertion", "Eating", "Stress"] },
 ]
 
-const AVOID_MAP: Record<string, string[]> = {
-  "Mind": ["Coffee and stimulants", "Alcohol", "Social media before bed", "Isolation", "Suppressing emotions", "Irregular sleep schedule"],
-  "Head": ["Bright screens in dark", "Skipping meals", "Dehydration", "Strong perfumes", "Loud noise", "Alcohol"],
-  "Fever": ["Cold bath during chill stage", "Heavy blankets during heat stage", "Carbonated drinks", "Dairy products", "Sudden temperature change"],
-  "Stomach": ["Spicy and fried food", "Coffee on empty stomach", "Carbonated drinks", "Late night eating", "Overeating", "Stress while eating"],
-  "Respiration": ["Cold drinks and ice cream", "Dairy products (increase mucus)", "Smoking", "AC direct exposure", "Dusty environment"],
-  "Skin": ["Harsh soap/chemicals", "Hot water baths", "Synthetic clothing", "Scratching", "Dairy and sugar", "Chemical cosmetics"],
-  "Hands, Legs & Back": ["Cold/damp environments", "Same position for long time", "Heavy lifting", "High heels", "Overexertion", "Very soft mattress"],
-  "Urinary System": ["Holding urine", "Less water intake", "Spicy food", "Alcohol", "Excess coffee", "Tight clothing"],
-  "Heart": ["Excess salt", "Saturated fats", "Smoking", "Unmanaged stress", "Sedentary lifestyle", "Excess caffeine"],
-  "Female Genitalia": ["Tight synthetic underwear", "Scented intimate products", "Stress", "Cold food during menses", "Irregular sleep"],
+// AVOID recommendations per category
+const AVOID_RECOMMENDATIONS: Record<string, string[]> = {
+  "Mind": ["Coffee and stimulants", "Alcohol", "Overthinking before bed", "Social media overuse", "Skipping meals", "Isolation"],
+  "Head": ["Bright screens in dark rooms", "Skipping meals (hypoglycemia)", "Dehydration", "Strong perfumes", "Loud noise", "Alcohol"],
+  "Fever": ["Cold baths when chilling", "Covering with heavy blankets during heat stage", "Antibiotics without indication", "Fruit juices with preservatives", "Sudden cold exposure"],
+  "Stomach": ["Spicy food", "Fried/oily food", "Late night eating", "Coffee on empty stomach", "Carbonated drinks", "Overeating"],
+  "Respiration": ["Cold drinks", "Ice cream", "Air conditioning direct exposure", "Smoking/passive smoking", "Dairy products (increase mucus)", "Dusty environments"],
+  "Skin": ["Soap with harsh chemicals", "Hot water baths", "Synthetic clothing", "Scratching", "Dairy and sugar (may worsen)", "Cosmetics with parabens"],
+  "Hands, Legs & Back": ["Cold and damp environments", "Sitting in one position too long", "Heavy lifting", "High heels", "Sleeping on very soft mattress", "Overexertion"],
+  "Urinary System": ["Holding urine for long", "Less water intake", "Spicy food", "Alcohol", "Coffee in excess", "Tight clothing"],
+  "Heart": ["Excess salt", "Saturated fats", "Smoking", "Stress without management", "Sedentary lifestyle", "Excess caffeine"],
 }
 
 const DEFAULT_AVOID = [
-  "Coffee and strong tea (antidotes many remedies)",
+  "Coffee and strong tea",
   "Alcohol",
   "Strongly scented substances",
+  "Suppressing natural urges",
   "Irregular sleep schedule",
   "Processed and junk food",
-  "Suppressing natural urges",
 ]
 
 interface RemedyScorerProps {
   initialQuery?: string;
   initialCategory?: string;
+  category?: string;
 }
 
-export default function RemedyScorer({ initialQuery = "", initialCategory = "" }: RemedyScorerProps) {
+export default function RemedyScorer({ initialQuery = "", initialCategory = "", category }: RemedyScorerProps) {
   const [, setLocation] = useLocation()
-  const [symptoms, setSymptoms] = useState<string[]>([])
-  const [currentSymptom, setCurrentSymptom] = useState("")
-  const [healthHistory, setHealthHistory] = useState("")
-  const [filters, setFilters] = useState<FilterState>({ age_group: "", gender: "", condition_type: "" })
-  const [results, setResults] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [showResults, setShowResults] = useState(false)
-  const [showQuestionnaire, setShowQuestionnaire] = useState(false)
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({})
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0)
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const [symptoms, setSymptoms] = useState<string[]>([]);
+  const [currentSymptom, setCurrentSymptom] = useState("");
+  const [filters, setFilters] = useState<FilterState>({ age_group: "", gender: "", condition_type: "", potency: "" });
+  const [showResults, setShowResults] = useState(false);
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [analyzingFiles, setAnalyzingFiles] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const activeCategory = initialCategory || ""
-  const questions = CATEGORY_QUESTIONS[activeCategory] || DEFAULT_QUESTIONS
-  const avoidList = AVOID_MAP[activeCategory] || DEFAULT_AVOID
+  const activeCategory = initialCategory || category || "";
+  const questions = CATEGORY_QUESTIONS[activeCategory] || DEFAULT_QUESTIONS;
+  const avoidList = AVOID_RECOMMENDATIONS[activeCategory] || DEFAULT_AVOID;
 
   useEffect(() => {
     if (initialQuery) {
-      const parts = initialQuery.split(",").map(s => s.trim()).filter(Boolean)
-      if (parts.length > 0) { setSymptoms(parts); setShowQuestionnaire(true) }
+      const parts = initialQuery.split(",").map(s => s.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        setSymptoms(parts);
+        setShowQuestionnaire(true);
+      }
     } else if (activeCategory) {
-      setShowQuestionnaire(true)
+      setShowQuestionnaire(true);
     }
-  }, [initialQuery, initialCategory])
+  }, [initialQuery, initialCategory]);
 
-  const submitToAI = async (syms: string[], answers: Record<string, string>) => {
-    setLoading(true); setError("")
-    try {
-      const allSymptoms = [
-        ...syms,
-        ...Object.values(answers).filter(v => v && !v.includes("No") && !v.includes("Normal") && !v.includes("N/A")),
-        ...(activeCategory ? [`category: ${activeCategory}`] : []),
-        ...(healthHistory.trim() ? [`health history: ${healthHistory.trim()}`] : []),
-        ...(filters.age_group ? [`age group: ${filters.age_group} years`] : []),
-        ...(filters.gender ? [`gender: ${filters.gender}`] : []),
-        ...(filters.condition_type ? [`disease duration: ${filters.condition_type}`] : []),
-      ].filter(Boolean)
-
-      const cleanFilters: any = {}
-      if (activeCategory) cleanFilters.symptom_location = activeCategory
-      if (filters.age_group) cleanFilters.age_group = filters.age_group
-      if (filters.gender) cleanFilters.gender = filters.gender
-
-      const scored = await scoreRemediesFromSupabase(allSymptoms, cleanFilters)
-      setResults(scored)
-      setShowResults(true)
-      await saveSearchHistory(allSymptoms, scored)
-    } catch (err: any) {
-      setError("Could not connect to Supabase. Please check your internet connection.")
-      console.error("AI scoring error:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
- const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = Array.from(e.target.files || []);
-  if (files.length === 0) return;
-
-  setUploadedFiles(prev => [...prev, ...files]);
-
-  for (const file of files) {
-    // Add placeholder while AI analyzes
-    setSymptoms(prev => [...prev, `Analyzing: ${file.name}...`]);
-
-    try {
-      // Read file as base64
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(",")[1]); // strip data:...;base64, prefix
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const response = await fetch("/api/analyze-report", {
+  const scoreMutation = useMutation({
+    mutationFn: async (data: { symptoms: string[]; filters: any }) => {
+      const response = await fetch("/api/remedies/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: base64,
-          mimeType: file.type || "image/jpeg",
-        }),
+        body: JSON.stringify(data),
       });
+      if (!response.ok) throw new Error("Failed to score remedies");
+      return response.json();
+    },
+    onSuccess: async (data, variables) => {
+      setShowResults(true);
+      await saveSearchHistory(variables.symptoms, data);
+    },
+  });
 
-      if (!response.ok) throw new Error("Analysis failed");
+  const submitToAI = (syms: string[], answers: Record<string, string>) => {
+    const allSymptoms = [
+      ...syms,
+      ...Object.values(answers),
+      ...(activeCategory ? [`category: ${activeCategory}`] : []),
+    ].filter(Boolean);
 
-      const result = await response.json();
+    const cleanFilters: any = Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ""));
+    if (activeCategory) cleanFilters.symptom_location = activeCategory;
+    scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters });
+  };
 
-      // Remove placeholder and add real findings
-      setSymptoms(prev => {
-        const filtered = prev.filter(s => s !== `Analyzing: ${file.name}...`);
-        const newSymptoms = [
-          ...result.symptoms,
-          ...result.conditions,
-        ].filter(Boolean);
-        return [...filtered, ...newSymptoms];
-      });
+  const handleAnswerQuestion = (answer: string) => {
+    const currentQ = questions[currentQuestionIdx];
+    const newAnswers = { ...questionAnswers, [currentQ.q]: answer };
+    setQuestionAnswers(newAnswers);
 
-    } catch (err) {
-      // On failure just keep filename as symptom
-      setSymptoms(prev =>
-        prev.map(s =>
-          s === `Analyzing: ${file.name}...`
-            ? `Report: ${file.name}`
-            : s
-        )
-      );
-    }
-  }
-};
+    if (currentQuestionIdx < questions.length - 1) {
+      setCurrentQuestionIdx(prev => prev + 1);
     } else {
-      setShowQuestionnaire(false)
-      submitToAI(symptoms, newAnswers)
+      setShowQuestionnaire(false);
+      submitToAI(symptoms, newAnswers);
     }
-  }
+  };
+
+  const handleSkipQuestionnaire = () => {
+    setShowQuestionnaire(false);
+    if (symptoms.length > 0) submitToAI(symptoms, questionAnswers);
+  };
 
   const handleAddSymptom = () => {
     if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
-      setSymptoms(prev => [...prev, currentSymptom.trim()])
-      setCurrentSymptom("")
+      setSymptoms(prev => [...prev, currentSymptom.trim()]);
+      setCurrentSymptom("");
     }
-  }
+  };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    setUploadedFiles(prev => [...prev, ...files])
-    files.forEach(f => setSymptoms(prev => [...prev, `Clinical report: ${f.name}`]))
-  }
+  const handleRemoveSymptom = (s: string) => setSymptoms(prev => prev.filter(x => x !== s));
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); handleAddSymptom(); }
+  };
+
+  // ── UPDATED: AI-powered file analysis using Groq Vision ──
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setUploadedFiles(prev => [...prev, ...files]);
+
+    for (const file of files) {
+      // Show "analyzing" placeholder
+      const placeholder = `🔍 Analyzing: ${file.name}...`;
+      setAnalyzingFiles(prev => [...prev, file.name]);
+      setSymptoms(prev => [...prev, placeholder]);
+
+      try {
+        // Read file as base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Send to Groq AI Vision endpoint
+        const response = await fetch("/api/analyze-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: base64,
+            mimeType: file.type || "image/jpeg",
+          }),
+        });
+
+        // Remove placeholder
+        setSymptoms(prev => prev.filter(s => s !== placeholder));
+        setAnalyzingFiles(prev => prev.filter(n => n !== file.name));
+
+        if (response.ok) {
+          const result = await response.json();
+          const extracted = [
+            ...( result.symptoms || []),
+            ...( result.conditions || []),
+          ].filter(Boolean);
+
+          if (extracted.length > 0) {
+            setSymptoms(prev => [...prev, ...extracted]);
+          } else {
+            setSymptoms(prev => [...prev, `Report: ${file.name}`]);
+          }
+        } else {
+          setSymptoms(prev => [...prev, `Report: ${file.name}`]);
+        }
+
+      } catch {
+        // On any error, just keep the filename
+        setSymptoms(prev =>
+          prev
+            .filter(s => s !== placeholder)
+            .concat(`Report: ${file.name}`)
+        );
+        setAnalyzingFiles(prev => prev.filter(n => n !== file.name));
+      }
+    }
+
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const handleSubmit = () => {
+    if (symptoms.length === 0) return;
+    submitToAI(symptoms, questionAnswers);
+  };
 
   const resetForm = () => {
-    setSymptoms([]); setCurrentSymptom(""); setHealthHistory("")
-    setFilters({ age_group: "", gender: "", condition_type: "" })
-    setResults([]); setShowResults(false); setShowQuestionnaire(false)
-    setQuestionAnswers({}); setCurrentQuestionIdx(0)
-    setUploadedFiles([]); setError("")
-  }
+    setSymptoms([]); setCurrentSymptom(""); setUploadedFiles([]);
+    setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
+    setShowResults(false); setShowQuestionnaire(false);
+    setQuestionAnswers({}); setCurrentQuestionIdx(0);
+    setAnalyzingFiles([]);
+    scoreMutation.reset();
+  };
 
   const PageHeader = () => (
     <header className="bg-white border-b border-gray-100 shadow-sm mb-6 sticky top-0 z-10">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
         <button onClick={() => setLocation("/")} className="flex items-center gap-2 hover:opacity-80 transition">
-          <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
-            <span className="text-xl">🌿</span>
+          <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center">
+            <span className="text-white text-lg">🌿</span>
           </div>
           <span className="font-bold text-green-700 text-lg">HomeoWell</span>
         </button>
-        {activeCategory && <Badge className="bg-green-100 text-green-700 border border-green-300">{activeCategory}</Badge>}
+        {activeCategory && (
+          <Badge className="bg-green-100 text-green-700 border-green-300">{activeCategory}</Badge>
+        )}
       </div>
     </header>
-  )
+  );
 
-  // ── QUESTIONNAIRE ────────────────────────────────────────
+  // ── QUESTIONNAIRE ──────────────────────────────────────────
   if (showQuestionnaire) {
-    const currentQ = questions[currentQuestionIdx]
-    const progress = (currentQuestionIdx / questions.length) * 100
-
+    const currentQ = questions[currentQuestionIdx];
+    const progress = (currentQuestionIdx / questions.length) * 100;
     return (
       <div>
         <PageHeader />
-        <div className="max-w-2xl mx-auto px-4 pb-8">
+        <div className="max-w-2xl mx-auto px-4">
           <Card className="p-6">
-            <div className="mb-5">
+            <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-green-700">
-                  <HelpCircle size={18} />
-                  <span className="font-semibold text-sm">
-                    {activeCategory === "Mind" ? "Psychological Assessment (18 questions)" : "AI Questionnaire"}
-                  </span>
+                  <HelpCircle size={20} />
+                  <span className="font-semibold">AI is narrowing down remedies...</span>
                 </div>
-                <span className="text-xs text-gray-400">{currentQuestionIdx + 1} / {questions.length}</span>
+                <span className="text-sm text-gray-400">{currentQuestionIdx + 1} / {questions.length}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2">
-                <div className="bg-green-500 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+                <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
-              {activeCategory && <p className="text-xs text-gray-400 mt-1">Category: {activeCategory}</p>}
+              {activeCategory && <p className="text-xs text-gray-400 mt-2">Category: {activeCategory}</p>}
             </div>
 
-            <h3 className="text-base font-semibold text-gray-800 mb-4">{currentQ.q}</h3>
-
-            <div className="grid grid-cols-2 gap-2 mb-5">
+            <h3 className="text-lg font-semibold text-gray-800 mb-5">{currentQ.q}</h3>
+            <div className="grid grid-cols-2 gap-3 mb-6">
               {currentQ.options.map(option => (
                 <button key={option} onClick={() => handleAnswerQuestion(option)}
-                  className={`p-3 rounded-xl border-2 text-left text-sm font-medium transition-all ${
-                    questionAnswers[currentQ.q] === option
-                      ? "border-green-500 bg-green-50 text-green-700"
-                      : "border-gray-200 hover:border-green-400 hover:bg-green-50 text-gray-700"
-                  }`}>
+                  className="p-3 rounded-xl border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 text-left text-sm font-medium text-gray-700 transition-all">
                   {option}
                 </button>
               ))}
             </div>
 
-            {/* Custom symptom during Q */}
-            <div className="border-t pt-3">
-              <p className="text-xs text-gray-400 mb-2">Add custom symptom:</p>
+            <div className="border-t pt-4 mt-2">
+              <p className="text-xs text-gray-400 mb-2">Or add a custom symptom:</p>
               <div className="flex gap-2">
-                <Input value={currentSymptom} onChange={e => setCurrentSymptom(e.target.value)}
-                  onKeyPress={e => { if (e.key === "Enter") handleAddSymptom() }}
-                  placeholder="" className="flex-1 text-sm" />
+                <Input
+                  value={currentSymptom}
+                  onChange={e => setCurrentSymptom(e.target.value)}
+                  onKeyPress={e => { if (e.key === "Enter") { handleAddSymptom(); } }}
+                  placeholder="Type symptom..."
+                  className="flex-1 text-sm"
+                />
                 <Button size="sm" onClick={handleAddSymptom} disabled={!currentSymptom.trim()}>Add</Button>
               </div>
               {symptoms.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {symptoms.map(s => (
-                    <Badge key={s} variant="secondary" className="text-xs cursor-pointer"
-                      onClick={() => setSymptoms(prev => prev.filter(x => x !== s))}>
+                    <Badge key={s} variant="secondary" className="text-xs cursor-pointer" onClick={() => handleRemoveSymptom(s)}>
                       {s} ×
                     </Badge>
                   ))}
@@ -339,290 +335,310 @@ export default function RemedyScorer({ initialQuery = "", initialCategory = "" }
 
             <div className="flex justify-between mt-4">
               {currentQuestionIdx > 0 && (
-                <Button variant="outline" size="sm" onClick={() => setCurrentQuestionIdx(p => p - 1)}>← Back</Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentQuestionIdx(prev => prev - 1)}>← Back</Button>
               )}
-              <Button variant="ghost" size="sm"
-                onClick={() => { setShowQuestionnaire(false); if (symptoms.length > 0) submitToAI(symptoms, questionAnswers) }}
-                className="ml-auto text-xs text-gray-400 hover:text-gray-600">
+              <Button variant="ghost" size="sm" onClick={handleSkipQuestionnaire} className="ml-auto text-gray-400">
                 Skip & Search →
               </Button>
             </div>
           </Card>
         </div>
       </div>
-    )
+    );
   }
 
-  // ── LOADING ──────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div>
-        <PageHeader />
-        <div className="max-w-2xl mx-auto px-4 text-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">AI is analyzing symptoms...</p>
-          <p className="text-gray-400 text-sm mt-1">Searching Supabase database</p>
-        </div>
-      </div>
-    )
-  }
-
-  // ── RESULTS ──────────────────────────────────────────────
-  if (showResults) {
-    const topResults = results.slice(0, 3)
+  // ── RESULTS ────────────────────────────────────────────────
+  if (showResults && scoreMutation.data) {
+    const topResults = scoreMutation.data.slice(0, 3);
 
     return (
       <div>
         <PageHeader />
-        <div className="max-w-4xl mx-auto px-4 pb-8 space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Top Remedy Recommendations</h2>
-              <p className="text-sm text-gray-500">
-                {topResults.length > 0 ? `${topResults.length} best matches` : "No matches found"}
-                {activeCategory ? ` — ${activeCategory}` : ""}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={resetForm}>
-              <ArrowLeft size={14} className="mr-1" /> New Search
-            </Button>
-          </div>
-
-          {/* Answers summary */}
-          {Object.keys(questionAnswers).length > 0 && (
-            <div className="p-3 bg-green-50 rounded-xl border border-green-200">
-              <p className="text-xs font-medium text-green-700 mb-2 flex items-center gap-1">
-                <CheckCircle size={13} /> AI refined by your answers:
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {Object.values(questionAnswers).filter(v => v && !v.includes("No") && !v.includes("Normal")).map((a, i) => (
-                  <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
-                ))}
+        <div className="max-w-4xl mx-auto px-4 space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold">Top Remedy Recommendations</h2>
+                <p className="text-neutral-500 text-sm">
+                  Best {topResults.length} matches{activeCategory ? ` for ${activeCategory}` : ""}
+                </p>
               </div>
+              <Button variant="outline" onClick={resetForm} className="flex items-center gap-2">
+                <ArrowLeft className="w-4 h-4" /> New Search
+              </Button>
             </div>
-          )}
 
-          {/* Health history shown in results */}
-          {healthHistory && (
-            <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
-              <p className="text-xs font-medium text-blue-700 mb-1 flex items-center gap-1">
-                <Heart size={13} /> Health History considered:
-              </p>
-              <p className="text-xs text-blue-600">{healthHistory}</p>
-            </div>
-          )}
+            {Object.keys(questionAnswers).length > 0 && (
+              <div className="mb-4 p-3 bg-green-50 rounded-lg">
+                <p className="text-xs font-medium text-green-700 mb-2 flex items-center gap-1">
+                  <CheckCircle size={14} /> Refined by your answers:
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {Object.values(questionAnswers).map((a, i) => (
+                    <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
-          {topResults.length === 0 && (
-            <Card className="p-8 text-center">
-              <p className="text-gray-500 mb-2">No matching remedies found in database.</p>
-              <p className="text-xs text-gray-400 mb-4">Try different symptoms or run the SQL import first in Supabase.</p>
-              <Button onClick={resetForm} className="bg-green-600 hover:bg-green-700">Try Again</Button>
-            </Card>
-          )}
-
-          {topResults.map((result: any, idx: number) => (
-            <Card key={idx} className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="w-7 h-7 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold shrink-0">
-                      {idx + 1}
-                    </span>
-                    <h3 className="text-lg font-bold text-gray-900">{result.remedy.name}</h3>
+            <div className="space-y-4">
+              {topResults.map((result: any, idx: number) => (
+                <div key={result.remedy.id} className="border rounded-xl p-4 bg-white">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-bold text-green-800">#{idx + 1}</span>
+                        <h3 className="text-lg font-bold text-gray-900">{result.remedy.name}</h3>
+                      </div>
+                      <p className="text-sm text-gray-500">{result.remedy.condition}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-green-600">{result.score}%</div>
+                      <div className="text-xs text-gray-400">match</div>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 ml-9">{result.remedy.condition}</p>
-                </div>
-                <div className="text-right shrink-0 ml-3">
-                  <div className="text-2xl font-bold text-green-600">{result.score}%</div>
-                  <div className="text-xs text-gray-400">match</div>
-                </div>
-              </div>
 
-              <div className="w-full bg-gray-100 rounded-full h-1.5 mb-3">
-                <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${result.score}%` }} />
-              </div>
-
-              <p className="text-sm text-gray-600 mb-3">{result.remedy.description}</p>
-
-              <div className="bg-blue-50 rounded-lg p-2.5 mb-3">
-                <p className="text-xs text-blue-700"><strong>💊 Dosage:</strong> {result.remedy.dosage}</p>
-              </div>
-
-              {result.matching_symptoms?.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-xs text-gray-400 mb-1">Matched rubrics:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {result.matching_symptoms.slice(0, 4).map((s: string, i: number) => (
-                      <Badge key={i} variant="outline" className="text-xs">{s}</Badge>
-                    ))}
+                  <div className="w-full bg-gray-100 rounded-full h-2 mb-3">
+                    <div className="bg-green-500 h-2 rounded-full" style={{ width: `${result.score}%` }} />
                   </div>
-                </div>
-              )}
 
-              {(result.remedy.modalities?.better?.length > 0 || result.remedy.modalities?.worse?.length > 0) && (
-                <div className="grid grid-cols-2 gap-2 text-xs mt-2">
-                  {result.remedy.modalities?.better?.length > 0 && (
-                    <div className="bg-green-50 rounded-lg p-2">
-                      <p className="font-semibold text-green-700 mb-1">✓ Better:</p>
-                      {result.remedy.modalities.better.slice(0, 3).map((b: string, i: number) => (
-                        <p key={i} className="text-green-600">{b}</p>
-                      ))}
+                  <p className="text-sm text-gray-600 mb-3">{result.remedy.description}</p>
+
+                  <div className="bg-blue-50 rounded-lg p-2 mb-3">
+                    <p className="text-xs text-blue-700"><strong>Dosage:</strong> {result.remedy.dosage}</p>
+                  </div>
+
+                  {result.matching_symptoms?.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-400 mb-1">Matching symptoms:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {result.matching_symptoms.slice(0, 5).map((s: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">{s}</Badge>
+                        ))}
+                      </div>
                     </div>
                   )}
-                  {result.remedy.modalities?.worse?.length > 0 && (
-                    <div className="bg-red-50 rounded-lg p-2">
-                      <p className="font-semibold text-red-700 mb-1">✗ Worse:</p>
-                      {result.remedy.modalities.worse.slice(0, 3).map((w: string, i: number) => (
-                        <p key={i} className="text-red-600">{w}</p>
-                      ))}
+
+                  {(result.remedy.modalities?.better?.length > 0 || result.remedy.modalities?.worse?.length > 0) && (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {result.remedy.modalities?.better?.length > 0 && (
+                        <div className="bg-green-50 rounded p-2">
+                          <p className="font-medium text-green-700 mb-1">Better:</p>
+                          {result.remedy.modalities.better.slice(0, 3).map((b: string, i: number) => (
+                            <p key={i} className="text-green-600">✓ {b}</p>
+                          ))}
+                        </div>
+                      )}
+                      {result.remedy.modalities?.worse?.length > 0 && (
+                        <div className="bg-red-50 rounded p-2">
+                          <p className="font-medium text-red-700 mb-1">Worse:</p>
+                          {result.remedy.modalities.worse.slice(0, 3).map((w: string, i: number) => (
+                            <p key={i} className="text-red-600">✗ {w}</p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </Card>
-          ))}
+              ))}
+            </div>
 
-          {topResults.length > 0 && (
-            <Card className="p-5 border-2 border-red-200 bg-red-50">
-              <h3 className="text-base font-bold text-red-700 mb-3">
-                ⚠️ AVOID — For {activeCategory || "this condition"}
+            {topResults.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-neutral-600 mb-4">No matching remedies found. Try different symptoms.</p>
+                <Button onClick={resetForm}>Try Again</Button>
+              </div>
+            )}
+
+            <div className="mt-6 border-2 border-red-200 rounded-xl p-5 bg-red-50">
+              <h3 className="text-lg font-bold text-red-700 mb-3 flex items-center gap-2">
+                ⚠️ AVOID
+                <span className="text-sm font-normal text-red-500">
+                  — Things to avoid for {activeCategory || "this condition"}
+                </span>
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {avoidList.map((item, i) => (
                   <div key={i} className="flex items-start gap-2">
-                    <span className="text-red-500 shrink-0">✗</span>
+                    <span className="text-red-500 mt-0.5 shrink-0">✗</span>
                     <span className="text-sm text-red-700">{item}</span>
                   </div>
                 ))}
               </div>
-            </Card>
-          )}
+            </div>
 
-          <p className="text-center text-xs text-gray-400">
-            ⚠️ For educational purposes only. Always consult a qualified homeopath.
-          </p>
+            <p className="text-center text-xs text-gray-400 mt-4">
+              ⚠️ For educational purposes only. Always consult a qualified homeopath.
+            </p>
+          </Card>
         </div>
       </div>
-    )
+    );
   }
 
-  // ── MAIN INPUT ───────────────────────────────────────────
+  // ── MAIN INPUT ─────────────────────────────────────────────
   return (
     <div>
       <PageHeader />
-      <div className="max-w-4xl mx-auto px-4 pb-8 space-y-5">
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-5">
+      <div className="max-w-4xl mx-auto px-4 space-y-6">
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-xl font-bold">Symptom Analysis</h2>
-              <p className="text-sm text-neutral-500">
-                {activeCategory ? `Category: ${activeCategory}` : "AI-powered remedy matching via Supabase"}
+              <h2 className="text-2xl font-bold">Symptom Analysis</h2>
+              <p className="text-neutral-500">
+                {activeCategory ? `Category: ${activeCategory}` : "Enter symptoms for AI remedy matching"}
               </p>
             </div>
-            <div className="flex items-center gap-1 text-xs text-neutral-400">
-              <TrendingUp size={14} /><span>Supabase AI</span>
+            <div className="flex items-center gap-2 text-sm text-neutral-400">
+              <TrendingUp className="w-4 h-4" />
+              <span>AI-Powered</span>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {/* Symptoms */}
-            <div>
-              <Label>Add Symptoms</Label>
-              <div className="flex gap-2 mt-1">
-                <Input value={currentSymptom} onChange={e => setCurrentSymptom(e.target.value)}
-                  onKeyPress={e => { if (e.key === "Enter") { e.preventDefault(); handleAddSymptom() } }}
-                  placeholder=""
-                  className="flex-1" autoFocus />
-                <Button onClick={handleAddSymptom} disabled={!currentSymptom.trim()} className="bg-green-600 hover:bg-green-700">Add</Button>
-              </div>
+          {scoreMutation.isPending && (
+            <div className="flex items-center justify-center py-10 gap-3">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600" />
+              <span className="text-neutral-600">AI is analyzing symptoms...</span>
             </div>
-
-            {symptoms.length > 0 && (
-              <div className="flex flex-wrap gap-2 p-3 bg-neutral-50 rounded-lg">
-                {symptoms.map(s => (
-                  <Badge key={s} variant="secondary" className="cursor-pointer hover:bg-red-100 text-xs"
-                    onClick={() => setSymptoms(p => p.filter(x => x !== s))}>
-                    {s} ×
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {/* Health History — always visible */}
-            <div className="border border-blue-200 rounded-xl p-4 bg-blue-50">
-              <Label className="flex items-center gap-2 text-blue-800 mb-2">
-                <Heart size={15} className="text-red-500" />
-                Health History
-                <span className="text-xs font-normal text-blue-500">(helps AI give better results)</span>
-              </Label>
-              <Textarea
-                value={healthHistory}
-                onChange={e => setHealthHistory(e.target.value)}
-                placeholder=""
-                className="bg-white text-sm resize-none border-blue-200 focus:border-blue-400"
-                rows={2}
-              />
-              <p className="text-xs text-blue-500 mt-1">e.g. Diabetes, BP, thyroid, surgeries, allergies, medications</p>
-            </div>
-
-            {/* Clinical uploads */}
-            <div>
-              <Label>Clinical Reports (optional)</Label>
-              <div className="flex gap-2 mt-1">
-                <div className="relative flex-1">
-                  <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    multiple onChange={handleFileSelect}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-                  <Button type="button" variant="outline" className="w-full border-dashed border-2 border-gray-300 hover:border-green-400 text-sm">
-                    <Paperclip size={15} className="mr-2 text-green-600" /> Upload PDF / Photos
-                  </Button>
-                </div>
-                <div className="relative">
-                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
-                    multiple onChange={handleFileSelect}
-                    className="absolute inset-0 opacity-0 cursor-pointer" />
-                  <Button type="button" variant="outline" className="border-2 border-gray-300 hover:border-green-400 px-3 h-full" title="Take photo">
-                    <Camera size={18} className="text-green-600" />
-                  </Button>
-                </div>
-              </div>
-              {uploadedFiles.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {uploadedFiles.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs bg-green-50 rounded px-3 py-1.5">
-                      <span className="text-green-700 truncate">📎 {f.name}</span>
-                      <button onClick={() => setUploadedFiles(p => p.filter((_, idx) => idx !== i))}
-                        className="text-gray-400 hover:text-red-500 ml-2"><X size={13} /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <Separator className="my-5" />
-
-          <AdvancedFilters onFiltersChange={setFilters} onSearch={() => submitToAI(symptoms, questionAnswers)} isLoading={loading} />
-
-          {error && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>
           )}
 
-          <div className="flex justify-between mt-5">
-            <Button variant="outline" onClick={() => { setShowQuestionnaire(true); setCurrentQuestionIdx(0) }} className="text-sm">
-              <HelpCircle size={14} className="mr-2" /> AI Questions
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={resetForm} className="text-sm">Clear</Button>
-              <Button onClick={() => submitToAI(symptoms, questionAnswers)}
-                disabled={symptoms.length === 0 || loading}
-                className="bg-green-600 hover:bg-green-700 min-w-28 text-sm">
-                <Search size={14} className="mr-2" /> Find Remedies
-              </Button>
-            </div>
-          </div>
+          {!scoreMutation.isPending && (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <Label>Add Symptoms</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      value={currentSymptom}
+                      onChange={e => setCurrentSymptom(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Type symptom and press Enter or Add..."
+                      className="flex-1" autoFocus
+                    />
+                    <Button onClick={handleAddSymptom} disabled={!currentSymptom.trim()}>Add</Button>
+                  </div>
+                </div>
+
+                {symptoms.length > 0 && (
+                  <div>
+                    <Label>Symptoms ({symptoms.length})</Label>
+                    <div className="flex flex-wrap gap-2 mt-2 p-3 bg-neutral-50 rounded-lg">
+                      {symptoms.map(s => (
+                        <Badge
+                          key={s}
+                          variant="secondary"
+                          className={`cursor-pointer hover:bg-red-100 ${
+                            s.startsWith("🔍 Analyzing:") ? "bg-yellow-100 text-yellow-700 animate-pulse" : ""
+                          }`}
+                          onClick={() => {
+                            if (!s.startsWith("🔍 Analyzing:")) handleRemoveSymptom(s);
+                          }}
+                        >
+                          {s.startsWith("🔍 Analyzing:") ? s : `${s} ×`}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clinical file uploads */}
+                <div>
+                  <Label>Clinical Reports (Optional)</Label>
+                  <p className="text-xs text-gray-400 mb-2 mt-0.5">
+                    Upload a photo or PDF of your report — AI will extract symptoms automatically
+                  </p>
+                  <div className="flex gap-2 mt-1">
+                    <div className="relative flex-1">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        multiple
+                        onChange={handleFileSelect}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                      <Button type="button" variant="outline" className="w-full border-dashed border-2 border-gray-300 hover:border-green-400">
+                        <Paperclip size={16} className="mr-2 text-green-600" />
+                        Upload PDF / Photos
+                      </Button>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        ref={cameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        multiple
+                        onChange={handleFileSelect}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                      <Button type="button" variant="outline" className="border-2 border-gray-300 hover:border-green-400 px-3">
+                        <Camera size={18} className="text-green-600" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {uploadedFiles.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs bg-green-50 rounded px-3 py-1.5">
+                          <span className="flex items-center gap-1.5 text-green-700 truncate">
+                            <FileText size={12} />
+                            {f.name}
+                            {analyzingFiles.includes(f.name) && (
+                              <span className="text-yellow-600 font-medium ml-1">— AI analyzing...</span>
+                            )}
+                          </span>
+                          <button
+                            onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                            className="text-gray-400 hover:text-red-500 ml-2 shrink-0"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Separator className="my-6" />
+
+              <AdvancedFilters onFiltersChange={setFilters} onSearch={handleSubmit} isLoading={scoreMutation.isPending} />
+
+              <div className="flex justify-between mt-6">
+                <Button variant="outline" onClick={() => { setShowQuestionnaire(true); setCurrentQuestionIdx(0); }}>
+                  <HelpCircle className="w-4 h-4 mr-2" /> AI Questions
+                </Button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={resetForm}>Clear</Button>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={symptoms.length === 0 || scoreMutation.isPending || analyzingFiles.length > 0}
+                    className="min-w-32 bg-green-600 hover:bg-green-700"
+                  >
+                    <Search className="w-4 h-4 mr-2" /> Find Remedies
+                  </Button>
+                </div>
+              </div>
+
+              {analyzingFiles.length > 0 && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500" />
+                  AI is reading your report... please wait before searching.
+                </div>
+              )}
+
+              {scoreMutation.isError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                  Something went wrong. Please try again.
+                </div>
+              )}
+            </>
+          )}
         </Card>
       </div>
     </div>
-  )
+  );
 }

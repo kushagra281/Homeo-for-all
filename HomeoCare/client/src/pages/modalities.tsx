@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Header } from "@/components/header";
+import Header from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

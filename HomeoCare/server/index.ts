@@ -1,16 +1,14 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { initializeWebSocket } from "./websocket";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
-// Supabase client (server-side — uses VITE_ vars since this is a unified app)
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL ?? "",
   process.env.VITE_SUPABASE_ANON_KEY ?? ""
 );
 
-// Groq — uses OpenAI-compatible API
 const groq = new OpenAI({
   apiKey: process.env.GROQ_OPENAI_API ?? "",
   baseURL: "https://api.groq.com/openai/v1",
@@ -18,7 +16,6 @@ const groq = new OpenAI({
 
 const hasGroq = !!process.env.GROQ_OPENAI_API;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 function toTitleCase(str: string): string {
   if (!str) return "";
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -59,14 +56,10 @@ function buildResults(scoreMap: Record<string, any>, category: string) {
     .sort((a, b) => b.score - a.score);
 }
 
-// ── Route Registration ────────────────────────────────────────────────────────
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
-
-  // Start WebSocket server for community chat
   initializeWebSocket(httpServer);
 
-  // ── Health ────────────────────────────────────────────────────────────────
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
@@ -76,7 +69,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // ── AI-powered remedy scoring ─────────────────────────────────────────────
   app.post("/api/remedies/score", async (req: Request, res: Response) => {
     try {
       const { symptoms = [], filters = {}, questionAnswers = {}, healthHistory = "" } = req.body;
@@ -98,7 +90,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const category = filters.symptom_location || filters.category || "";
 
-      // Search remedy_symptoms table
       const allData: any[] = [];
       for (const term of cleanSymptoms.slice(0, 5)) {
         let query = supabase
@@ -111,7 +102,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (data) allData.push(...data);
       }
 
-      // Also search symptoms table
       const allData2: any[] = [];
       for (const term of cleanSymptoms.slice(0, 4)) {
         let q2 = supabase
@@ -124,8 +114,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (data) allData2.push(...data);
       }
 
-      // Build score map from remedy_symptoms
       const scoreMap: Record<string, any> = {};
+
       allData.forEach((row) => {
         const name = row.remedy_name;
         const termMatches = cleanSymptoms.filter((t) =>
@@ -142,7 +132,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         scoreMap[name].headings.add(row.heading);
       });
 
-      // Merge from symptoms table
       allData2.forEach((row) => {
         const name = row.remedy;
         const termMatches = cleanSymptoms.filter((t) =>
@@ -160,14 +149,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const topRemedies = buildResults(scoreMap, category).slice(0, 5);
 
-      // Enhance with Groq AI if configured
       if (hasGroq && topRemedies.length > 0) {
-        const symptomsText = symptoms
-          .filter((s: string) => !s.includes(":"))
-          .join(", ");
-        const qaText = Object.entries(questionAnswers)
-          .map(([q, a]) => `${q}: ${a}`)
-          .join("; ");
+        const symptomsText = symptoms.filter((s: string) => !s.includes(":")).join(", ");
+        const qaText = Object.entries(questionAnswers).map(([q, a]) => `${q}: ${a}`).join("; ");
 
         const aiPrompt = `You are a classical homeopath. Evaluate these remedies for the patient.
 
@@ -223,7 +207,6 @@ Return ONLY valid JSON array — no extra text:
     }
   });
 
-  // ── Analyze clinical report (image or text) with Groq ────────────────────
   app.post("/api/ai/analyze-report", async (req: Request, res: Response) => {
     try {
       const { reportText, imageBase64, symptoms = [] } = req.body;
@@ -233,28 +216,25 @@ Return ONLY valid JSON array — no extra text:
       }
 
       const userContext = symptoms.filter((s: string) => !s.includes(":")).join(", ");
-      let messages: any[];
 
       if (imageBase64) {
-        // Vision model for images
-        messages = [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `You are a homeopathic physician. Analyze this medical report/image and extract all symptoms, test findings, and clinical observations useful for homeopathic remedy selection.${userContext ? ` Patient also reports: ${userContext}` : ""}
+        const completion = await groq.chat.completions.create({
+          model: "llama-3.2-90b-vision-preview",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `You are a homeopathic physician. Analyze this medical report/image and extract all symptoms, test findings, and clinical observations useful for homeopathic remedy selection.${userContext ? ` Patient also reports: ${userContext}` : ""}
 
 Return ONLY valid JSON:
 {"extracted_symptoms":["symptom1","symptom2"],"summary":"2-3 sentence clinical summary","key_findings":["finding1","finding2"]}`,
-              },
-              { type: "image_url", image_url: { url: imageBase64 } },
-            ],
-          },
-        ];
-        const completion = await groq.chat.completions.create({
-          model: "llama-3.2-90b-vision-preview",
-          messages,
+                },
+                { type: "image_url", image_url: { url: imageBase64 } },
+              ],
+            },
+          ],
           max_tokens: 1000,
           temperature: 0.2,
         });
@@ -262,7 +242,6 @@ Return ONLY valid JSON:
         const m = text.match(/\{[\s\S]*\}/);
         return res.json(m ? JSON.parse(m[0]) : { extracted_symptoms: [], summary: text });
       } else {
-        // Text model for text content
         const prompt = `You are a homeopathic physician. Extract all symptoms and clinical findings from this report.${userContext ? ` Patient also reports: ${userContext}` : ""}
 
 Report:
@@ -287,7 +266,6 @@ Return ONLY valid JSON:
     }
   });
 
-  // ── Search remedies ───────────────────────────────────────────────────────
   app.get("/api/remedies/search", async (req: Request, res: Response) => {
     try {
       const q = (req.query.q as string) ?? "";
@@ -304,7 +282,6 @@ Return ONLY valid JSON:
     }
   });
 
-  // ── Remedies by category ──────────────────────────────────────────────────
   app.get("/api/remedies/:category", async (req: Request, res: Response) => {
     try {
       const { category } = req.params;
@@ -345,6 +322,14 @@ Return ONLY valid JSON:
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── FIX 1: "throw err" removed — was crashing Node process in production ──
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+    console.error(`[error] ${status} - ${message}`, err);
+    res.status(status).json({ message });
   });
 
   return httpServer;

@@ -9,6 +9,9 @@ import SymptomAnalysis from "@/pages/symptom-analysis";
 import PotencyGuidePage from "@/pages/potency-guide-page";
 import DiagnosticWizardPage from "@/pages/diagnostic-wizard-page";
 import AuthPage from "@/pages/auth-page";
+import Community from "@/pages/community";
+import DictionaryPage from "@/pages/dictionary";
+import ModalitiesPage from "@/pages/modalities";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -20,6 +23,9 @@ function Router() {
       <Route path="/symptom-analysis" component={SymptomAnalysis} />
       <Route path="/potency-guide" component={PotencyGuidePage} />
       <Route path="/diagnostic/:bodySystem" component={DiagnosticWizardPage} />
+      <Route path="/community" component={Community} />
+      <Route path="/dictionary" component={DictionaryPage} />
+      <Route path="/modalities" component={ModalitiesPage} />
       <Route component={NotFound} />
     </Switch>
   );

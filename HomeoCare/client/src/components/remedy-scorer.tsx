@@ -177,12 +177,63 @@ export default function RemedyScorer({ initialQuery = "", initialCategory = "" }
     }
   }
 
-  const handleAnswerQuestion = (answer: string) => {
-    const currentQ = questions[currentQuestionIdx]
-    const newAnswers = { ...questionAnswers, [currentQ.q]: answer }
-    setQuestionAnswers(newAnswers)
-    if (currentQuestionIdx < questions.length - 1) {
-      setCurrentQuestionIdx(prev => prev + 1)
+ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+
+  setUploadedFiles(prev => [...prev, ...files]);
+
+  for (const file of files) {
+    // Add placeholder while AI analyzes
+    setSymptoms(prev => [...prev, `Analyzing: ${file.name}...`]);
+
+    try {
+      // Read file as base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]); // strip data:...;base64, prefix
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await fetch("/api/analyze-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType: file.type || "image/jpeg",
+        }),
+      });
+
+      if (!response.ok) throw new Error("Analysis failed");
+
+      const result = await response.json();
+
+      // Remove placeholder and add real findings
+      setSymptoms(prev => {
+        const filtered = prev.filter(s => s !== `Analyzing: ${file.name}...`);
+        const newSymptoms = [
+          ...result.symptoms,
+          ...result.conditions,
+        ].filter(Boolean);
+        return [...filtered, ...newSymptoms];
+      });
+
+    } catch (err) {
+      // On failure just keep filename as symptom
+      setSymptoms(prev =>
+        prev.map(s =>
+          s === `Analyzing: ${file.name}...`
+            ? `Report: ${file.name}`
+            : s
+        )
+      );
+    }
+  }
+};
     } else {
       setShowQuestionnaire(false)
       submitToAI(symptoms, newAnswers)

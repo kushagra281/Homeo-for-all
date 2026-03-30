@@ -312,6 +312,7 @@ export default function ModalitiesPage() {
           </div>
         </Card>
             </div>
-    </main>
+          </main>
+    </div>    
   );
 }

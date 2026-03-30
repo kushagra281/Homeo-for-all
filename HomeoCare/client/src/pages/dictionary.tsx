@@ -60,12 +60,13 @@ export default function DictionaryPage() {
         <div className="mb-8 space-y-4">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
-              <SearchBar 
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Search medical terms..."
-                icon={Search}
-              />
+              <input
+  type="text"
+  value={searchQuery}
+  onChange={e => setSearchQuery(e.target.value)}
+  placeholder="Search remedies..."
+  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-green-500"
+/>
             </div>
             <div className="md:w-64">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>

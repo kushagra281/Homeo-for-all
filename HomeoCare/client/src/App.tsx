@@ -27,6 +27,7 @@ function Router() {
       <Route path="/community" component={Community} />
       <Route path="/dictionary" component={DictionaryPage} />
       <Route path="/modalities" component={ModalitiesPage} />
+      <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

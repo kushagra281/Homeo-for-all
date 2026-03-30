@@ -195,12 +195,13 @@ export default function ModalitiesPage() {
 
         {/* Search */}
         <div className="mb-8">
-          <SearchBar
+                  <input
+            type="text"
             value={searchQuery}
-            onChange={setSearchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search modalities, conditions, or remedies..."
+            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400"
           />
-        </div>
 
         {/* Modalities Sections */}
         <div className="space-y-8">

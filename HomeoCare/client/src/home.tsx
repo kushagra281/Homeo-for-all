@@ -101,10 +101,10 @@ export default function Home() {
                   <Clock size={16} />
                   <span className="hidden sm:inline">History</span>
                 </button>
-                <div className="flex items-center gap-1 text-sm text-gray-700 bg-green-50 px-3 py-1 rounded-full">
-                  <User size={14} />
-                  <span className="hidden sm:inline">{user.user_metadata?.name || user.email}</span>
-                </div>
+               <button onClick={() => setLocation("/profile")} className="flex items-center gap-1 text-sm text-gray-700 bg-green-50 px-3 py-1 rounded-full hover:bg-green-100 transition">
+  <User size={14} />
+  <span className="hidden sm:inline">{user.user_metadata?.name || user.email}</span>
+</button>
                 <button onClick={handleLogout} className="text-gray-400 hover:text-red-500">
                   <LogOut size={18} />
                 </button>

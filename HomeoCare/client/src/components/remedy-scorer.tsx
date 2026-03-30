@@ -79,13 +79,6 @@ const CATEGORY_QUESTIONS: Record<string, Array<{ q: string; options: string[] }>
     { q: "When better?", options: ["Continued movement", "Complete rest", "External warmth/Heat", "Cold application", "Firm pressure", "Elevation of limb"] },
     { q: "Associated?", options: ["Redness and heat in joint", "Swelling", "Cracking sounds", "Muscle weakness", "None of these"] },
   ],
-  "Fever": [
-    { q: "Fever pattern?", options: ["Chill first then heat", "Heat only", "Sweating after heat", "All three stages", "Irregular"] },
-    { q: "Time of fever?", options: ["Morning", "Afternoon (1-3 PM)", "Evening", "Night", "Irregular"] },
-    { q: "Thirst?", options: ["Very thirsty - large amounts", "Thirsty for cold", "Thirsty for warm", "No thirst at all"] },
-    { q: "Perspiration?", options: ["Profuse sweating", "No sweating", "Sweating relieves", "Sweating doesn't relieve", "Night sweats"] },
-    { q: "Associated?", options: ["Body ache", "Headache", "Rash", "Vomiting", "Delirium", "None"] },
-  ],
 }
 
 const DEFAULT_QUESTIONS = [

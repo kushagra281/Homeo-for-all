@@ -3,11 +3,42 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>HomeoWell</title>
+    <style>
+      /* Hide Google Translate toolbar/banner */
+      .goog-te-banner-frame { display: none !important; }
+      body { top: 0 !important; }
+      .goog-te-gadget { font-size: 0 !important; }
+      .goog-te-gadget select {
+        font-size: 13px !important;
+        border: 1px solid #d1fae5;
+        border-radius: 8px;
+        padding: 4px 8px;
+        color: #15803d;
+        background: #f0fdf4;
+        cursor: pointer;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Google Translate Widget (hidden, triggered by button in header) -->
+    <div id="google_translate_element" style="display:none; position:fixed; top:60px; right:16px; z-index:9999; background:white; border:1px solid #d1fae5; border-radius:12px; padding:10px; box-shadow:0 4px 20px rgba(0,0,0,0.15);"></div>
+    <script type="text/javascript">
+      function googleTranslateElementInit() {
+        new google.translate.TranslateElement(
+          {
+            pageLanguage: 'en',
+            includedLanguages: 'hi,ur,gu,mr,pa,bn,ta,te,kn,ar,en',
+            layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+            autoDisplay: false
+          },
+          'google_translate_element'
+        );
+      }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async></script>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
 </html>

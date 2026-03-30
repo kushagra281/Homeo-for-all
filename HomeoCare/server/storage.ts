@@ -168,11 +168,11 @@ export class MemStorage implements IStorage {
 
       // ── Load 5000 Symptoms Database ──────────────────────────────
       const symptomsPath = this.findFile([
-        'homeopathy_symptoms_2000.json',
-        'homeopathy_5000_symptoms.json',
-        'homeopathy_2000_symptoms.json',
-        'symptoms.json'
-      ]);
+  'homeopathy_symptoms_2000.json',
+  'homeopathy_5000_symptoms.json',
+  'homeopathy_2000_symptoms.json',
+  'symptoms.json'
+]);
 
       if (symptomsPath) {
         console.log(`Loading symptoms database from: ${symptomsPath}`);

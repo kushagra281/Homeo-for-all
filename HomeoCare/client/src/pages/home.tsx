@@ -6,6 +6,7 @@ import supabase from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+
 const RUBRIC_CATEGORIES = [
   { name: "Mind", icon: "🧠", desc: "Mental & Emotional" },
   { name: "Head", icon: "👤", desc: "Headache, Vertigo" },
@@ -32,6 +33,7 @@ const RUBRIC_CATEGORIES = [
   { name: "Nervous System", icon: "⚡", desc: "Nerves, Neurological" },
   { name: "Others", icon: "🔵", desc: "General, Misc" },
 ]
+
 const LANGS = [
   { code: "en", label: "English" },
   { code: "hi", label: "हिन्दी" },
@@ -45,16 +47,19 @@ const LANGS = [
   { code: "pa", label: "ਪੰਜਾਬੀ" },
   { code: "ur", label: "اردو" },
 ]
+
 declare global {
   interface Window {
     googleTranslateElementInit?: () => void
     google?: any
   }
 }
+
 function TranslateWidget() {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState("en")
   const ref = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!document.getElementById("gt-script")) {
       window.googleTranslateElementInit = () => {
@@ -75,6 +80,7 @@ function TranslateWidget() {
     document.addEventListener("mousedown", close)
     return () => document.removeEventListener("mousedown", close)
   }, [])
+
   const pick = (code: string) => {
     setActive(code)
     setOpen(false)
@@ -85,6 +91,7 @@ function TranslateWidget() {
     }
     attempt()
   }
+
   return (
     <>
       <div id="gt-hidden" style={{ display: "none", position: "absolute" }} />
@@ -109,7 +116,9 @@ function TranslateWidget() {
                 key={l.code}
                 onClick={() => pick(l.code)}
                 className={`w-full text-left px-3 py-2 text-xs transition ${
-                  active === l.code ? "bg-green-50 text-green-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                  active === l.code
+                    ? "bg-green-50 text-green-700 font-semibold"
+                    : "text-gray-700 hover:bg-gray-50"
                 }`}
               >
                 {l.label}
@@ -124,7 +133,8 @@ function TranslateWidget() {
 function ProfileView({
   user, history, onBack, onLogout, onGo,
 }: {
-  user: any; history: any[]; onBack: () => void; onLogout: () => void; onGo: (p: string) => void
+  user: any; history: any[]; onBack: () => void
+  onLogout: () => void; onGo: (p: string) => void
 }) {
   const [tab, setTab] = useState<"health" | "history">("health")
   const [loading, setLoading] = useState(true)
@@ -136,6 +146,7 @@ function ProfileView({
     obesity: "no", hairfall: "none",
     injury_operation: "", other_conditions: "",
   })
+
   useEffect(() => {
     supabase.from("patients").select("*").eq("id", user.id).single().then(({ data }) => {
       if (data) setH({
@@ -143,12 +154,15 @@ function ProfileView({
         gender: data.gender ?? "", height: data.height ?? "", weight: data.weight ?? "",
         diabetes: data.diabetes ?? "none", blood_pressure: data.blood_pressure ?? "normal",
         obesity: data.obesity ?? "no", hairfall: data.hairfall ?? "none",
-        injury_operation: data.injury_operation ?? "", other_conditions: data.other_conditions ?? "",
+        injury_operation: data.injury_operation ?? "",
+        other_conditions: data.other_conditions ?? "",
       })
       setLoading(false)
     })
   }, [])
+
   const set = (k: string, v: string) => setH(p => ({ ...p, [k]: v }))
+
   const save = async () => {
     setSaving(true)
     await supabase.from("patients").upsert({
@@ -157,11 +171,13 @@ function ProfileView({
       height: h.height, weight: h.weight,
       diabetes: h.diabetes, blood_pressure: h.blood_pressure,
       obesity: h.obesity, hairfall: h.hairfall,
-      injury_operation: h.injury_operation, other_conditions: h.other_conditions,
+      injury_operation: h.injury_operation,
+      other_conditions: h.other_conditions,
     })
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
+
   const Chip = ({ field, val, label }: { field: string; val: string; label: string }) => (
     <button
       onClick={() => set(field, val)}
@@ -174,6 +190,7 @@ function ProfileView({
       {label}
     </button>
   )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
       <header className="bg-white border-b shadow-sm sticky top-0 z-10">
@@ -201,13 +218,10 @@ function ProfileView({
         </div>
         <div className="flex gap-2 mb-5">
           {(["health", "history"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
+            <button key={t} onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
                 tab === t ? "bg-green-600 text-white" : "bg-white border border-gray-200 text-gray-500 hover:border-green-300"
-              }`}
-            >
+              }`}>
               {t === "health" ? "🩺 Health Profile" : "📋 History"}
             </button>
           ))}
@@ -263,8 +277,8 @@ function ProfileView({
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">❤️ Blood Pressure</label>
                   <div className="flex flex-wrap gap-2">
                     <Chip field="blood_pressure" val="normal" label="Normal" />
-                    <Chip field="blood_pressure" val="high" label="High (Hypertension)" />
-                    <Chip field="blood_pressure" val="low" label="Low (Hypotension)" />
+                    <Chip field="blood_pressure" val="high" label="High BP" />
+                    <Chip field="blood_pressure" val="low" label="Low BP" />
                     <Chip field="blood_pressure" val="borderline" label="Borderline" />
                   </div>
                 </div>
@@ -289,36 +303,23 @@ function ProfileView({
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">🏥 Injury / Operation History</label>
-                  <textarea
-                    value={h.injury_operation}
-                    onChange={e => set("injury_operation", e.target.value)}
+                  <textarea value={h.injury_operation} onChange={e => set("injury_operation", e.target.value)}
                     placeholder="e.g. Appendix removed 2018, knee fracture 2021..."
-                    className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-green-400 outline-none resize-none h-20"
-                  />
+                    className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-green-400 outline-none resize-none h-20" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">🩺 Other Chronic Conditions</label>
-                  <textarea
-                    value={h.other_conditions}
-                    onChange={e => set("other_conditions", e.target.value)}
+                  <textarea value={h.other_conditions} onChange={e => set("other_conditions", e.target.value)}
                     placeholder="e.g. Asthma, Thyroid, Gastritis, Arthritis, PCOD..."
-                    className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-green-400 outline-none resize-none h-20"
-                  />
+                    className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-green-400 outline-none resize-none h-20" />
                 </div>
-                <Button
-                  onClick={save}
-                  disabled={saving}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl"
-                >
+                <Button onClick={save} disabled={saving} className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl">
                   {saving ? (
                     <span className="flex items-center gap-2 justify-center">
-                      <div className="animate-spin h-4 w-4 border-b-2 border-white rounded-full" />
-                      Saving...
+                      <div className="animate-spin h-4 w-4 border-b-2 border-white rounded-full" />Saving...
                     </span>
                   ) : saved ? "✓ Saved!" : (
-                    <span className="flex items-center gap-2 justify-center">
-                      <Save size={16} /> Save Health Profile
-                    </span>
+                    <span className="flex items-center gap-2 justify-center"><Save size={16} /> Save Health Profile</span>
                   )}
                 </Button>
               </>
@@ -331,15 +332,13 @@ function ProfileView({
               <Clock size={16} className="text-green-600" /> Consultation History
             </h3>
             {history.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">No consultations yet. Search symptoms to start.</p>
+              <p className="text-sm text-gray-400 text-center py-6">No consultations yet.</p>
             ) : (
               <div className="space-y-3">
                 {history.slice(0, 15).map((item: any, i: number) => (
-                  <div
-                    key={i}
+                  <div key={i}
                     onClick={() => onGo(`/symptom-analysis?q=${encodeURIComponent(item.symptoms?.join(", ") || "")}`)}
-                    className="p-3 bg-green-50 rounded-xl border border-green-100 cursor-pointer hover:border-green-400 transition"
-                  >
+                    className="p-3 bg-green-50 rounded-xl border border-green-100 cursor-pointer hover:border-green-400 transition">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{item.symptoms?.join(", ") || "—"}</p>
@@ -357,17 +356,14 @@ function ProfileView({
             )}
           </Card>
         )}
-        <Button
-          onClick={onLogout}
-          variant="outline"
-          className="w-full mt-4 border-red-200 text-red-500 hover:bg-red-50"
-        >
+        <Button onClick={onLogout} variant="outline" className="w-full mt-4 border-red-200 text-red-500 hover:bg-red-50">
           <LogOut size={15} className="mr-2" /> Sign Out
         </Button>
       </main>
     </div>
   )
 }
+
 export default function Home() {
   const [, setLocation] = useLocation()
   const [user, setUser] = useState<any>(null)
@@ -377,6 +373,7 @@ export default function Home() {
   const [showProfile, setShowProfile] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [categoryQuery, setCategoryQuery] = useState("")
+
   useEffect(() => {
     getCurrentUser().then(u => {
       if (!u) { setLocation("/auth"); return }
@@ -384,12 +381,15 @@ export default function Home() {
       getSearchHistory().then(setHistory)
     })
   }, [])
+
   const handleLogout = async () => { await signOut(); setLocation("/auth") }
+
   const handleSearch = (e?: React.FormEvent) => {
     e?.preventDefault()
     if (!query.trim()) return
     setLocation(`/symptom-analysis?q=${encodeURIComponent(query.trim())}`)
   }
+
   const handleCategorySearch = (e?: React.FormEvent) => {
     e?.preventDefault()
     const p = new URLSearchParams()
@@ -397,17 +397,12 @@ export default function Home() {
     if (categoryQuery.trim()) p.set("q", categoryQuery.trim())
     setLocation(`/symptom-analysis?${p.toString()}`)
   }
+
   if (showProfile) {
-    return (
-      <ProfileView
-        user={user}
-        history={history}
-        onBack={() => setShowProfile(false)}
-        onLogout={handleLogout}
-        onGo={(path) => { setShowProfile(false); setLocation(path) }}
-      />
-    )
+    return <ProfileView user={user} history={history} onBack={() => setShowProfile(false)}
+      onLogout={handleLogout} onGo={(path) => { setShowProfile(false); setLocation(path) }} />
   }
+
   if (selectedCategory) {
     const cat = RUBRIC_CATEGORIES.find(c => c.name === selectedCategory)!
     return (
@@ -441,13 +436,9 @@ export default function Home() {
               <div className="flex gap-2 mb-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <Input
-                    value={categoryQuery}
-                    onChange={e => setCategoryQuery(e.target.value)}
-                    placeholder="describe your symptom..."
-                    className="pl-10 py-5 border-2 border-green-200 focus:border-green-500"
-                    autoFocus
-                  />
+                  <Input value={categoryQuery} onChange={e => setCategoryQuery(e.target.value)}
+                    placeholder="describe your symptom..." autoFocus
+                    className="pl-10 py-5 border-2 border-green-200 focus:border-green-500" />
                 </div>
                 <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-5">Search</Button>
               </div>
@@ -456,22 +447,19 @@ export default function Home() {
               <p className="text-xs text-gray-400 mb-2">Common symptoms:</p>
               <div className="flex flex-wrap gap-2">
                 {getCommonSymptoms(cat.name).map(s => (
-                  <button key={s}
-                    onClick={() => {
-                      const p = new URLSearchParams()
-                      p.set("category", selectedCategory!)
-                      p.set("q", s)
-                      setLocation(`/symptom-analysis?${p.toString()}`)
-                    }}
-                    className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1 rounded-full hover:bg-green-100 transition">
+                  <button key={s} onClick={() => {
+                    const p = new URLSearchParams()
+                    p.set("category", selectedCategory!)
+                    p.set("q", s)
+                    setLocation(`/symptom-analysis?${p.toString()}`)
+                  }} className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1 rounded-full hover:bg-green-100 transition">
                     {s}
                   </button>
                 ))}
               </div>
             </div>
             <div className="mt-5 pt-4 border-t">
-              <Button
-                onClick={() => setLocation(`/symptom-analysis?category=${encodeURIComponent(selectedCategory!)}`)}
+              <Button onClick={() => setLocation(`/symptom-analysis?category=${encodeURIComponent(selectedCategory!)}`)}
                 variant="outline" className="w-full border-green-300 text-green-700 hover:bg-green-50">
                 Browse all {cat.name} remedies with AI questions →
               </Button>
@@ -481,6 +469,7 @@ export default function Home() {
       </div>
     )
   }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
       <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-10">
@@ -493,4 +482,121 @@ export default function Home() {
             <span className="font-bold text-green-700 text-lg">HomeoWell</span>
           </button>
           <div className="flex items-center gap-2">
-            <Trans
+            <TranslateWidget />
+            {user && (
+              <>
+                <button onClick={() => setShowHistory(v => !v)}
+                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-green-700 px-2 py-1 rounded-lg hover:bg-green-50">
+                  <Clock size={15} />
+                  <span className="hidden sm:inline text-xs">History</span>
+                </button>
+                <button onClick={() => setShowProfile(true)}
+                  className="flex items-center gap-1.5 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-1.5 rounded-full transition">
+                  <User size={14} className="text-green-700" />
+                  <span className="hidden sm:inline text-xs text-gray-700 font-medium">
+                    {user.user_metadata?.name || user.email?.split("@")[0]}
+                  </span>
+                </button>
+                <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 p-1">
+                  <LogOut size={17} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Find Your Homeopathic Remedy</h1>
+          <p className="text-gray-500">Enter symptoms or select a category below</p>
+        </div>
+        <div className="mb-8">
+          <form onSubmit={handleSearch}>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <Input value={query} onChange={e => setQuery(e.target.value)}
+                  placeholder="e.g. headache with fever, anxiety at night..."
+                  className="pl-12 pr-4 py-6 text-base rounded-xl border-2 border-green-200 focus:border-green-500 shadow-sm" />
+              </div>
+              <div className="relative">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple
+                  onChange={() => setLocation("/symptom-analysis?category=Clinical")}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
+                <Button type="button" variant="outline"
+                  className="h-full px-3 rounded-xl border-2 border-green-200 hover:border-green-400 flex flex-col items-center justify-center gap-0.5">
+                  <Paperclip size={18} className="text-green-600" />
+                  <span className="text-xs text-green-600 leading-none">Clinical</span>
+                </Button>
+              </div>
+              <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-6 rounded-xl font-medium">
+                Search
+              </Button>
+            </div>
+          </form>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {["Headache", "Anxiety", "Fever", "Joint pain", "Insomnia", "Cold"].map(s => (
+              <button key={s} onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(s)}`)}
+                className="text-xs bg-white border border-green-200 text-green-700 px-3 py-1 rounded-full hover:bg-green-50 transition">
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+        {showHistory && history.length > 0 && (
+          <Card className="mb-6 p-4">
+            <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Clock size={16} /> Recent Searches
+            </h3>
+            <div className="space-y-1">
+              {history.slice(0, 5).map((item, i) => (
+                <button key={i}
+                  onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(item.symptoms?.join(", ") || "")}`)}
+                  className="w-full text-left flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 group">
+                  <span className="text-sm text-gray-600">{item.symptoms?.join(", ")}</span>
+                  <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
+                </button>
+              ))}
+            </div>
+          </Card>
+        )}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Browse by Category</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {RUBRIC_CATEGORIES.map(cat => (
+              <button key={cat.name} onClick={() => { setSelectedCategory(cat.name); setCategoryQuery("") }}
+                className="bg-white border-2 border-gray-100 rounded-xl p-3 text-left hover:border-green-400 hover:shadow-md transition-all group">
+                <div className="text-2xl mb-1">{cat.icon}</div>
+                <div className="font-medium text-sm text-gray-800 group-hover:text-green-700">{cat.name}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{cat.desc}</div>
+                <div className="text-xs text-green-500 mt-1 opacity-0 group-hover:opacity-100 transition">Tap to explore →</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-center text-xs text-gray-400 mt-8">
+          ⚠️ For educational purposes only. Always consult a qualified homeopath.
+        </p>
+      </main>
+    </div>
+  )
+}
+
+function getCommonSymptoms(category: string): string[] {
+  const map: Record<string, string[]> = {
+    "Mind": ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Sleeplessness"],
+    "Head": ["Throbbing headache", "One-sided headache", "Headache with nausea", "Vertigo"],
+    "Fever": ["High fever", "Fever with chills", "Fever with sweating", "Low-grade fever"],
+    "Stomach": ["Nausea", "Acidity", "Bloating", "Loss of appetite", "Vomiting"],
+    "Respiration": ["Dry cough", "Wet cough", "Breathlessness", "Wheezing"],
+    "Skin": ["Itching", "Rash", "Eczema", "Dry skin", "Hives"],
+    "Hands, Legs & Back": ["Joint pain", "Back pain", "Stiffness", "Swollen joints", "Sciatica"],
+    "Urinary System": ["Burning urination", "Frequent urination", "UTI", "Kidney pain"],
+    "Heart": ["Palpitations", "Chest pain", "High BP", "Anxiety with heart symptoms"],
+    "Eye": ["Redness", "Itching", "Watering", "Pain", "Blurred vision"],
+    "Ear": ["Earache", "Tinnitus", "Discharge", "Hearing loss"],
+    "Nose": ["Blocked nose", "Running nose", "Sneezing", "Loss of smell"],
+    "Throat": ["Sore throat", "Difficulty swallowing", "Hoarseness", "Tonsillitis"],
+  }
+  return map[category] || ["Acute symptoms", "Chronic symptoms", "Pain", "Inflammation", "Discharge"]
+}

@@ -9,12 +9,11 @@ import SymptomAnalysis from "@/pages/symptom-analysis";
 import PotencyGuidePage from "@/pages/potency-guide-page";
 import DiagnosticWizardPage from "@/pages/diagnostic-wizard-page";
 import AuthPage from "@/pages/auth-page";
-import Community from "@/pages/community";
+import NotFound from "@/pages/not-found";
 import ProfilePage from "@/pages/profile";
 import DictionaryPage from "@/pages/dictionary";
 import ModalitiesPage from "@/pages/modalities";
-import NotFound from "@/pages/not-found";
-
+import Community from "@/pages/community";
 function Router() {
   return (
     <Switch>

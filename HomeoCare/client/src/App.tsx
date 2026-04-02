@@ -19,19 +19,18 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/profile" component={ProfilePage} />
+      <Route path="/dictionary" component={DictionaryPage} />
+      <Route path="/modalities" component={ModalitiesPage} />
+      <Route path="/community" component={Community} />
       <Route path="/remedies/:category" component={Remedies} />
       <Route path="/symptom-analysis" component={SymptomAnalysis} />
       <Route path="/potency-guide" component={PotencyGuidePage} />
       <Route path="/diagnostic/:bodySystem" component={DiagnosticWizardPage} />
-      <Route path="/community" component={Community} />
-      <Route path="/dictionary" component={DictionaryPage} />
-      <Route path="/modalities" component={ModalitiesPage} />
-      <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );
 }
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>

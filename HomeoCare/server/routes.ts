@@ -4,13 +4,13 @@ import { storage } from "./storage";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
-// ── Groq client (fix: reads GROQ_OPENAI_API which is what Render has) ──
+// ── Groq client ───────────────────────────────────────────────────
 const groq = new OpenAI({
   apiKey: process.env.GROQ_OPENAI_API || process.env.GROQ_API_KEY || "",
   baseURL: "https://api.groq.com/openai/v1",
 });
 
-// ── Supabase client (server-side, uses service role for reliability) ──
+// ── Supabase client (server-side) ─────────────────────────────────
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_KEY ||
@@ -20,14 +20,8 @@ const supabase = createClient(
 );
 
 // ================================================================
-// HELPERS — replicate supabase.js scoring logic, server-side
+// TYPES
 // ================================================================
-
-function toTitleCase(str: string): string {
-  if (!str) return "";
-  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 interface ScoreEntry {
   name: string;
   displayName: string;
@@ -59,17 +53,35 @@ interface ScoredRemedy {
   ai_insight?: string;
 }
 
+interface HealthProfile {
+  name?: string;
+  age?: number;
+  gender?: string;
+  blood_group?: string;
+  weight_kg?: number;
+  height_cm?: number;
+  chronic_conditions?: string;
+  allergies?: string;
+  current_medications?: string;
+  dietary_preference?: string;
+}
+
+// ================================================================
+// SCORING HELPERS
+// ================================================================
+function toTitleCase(str: string): string {
+  if (!str) return "";
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function buildResults(scoreMap: Record<string, ScoreEntry>, category: string): ScoredRemedy[] {
   if (!Object.keys(scoreMap).length) return [];
-
   const maxScore = Math.max(...Object.values(scoreMap).map((r) => r.totalScore));
-
   return Object.values(scoreMap)
     .map((r) => {
       const pct = Math.round((r.totalScore / maxScore) * 100);
       const grade = pct >= 75 ? 3 : pct >= 45 ? 2 : 1;
       const headings = [...r.headings].filter(Boolean).slice(0, 2).join(", ");
-
       return {
         remedy: {
           id: r.name.toLowerCase().replace(/\s+/g, "-"),
@@ -100,55 +112,36 @@ function buildResults(scoreMap: Record<string, ScoreEntry>, category: string): S
     .slice(0, 10);
 }
 
-async function searchRemedySymptoms(
-  searchTerms: string[],
-  category: string
-): Promise<ScoredRemedy[]> {
+async function searchRemedySymptoms(searchTerms: string[], category: string): Promise<ScoredRemedy[]> {
   try {
     const allData: any[] = [];
-
     for (const term of searchTerms.slice(0, 4)) {
       let query = supabase
         .from("remedy_symptoms")
         .select("remedy_name, heading, symptom")
         .ilike("symptom", `%${term}%`)
         .limit(300);
-
       if (category) query = query.ilike("heading", `%${category}%`);
-
       const { data, error } = await query;
-      if (error) console.error("remedy_symptoms query error:", error.message);
+      if (error) console.error("remedy_symptoms error:", error.message);
       if (data) allData.push(...data);
     }
-
     if (!allData.length) return [];
-
     const scoreMap: Record<string, ScoreEntry> = {};
     allData.forEach((row) => {
       const name = row.remedy_name;
       const termMatches = searchTerms.filter(
-        (t) =>
-          row.symptom?.toLowerCase().includes(t) ||
-          row.heading?.toLowerCase().includes(t)
+        (t) => row.symptom?.toLowerCase().includes(t) || row.heading?.toLowerCase().includes(t)
       ).length;
       if (!termMatches) return;
-
       if (!scoreMap[name]) {
-        scoreMap[name] = {
-          name,
-          displayName: toTitleCase(name),
-          totalScore: 0,
-          matchCount: 0,
-          matchedSymptoms: [],
-          headings: new Set(),
-        };
+        scoreMap[name] = { name, displayName: toTitleCase(name), totalScore: 0, matchCount: 0, matchedSymptoms: [], headings: new Set() };
       }
       scoreMap[name].totalScore += 3 * termMatches;
       scoreMap[name].matchCount += 1;
       scoreMap[name].matchedSymptoms.push(row.symptom);
       scoreMap[name].headings.add(row.heading);
     });
-
     return buildResults(scoreMap, category);
   } catch (e) {
     console.error("Strategy 1 error:", e);
@@ -156,53 +149,51 @@ async function searchRemedySymptoms(
   }
 }
 
-async function searchSymptomsTable(
-  searchTerms: string[],
-  category: string
-): Promise<ScoredRemedy[]> {
+// Detects column name dynamically — fixes "column does not exist" error
+async function searchSymptomsTable(searchTerms: string[], category: string): Promise<ScoredRemedy[]> {
   try {
-    const allData: any[] = [];
+    const { data: sampleRow } = await supabase.from("symptoms").select("*").limit(1);
+    if (!sampleRow || sampleRow.length === 0) return [];
 
+    const cols = Object.keys(sampleRow[0]);
+    const remedyCol =
+      cols.includes("remedy_name") ? "remedy_name" :
+      cols.includes("name")        ? "name" :
+      cols.includes("remedy")      ? "remedy" : null;
+
+    if (!remedyCol) {
+      console.error("symptoms table: no remedy column found. columns:", cols);
+      return [];
+    }
+
+    const allData: any[] = [];
     for (const term of searchTerms.slice(0, 4)) {
       let query = supabase
         .from("symptoms")
-        .select("remedy_name, heading, symptom")
+        .select(`${remedyCol}, heading, symptom`)
         .ilike("symptom", `%${term}%`)
         .limit(200);
-
       if (category) query = query.ilike("heading", `%${category}%`);
-
       const { data, error } = await query;
-      if (error) console.error("symptoms table query error:", error.message);
+      if (error) console.error("symptoms table error:", error.message);
       if (data) allData.push(...data);
     }
-
     if (!allData.length) return [];
 
     const scoreMap: Record<string, ScoreEntry> = {};
     allData.forEach((row) => {
-      const name = row.remedy_name;
-      const termMatches = searchTerms.filter((t) =>
-        row.symptom?.toLowerCase().includes(t)
-      ).length;
+      const name = row[remedyCol];
+      if (!name) return;
+      const termMatches = searchTerms.filter((t) => row.symptom?.toLowerCase().includes(t)).length;
       if (!termMatches) return;
-
       if (!scoreMap[name]) {
-        scoreMap[name] = {
-          name,
-          displayName: toTitleCase(name),
-          totalScore: 0,
-          matchCount: 0,
-          matchedSymptoms: [],
-          headings: new Set(),
-        };
+        scoreMap[name] = { name, displayName: toTitleCase(name), totalScore: 0, matchCount: 0, matchedSymptoms: [], headings: new Set() };
       }
       scoreMap[name].totalScore += termMatches * 2;
       scoreMap[name].matchCount += 1;
       scoreMap[name].matchedSymptoms.push(row.symptom);
       scoreMap[name].headings.add(row.heading || "");
     });
-
     return buildResults(scoreMap, category);
   } catch (e) {
     console.error("Strategy 2 error:", e);
@@ -212,26 +203,17 @@ async function searchSymptomsTable(
 
 function mergeResults(arr1: ScoredRemedy[], arr2: ScoredRemedy[]): ScoredRemedy[] {
   const map: Record<string, ScoredRemedy> = {};
-
-  arr1.forEach((r) => {
-    map[r.remedy.name] = { ...r };
-  });
-
+  arr1.forEach((r) => { map[r.remedy.name] = { ...r }; });
   arr2.forEach((r) => {
     const key = r.remedy.name;
     if (map[key]) {
       map[key].score = Math.min(100, map[key].score + Math.round(r.score * 0.4));
-      map[key].matching_symptoms = [
-        ...new Set([...map[key].matching_symptoms, ...r.matching_symptoms]),
-      ].slice(0, 6);
+      map[key].matching_symptoms = [...new Set([...map[key].matching_symptoms, ...r.matching_symptoms])].slice(0, 6);
     } else {
       map[key] = { ...r };
     }
   });
-
-  return Object.values(map)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10);
+  return Object.values(map).sort((a, b) => b.score - a.score).slice(0, 10);
 }
 
 async function scoreRemediesFromSupabase(
@@ -251,31 +233,25 @@ async function scoreRemediesFromSupabase(
         !s.startsWith("gender:") &&
         !s.startsWith("disease duration:")
     );
-
   if (searchTerms.length === 0) return [];
 
   const category = filters.symptom_location || filters.category || "";
-
   const [scraperResults, rubricResults] = await Promise.all([
     searchRemedySymptoms(searchTerms, category),
     searchSymptomsTable(searchTerms, category),
   ]);
-
   const merged = mergeResults(scraperResults, rubricResults);
-  return merged.length > 0
-    ? merged
-    : scraperResults.length > 0
-    ? scraperResults
-    : rubricResults;
+  return merged.length > 0 ? merged : scraperResults.length > 0 ? scraperResults : rubricResults;
 }
 
 // ================================================================
-// GROQ AI ENHANCEMENT — adds AI insight to top 3 remedies
+// GROQ ENHANCEMENT — personalized with health profile
 // ================================================================
 async function enhanceWithGroq(
   results: ScoredRemedy[],
   symptoms: string[],
-  filters: Record<string, string>
+  filters: Record<string, string>,
+  healthProfile?: HealthProfile
 ): Promise<ScoredRemedy[]> {
   const groqKey = process.env.GROQ_OPENAI_API || process.env.GROQ_API_KEY;
   if (!groqKey || results.length === 0) return results;
@@ -285,13 +261,31 @@ async function enhanceWithGroq(
     const symptomSummary = symptoms.slice(0, 6).join(", ");
     const category = filters.symptom_location || filters.category || "general";
 
-    const prompt = `You are a classical homeopathy expert. A patient reports: ${symptomSummary}.
-Category: ${category}.
+    // Build patient context from health profile
+    let patientContext = "";
+    if (healthProfile) {
+      const parts: string[] = [];
+      if (healthProfile.age)                 parts.push(`Age: ${healthProfile.age}`);
+      if (healthProfile.gender)              parts.push(`Gender: ${healthProfile.gender}`);
+      if (healthProfile.chronic_conditions)  parts.push(`Chronic conditions: ${healthProfile.chronic_conditions}`);
+      if (healthProfile.allergies)           parts.push(`Allergies: ${healthProfile.allergies}`);
+      if (healthProfile.current_medications) parts.push(`Medications: ${healthProfile.current_medications}`);
+      if (healthProfile.blood_group)         parts.push(`Blood group: ${healthProfile.blood_group}`);
+      if (healthProfile.dietary_preference)  parts.push(`Diet: ${healthProfile.dietary_preference}`);
+      if (parts.length > 0) patientContext = `\nPatient profile: ${parts.join(" | ")}`;
+    }
 
-The top 3 matching remedies from our repertory are: ${top3Names.join(", ")}.
+    const hasProfile = patientContext.length > 0;
 
-For each remedy, write ONE short sentence (max 15 words) explaining why it fits these specific symptoms.
-Return ONLY valid JSON — no markdown, no explanation:
+    const prompt = `You are a classical homeopathy expert.
+Patient symptoms: ${symptomSummary}.
+Category: ${category}.${patientContext}
+
+Top 3 matching remedies from repertory: ${top3Names.join(", ")}.
+${hasProfile ? "Consider the patient profile when explaining each remedy. Mention if chronic conditions or medications affect suitability." : ""}
+
+For each remedy, write ONE sentence (max 18 words) explaining why it fits these symptoms${hasProfile ? " and this patient" : ""}.
+Return ONLY valid JSON — no markdown, no preamble:
 [
   {"name": "${top3Names[0]}", "insight": "..."},
   {"name": "${top3Names[1] || top3Names[0]}", "insight": "..."},
@@ -301,7 +295,7 @@ Return ONLY valid JSON — no markdown, no explanation:
     const response = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 300,
+      max_tokens: 400,
       temperature: 0.3,
     });
 
@@ -311,9 +305,7 @@ Return ONLY valid JSON — no markdown, no explanation:
 
     const insights: Array<{ name: string; insight: string }> = JSON.parse(jsonMatch[0]);
     const insightMap: Record<string, string> = {};
-    insights.forEach((i) => {
-      insightMap[i.name] = i.insight;
-    });
+    insights.forEach((i) => { insightMap[i.name] = i.insight; });
 
     return results.map((r) => ({
       ...r,
@@ -321,7 +313,7 @@ Return ONLY valid JSON — no markdown, no explanation:
     }));
   } catch (e) {
     console.error("Groq enhancement error (non-fatal):", e);
-    return results; // always return results even if Groq fails
+    return results;
   }
 }
 
@@ -339,29 +331,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // ── Score remedies — NOW uses Supabase + Groq ─────────────────
+  // ── Score remedies — Supabase + Groq + Health Profile ────────
   app.post("/api/remedies/score", async (req, res) => {
     try {
-      const { symptoms, filters = {} } = req.body;
-
+      const { symptoms, filters = {}, healthProfile } = req.body;
       if (!symptoms || !Array.isArray(symptoms)) {
         return res.status(400).json({ message: "Symptoms array is required" });
       }
 
-      console.log(`[score] symptoms: ${symptoms.slice(0, 4).join(", ")} | filters:`, filters);
+      console.log(
+        `[score] symptoms: ${symptoms.slice(0, 4).join(", ")} | filters:`, filters,
+        healthProfile ? `| profile: age=${healthProfile.age}, gender=${healthProfile.gender}` : "| no profile"
+      );
 
-      // Step 1: Score from Supabase
       const scored = await scoreRemediesFromSupabase(symptoms, filters);
       console.log(`[score] Supabase returned ${scored.length} results`);
+      if (scored.length === 0) return res.json([]);
 
-      if (scored.length === 0) {
-        return res.json([]);
-      }
-
-      // Step 2: Enhance top results with Groq AI insights
-      const enhanced = await enhanceWithGroq(scored, symptoms, filters);
+      const enhanced = await enhanceWithGroq(scored, symptoms, filters, healthProfile);
       console.log(`[score] Returning ${enhanced.length} enhanced results`);
-
       res.json(enhanced);
     } catch (error) {
       console.error("Error scoring remedies:", error);
@@ -369,18 +357,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Save health profile (server-side — bypasses RLS issues) ──
+  app.post("/api/profile/save", async (req, res) => {
+    try {
+      const { userId, email, profile } = req.body;
+      if (!userId) return res.status(400).json({ message: "userId required" });
+
+      const { error } = await supabase.from("patients").upsert(
+        {
+          id:                   userId,
+          email:                email || "",
+          name:                 profile.name || "",
+          age:                  profile.age ? parseInt(profile.age) : null,
+          gender:               profile.gender || null,
+          blood_group:          profile.blood_group || null,
+          weight_kg:            profile.weight_kg ? parseFloat(profile.weight_kg) : null,
+          height_cm:            profile.height_cm ? parseFloat(profile.height_cm) : null,
+          chronic_conditions:   profile.chronic_conditions || null,
+          allergies:            profile.allergies || null,
+          current_medications:  profile.current_medications || null,
+          dietary_preference:   profile.dietary_preference || null,
+          updated_at:           new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+
+      if (error) {
+        console.error("Profile save error:", error);
+        return res.status(500).json({ message: "Failed to save profile", detail: error.message });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Profile save error:", error);
+      res.status(500).json({ message: "Failed to save profile" });
+    }
+  });
+
+  // ── Get health profile (server-side) ─────────────────────────
+  app.get("/api/profile/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      if (!userId) return res.status(400).json({ message: "userId required" });
+
+      const { data, error } = await supabase
+        .from("patients")
+        .select(
+          "name, age, gender, blood_group, weight_kg, height_cm, chronic_conditions, allergies, current_medications, dietary_preference, updated_at"
+        )
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") return res.json(null); // no rows = not an error
+        console.error("Profile fetch error:", error);
+        return res.status(500).json({ message: "Failed to fetch profile" });
+      }
+      res.json(data);
+    } catch (error: any) {
+      console.error("Profile fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
   // ── Analyze medical report image using Groq Vision ────────────
   app.post("/api/analyze-report", async (req, res) => {
     try {
       const { imageBase64, mimeType } = req.body;
-
-      if (!imageBase64) {
-        return res.status(400).json({ message: "Image data is required" });
-      }
+      if (!imageBase64) return res.status(400).json({ message: "Image data is required" });
 
       const groqKey = process.env.GROQ_OPENAI_API || process.env.GROQ_API_KEY;
       if (!groqKey) {
-        return res.status(500).json({ message: "AI service not configured. Add GROQ_OPENAI_API to Render env vars." });
+        return res.status(500).json({ message: "AI service not configured. Add GROQ_OPENAI_API to Render." });
       }
 
       const response = await groq.chat.completions.create({
@@ -391,9 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             content: [
               {
                 type: "image_url",
-                image_url: {
-                  url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}`,
-                },
+                image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` },
               },
               {
                 type: "text",
@@ -421,51 +466,35 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
 
       const content = response.choices[0]?.message?.content || "";
       let parsed: { symptoms: string[]; conditions: string[]; summary: string };
-
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
-        parsed = jsonMatch
-          ? JSON.parse(jsonMatch[0])
-          : { symptoms: [], conditions: [], summary: "" };
+        parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { symptoms: [], conditions: [], summary: "" };
       } catch {
         parsed = { symptoms: [], conditions: [], summary: content.slice(0, 200) };
       }
-
-      res.json({
-        symptoms: parsed.symptoms || [],
-        conditions: parsed.conditions || [],
-        summary: parsed.summary || "Report analyzed",
-      });
+      res.json({ symptoms: parsed.symptoms || [], conditions: parsed.conditions || [], summary: parsed.summary || "Report analyzed" });
     } catch (error: any) {
       console.error("Error analyzing report:", error);
-      res.status(500).json({
-        message: "Failed to analyze report",
-        detail: error?.message || "Unknown error",
-      });
+      res.status(500).json({ message: "Failed to analyze report", detail: error?.message });
     }
   });
 
   // ── Search remedies by keyword ────────────────────────────────
   app.get("/api/remedies/search/:keyword", async (req, res) => {
     try {
-      const keyword = req.params.keyword;
-      const category = req.query.category as string;
-      const remedies = await storage.searchRemediesByKeyword(keyword, category);
+      const remedies = await storage.searchRemediesByKeyword(req.params.keyword, req.query.category as string);
       res.json(remedies);
     } catch (error) {
-      console.error("Error searching remedies:", error);
       res.status(500).json({ message: "Failed to search remedies" });
     }
   });
 
-  // ── Diagnostic questions for body system ─────────────────────
+  // ── Diagnostic questions ──────────────────────────────────────
   app.get("/api/questions/:bodySystem", async (req, res) => {
     try {
-      const bodySystem = req.params.bodySystem;
-      const questions = await storage.getQuestionTree(bodySystem);
+      const questions = await storage.getQuestionTree(req.params.bodySystem);
       res.json(questions);
     } catch (error) {
-      console.error("Error fetching questions:", error);
       res.status(500).json({ message: "Failed to fetch questions" });
     }
   });
@@ -473,11 +502,9 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
   // ── Remedies by category ──────────────────────────────────────
   app.get("/api/remedies/:category", async (req, res) => {
     try {
-      const category = req.params.category.toUpperCase();
-      const remedies = await storage.getRemediesByCategory(category);
+      const remedies = await storage.getRemediesByCategory(req.params.category.toUpperCase());
       res.json(remedies);
     } catch (error) {
-      console.error("Error fetching remedies:", error);
       res.status(500).json({ message: "Failed to fetch remedies" });
     }
   });
@@ -488,7 +515,6 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
       const remedies = await storage.getAllRemedies();
       res.json(remedies);
     } catch (error) {
-      console.error("Error fetching all remedies:", error);
       res.status(500).json({ message: "Failed to fetch remedies" });
     }
   });

@@ -1,388 +1,94 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
-import { Search, LogOut, User, Clock, ChevronRight, Paperclip, ArrowLeft, Save, Globe } from "lucide-react"
-import { getCurrentUser, signOut, getSearchHistory } from "@/lib/supabase"
-import supabase from "@/lib/supabase"
+import { Search, LogOut, User, Clock, ChevronRight, Paperclip, ArrowLeft, X, Trash2 } from "lucide-react"
+import { getCurrentUser, signOut, getSearchHistory, deleteHistoryItem } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 
 const RUBRIC_CATEGORIES = [
-  { name: "Mind", icon: "🧠", desc: "Mental & Emotional" },
-  { name: "Head", icon: "👤", desc: "Headache, Vertigo" },
-  { name: "Eye", icon: "👁️", desc: "Vision, Pain" },
-  { name: "Ear", icon: "👂", desc: "Hearing, Tinnitus" },
-  { name: "Nose", icon: "👃", desc: "Cold, Sinusitis" },
-  { name: "Face", icon: "😬", desc: "Facial Pain, Skin" },
-  { name: "Mouth", icon: "👄", desc: "Ulcers, Dryness" },
-  { name: "Tongue", icon: "👅", desc: "Coating, Pain" },
-  { name: "Taste", icon: "🫧", desc: "Bitter, Metallic" },
-  { name: "Gums", icon: "🦷", desc: "Swelling, Bleeding" },
-  { name: "Teeth", icon: "🦷", desc: "Toothache, Decay" },
-  { name: "Throat", icon: "🗣️", desc: "Pain, Infection" },
-  { name: "Stomach", icon: "🍽️", desc: "Digestion, Nausea" },
-  { name: "Abdomen", icon: "🫃", desc: "Pain, Bloating" },
-  { name: "Urinary System", icon: "🚻", desc: "Infection, Burning" },
-  { name: "Male Genitalia", icon: "🧬", desc: "Male Complaints" },
-  { name: "Female Genitalia", icon: "🧬", desc: "Female Complaints" },
-  { name: "Heart", icon: "❤️", desc: "Palpitations, Pain" },
+  { name: "Mind",               icon: "🧠", desc: "Mental & Emotional" },
+  { name: "Head",               icon: "👤", desc: "Headache, Vertigo" },
+  { name: "Eye",                icon: "👁️", desc: "Vision, Pain" },
+  { name: "Ear",                icon: "👂", desc: "Hearing, Tinnitus" },
+  { name: "Nose",               icon: "👃", desc: "Cold, Sinusitis" },
+  { name: "Face",               icon: "😬", desc: "Facial Pain" },
+  { name: "Mouth",              icon: "👄", desc: "Ulcers, Dryness" },
+  { name: "Tongue",             icon: "👅", desc: "Coating, Pain" },
+  { name: "Taste",              icon: "🫧", desc: "Bitter, Metallic" },
+  { name: "Gums",               icon: "🦷", desc: "Swelling, Bleeding" },
+  { name: "Teeth",              icon: "🦷", desc: "Toothache, Decay" },
+  { name: "Throat",             icon: "🗣️", desc: "Pain, Infection" },
+  { name: "Stomach",            icon: "🍽️", desc: "Digestion, Nausea" },
+  { name: "Abdomen",            icon: "🫃", desc: "Pain, Bloating" },
+  { name: "Urinary System",     icon: "🚻", desc: "Infection, Burning" },
+  { name: "Male Genitalia",     icon: "🧬", desc: "Male Complaints" },
+  { name: "Female Genitalia",   icon: "🧬", desc: "Female Complaints" },
+  { name: "Heart",              icon: "❤️", desc: "Palpitations, Pain" },
   { name: "Hands, Legs & Back", icon: "🦴", desc: "Joints, Spine" },
-  { name: "Respiration", icon: "🫁", desc: "Breathing, Cough" },
-  { name: "Skin", icon: "🧴", desc: "Rashes, Eruptions" },
-  { name: "Fever", icon: "🌡️", desc: "Temperature, Chills" },
-  { name: "Nervous System", icon: "⚡", desc: "Nerves, Neurological" },
-  { name: "Others", icon: "🔵", desc: "General, Misc" },
+  { name: "Respiration",        icon: "🫁", desc: "Breathing, Cough" },
+  { name: "Skin",               icon: "🧴", desc: "Rashes, Eruptions" },
+  { name: "Fever",              icon: "🌡️", desc: "Temperature, Chills" },
+  { name: "Nervous System",     icon: "⚡", desc: "Nerves, Neurological" },
+  { name: "Others",             icon: "🔵", desc: "General, Misc" },
 ]
 
-const LANGS = [
-  { code: "en", label: "English" },
-  { code: "hi", label: "हिन्दी" },
-  { code: "bn", label: "বাংলা" },
-  { code: "te", label: "తెలుగు" },
-  { code: "mr", label: "मराठी" },
-  { code: "ta", label: "தமிழ்" },
-  { code: "gu", label: "ગુજરાતી" },
-  { code: "kn", label: "ಕನ್ನಡ" },
-  { code: "ml", label: "മലയാളം" },
-  { code: "pa", label: "ਪੰਜਾਬੀ" },
-  { code: "ur", label: "اردو" },
-]
-
-declare global {
-  interface Window {
-    googleTranslateElementInit?: () => void
-    google?: any
+function getCommonSymptoms(category: string): string[] {
+  const map: Record<string, string[]> = {
+    "Mind": ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Sleeplessness"],
+    "Head": ["Throbbing headache", "One-sided headache", "Vertigo", "Migraine"],
+    "Fever": ["High fever", "Fever with chills", "Fever with sweating", "Low-grade fever"],
+    "Stomach": ["Nausea", "Acidity", "Bloating", "Loss of appetite", "Vomiting"],
+    "Respiration": ["Dry cough", "Wet cough", "Breathlessness", "Wheezing"],
+    "Skin": ["Itching", "Rash", "Eczema", "Dry skin", "Hives"],
+    "Hands, Legs & Back": ["Joint pain", "Back pain", "Stiffness", "Swollen joints"],
+    "Urinary System": ["Burning urination", "Frequent urination", "UTI"],
+    "Heart": ["Palpitations", "Chest pain", "High BP"],
+    "Eye": ["Redness", "Itching eyes", "Watering", "Eye pain"],
+    "Ear": ["Earache", "Ringing in ear", "Ear discharge"],
+    "Nose": ["Blocked nose", "Running nose", "Sneezing"],
+    "Throat": ["Sore throat", "Difficulty swallowing", "Hoarseness"],
+    "Female Genitalia": ["Irregular menses", "Painful periods", "White discharge"],
+    "Nervous System": ["Numbness", "Tingling", "Weakness", "Trembling"],
   }
-}
-
-function TranslateWidget() {
-  const [open, setOpen] = useState(false)
-  const [active, setActive] = useState("en")
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!document.getElementById("gt-script")) {
-      window.googleTranslateElementInit = () => {
-        new window.google.translate.TranslateElement(
-          { pageLanguage: "en", autoDisplay: false },
-          "gt-hidden"
-        )
-      }
-      const s = document.createElement("script")
-      s.id = "gt-script"
-      s.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
-      s.async = true
-      document.head.appendChild(s)
-    }
-    const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", close)
-    return () => document.removeEventListener("mousedown", close)
-  }, [])
-
-  const pick = (code: string) => {
-    setActive(code)
-    setOpen(false)
-    const attempt = () => {
-      const sel = document.querySelector(".goog-te-combo") as HTMLSelectElement | null
-      if (sel) { sel.value = code; sel.dispatchEvent(new Event("change")) }
-      else setTimeout(attempt, 800)
-    }
-    attempt()
-  }
-
-  return (
-    <>
-      <div id="gt-hidden" style={{ display: "none", position: "absolute" }} />
-      <style>{`
-        body { top: 0 !important; }
-        .goog-te-banner-frame { display: none !important; }
-        #gt-hidden { display: none !important; }
-      `}</style>
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 text-xs text-green-700 font-medium transition"
-        >
-          <Globe size={13} />
-          <span className="hidden sm:inline">{LANGS.find(l => l.code === active)?.label ?? "EN"}</span>
-          <span className="text-green-400">▾</span>
-        </button>
-        {open && (
-          <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
-            {LANGS.map(l => (
-              <button
-                key={l.code}
-                onClick={() => pick(l.code)}
-                className={`w-full text-left px-3 py-2 text-xs transition ${
-                  active === l.code
-                    ? "bg-green-50 text-green-700 font-semibold"
-                    : "text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  )
-}
-function ProfileView({
-  user, history, onBack, onLogout, onGo,
-}: {
-  user: any; history: any[]; onBack: () => void
-  onLogout: () => void; onGo: (p: string) => void
-}) {
-  const [tab, setTab] = useState<"health" | "history">("health")
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [h, setH] = useState({
-    name: "", age: "", gender: "", height: "", weight: "",
-    diabetes: "none", blood_pressure: "normal",
-    obesity: "no", hairfall: "none",
-    injury_operation: "", other_conditions: "",
-  })
-
-  useEffect(() => {
-    supabase.from("patients").select("*").eq("id", user.id).single().then(({ data }) => {
-      if (data) setH({
-        name: data.name ?? "", age: data.age ? String(data.age) : "",
-        gender: data.gender ?? "", height: data.height ?? "", weight: data.weight ?? "",
-        diabetes: data.diabetes ?? "none", blood_pressure: data.blood_pressure ?? "normal",
-        obesity: data.obesity ?? "no", hairfall: data.hairfall ?? "none",
-        injury_operation: data.injury_operation ?? "",
-        other_conditions: data.other_conditions ?? "",
-      })
-      setLoading(false)
-    })
-  }, [])
-
-  const set = (k: string, v: string) => setH(p => ({ ...p, [k]: v }))
-
-  const save = async () => {
-    setSaving(true)
-    await supabase.from("patients").upsert({
-      id: user.id, email: user.email,
-      name: h.name, age: parseInt(h.age) || null, gender: h.gender,
-      height: h.height, weight: h.weight,
-      diabetes: h.diabetes, blood_pressure: h.blood_pressure,
-      obesity: h.obesity, hairfall: h.hairfall,
-      injury_operation: h.injury_operation,
-      other_conditions: h.other_conditions,
-    })
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
-  }
-
-  const Chip = ({ field, val, label }: { field: string; val: string; label: string }) => (
-    <button
-      onClick={() => set(field, val)}
-      className={`px-3 py-1.5 rounded-full text-xs border-2 font-medium transition ${
-        (h as any)[field] === val
-          ? "border-green-500 bg-green-50 text-green-700"
-          : "border-gray-200 text-gray-500 hover:border-green-300"
-      }`}
-    >
-      {label}
-    </button>
-  )
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-      <header className="bg-white border-b shadow-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-lg">🌿</span>
-            </div>
-            <span className="font-bold text-green-700 text-lg">HomeoWell</span>
-          </button>
-          <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500">
-            <ArrowLeft size={16} /> Back
-          </button>
-        </div>
-      </header>
-      <main className="max-w-2xl mx-auto px-4 py-6 pb-16">
-        <div className="flex items-center gap-4 mb-5">
-          <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center text-2xl font-bold text-green-700">
-            {h.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
-          </div>
-          <div>
-            <p className="font-bold text-gray-900">{h.name || user?.email?.split("@")[0]}</p>
-            <p className="text-xs text-gray-400">{user?.email}</p>
-          </div>
-        </div>
-        <div className="flex gap-2 mb-5">
-          {(["health", "history"] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${
-                tab === t ? "bg-green-600 text-white" : "bg-white border border-gray-200 text-gray-500 hover:border-green-300"
-              }`}>
-              {t === "health" ? "🩺 Health Profile" : "📋 History"}
-            </button>
-          ))}
-        </div>
-        {tab === "health" && (
-          <Card className="p-5 space-y-5">
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin h-6 w-6 border-b-2 border-green-600 rounded-full" />
-              </div>
-            ) : (
-              <>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Basic Info</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Full Name</label>
-                      <Input value={h.name} onChange={e => set("name", e.target.value)} placeholder="Your name" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Age</label>
-                      <Input value={h.age} onChange={e => set("age", e.target.value)} placeholder="e.g. 35" type="number" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Height (cm)</label>
-                      <Input value={h.height} onChange={e => set("height", e.target.value)} placeholder="e.g. 170" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Weight (kg)</label>
-                      <Input value={h.weight} onChange={e => set("weight", e.target.value)} placeholder="e.g. 70" />
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <label className="text-xs text-gray-400 block mb-2">Gender</label>
-                    <div className="flex gap-2">
-                      <Chip field="gender" val="male" label="Male" />
-                      <Chip field="gender" val="female" label="Female" />
-                      <Chip field="gender" val="other" label="Other" />
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">🍬 Diabetes</label>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip field="diabetes" val="none" label="None" />
-                    <Chip field="diabetes" val="type1" label="Type 1" />
-                    <Chip field="diabetes" val="type2" label="Type 2" />
-                    <Chip field="diabetes" val="prediabetes" label="Pre-Diabetes" />
-                    <Chip field="diabetes" val="gestational" label="Gestational" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">❤️ Blood Pressure</label>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip field="blood_pressure" val="normal" label="Normal" />
-                    <Chip field="blood_pressure" val="high" label="High BP" />
-                    <Chip field="blood_pressure" val="low" label="Low BP" />
-                    <Chip field="blood_pressure" val="borderline" label="Borderline" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">⚖️ Obesity / Weight</label>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip field="obesity" val="no" label="Normal" />
-                    <Chip field="obesity" val="overweight" label="Overweight" />
-                    <Chip field="obesity" val="obese" label="Obese" />
-                    <Chip field="obesity" val="underweight" label="Underweight" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">💇 Hair Fall</label>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip field="hairfall" val="none" label="None" />
-                    <Chip field="hairfall" val="mild" label="Mild" />
-                    <Chip field="hairfall" val="moderate" label="Moderate" />
-                    <Chip field="hairfall" val="severe" label="Severe" />
-                    <Chip field="hairfall" val="alopecia" label="Alopecia" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">🏥 Injury / Operation History</label>
-                  <textarea value={h.injury_operation} onChange={e => set("injury_operation", e.target.value)}
-                    placeholder="e.g. Appendix removed 2018, knee fracture 2021..."
-                    className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-green-400 outline-none resize-none h-20" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">🩺 Other Chronic Conditions</label>
-                  <textarea value={h.other_conditions} onChange={e => set("other_conditions", e.target.value)}
-                    placeholder="e.g. Asthma, Thyroid, Gastritis, Arthritis, PCOD..."
-                    className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-green-400 outline-none resize-none h-20" />
-                </div>
-                <Button onClick={save} disabled={saving} className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl">
-                  {saving ? (
-                    <span className="flex items-center gap-2 justify-center">
-                      <div className="animate-spin h-4 w-4 border-b-2 border-white rounded-full" />Saving...
-                    </span>
-                  ) : saved ? "✓ Saved!" : (
-                    <span className="flex items-center gap-2 justify-center"><Save size={16} /> Save Health Profile</span>
-                  )}
-                </Button>
-              </>
-            )}
-          </Card>
-        )}
-        {tab === "history" && (
-          <Card className="p-5">
-            <h3 className="font-semibold text-gray-700 mb-4 flex items-center gap-2">
-              <Clock size={16} className="text-green-600" /> Consultation History
-            </h3>
-            {history.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">No consultations yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {history.slice(0, 15).map((item: any, i: number) => (
-                  <div key={i}
-                    onClick={() => onGo(`/symptom-analysis?q=${encodeURIComponent(item.symptoms?.join(", ") || "")}`)}
-                    className="p-3 bg-green-50 rounded-xl border border-green-100 cursor-pointer hover:border-green-400 transition">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{item.symptoms?.join(", ") || "—"}</p>
-                        {item.results?.[0]?.remedy?.name && (
-                          <p className="text-xs text-green-600 mt-0.5">Top: {item.results[0].remedy.name}</p>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-400 ml-2 shrink-0">
-                        {item.created_at ? new Date(item.created_at).toLocaleDateString("en-IN") : ""}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        )}
-        <Button onClick={onLogout} variant="outline" className="w-full mt-4 border-red-200 text-red-500 hover:bg-red-50">
-          <LogOut size={15} className="mr-2" /> Sign Out
-        </Button>
-      </main>
-    </div>
-  )
+  return map[category] || ["Pain", "Swelling", "Discharge", "Weakness", "Fever"]
 }
 
 export default function Home() {
-  const [, setLocation] = useLocation()
-  const [user, setUser] = useState<any>(null)
-  const [query, setQuery] = useState("")
-  const [history, setHistory] = useState<any[]>([])
-  const [showHistory, setShowHistory] = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
+  const [, setLocation]         = useLocation()
+  const [user, setUser]         = useState<any>(null)
+  const [query, setQuery]       = useState("")
+  const [history, setHistory]   = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [showHistory, setShowHistory]       = useState(false)
+  const [showTranslate, setShowTranslate]   = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [categoryQuery, setCategoryQuery] = useState("")
+  const [categoryQuery, setCategoryQuery]       = useState("")
 
   useEffect(() => {
     getCurrentUser().then(u => {
       if (!u) { setLocation("/auth"); return }
       setUser(u)
-      getSearchHistory().then(setHistory)
     })
   }, [])
 
-  const handleLogout = async () => { await signOut(); setLocation("/auth") }
+  const loadHistory = async () => {
+    setHistoryLoading(true)
+    try { setHistory(await getSearchHistory() || []) }
+    catch { setHistory([]) }
+    finally { setHistoryLoading(false) }
+  }
+
+  const toggleHistory = () => {
+    if (!showHistory) loadHistory()
+    setShowHistory(p => !p)
+  }
+
+  const handleDeleteHistory = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    await deleteHistoryItem(id)
+    setHistory(p => p.filter(h => h.id !== id))
+  }
 
   const handleSearch = (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -390,142 +96,203 @@ export default function Home() {
     setLocation(`/symptom-analysis?q=${encodeURIComponent(query.trim())}`)
   }
 
-  const handleCategorySearch = (e?: React.FormEvent) => {
-    e?.preventDefault()
+  const handleCategorySearch = (cat: string, q?: string) => {
     const p = new URLSearchParams()
-    p.set("category", selectedCategory!)
-    if (categoryQuery.trim()) p.set("q", categoryQuery.trim())
+    p.set("category", cat)
+    if (q?.trim()) p.set("q", q.trim())
     setLocation(`/symptom-analysis?${p.toString()}`)
   }
 
-  if (showProfile) {
-    return <ProfileView user={user} history={history} onBack={() => setShowProfile(false)}
-      onLogout={handleLogout} onGo={(path) => { setShowProfile(false); setLocation(path) }} />
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) setLocation(`/symptom-analysis?category=Clinical`)
   }
 
+  const handleLogout = async () => { await signOut(); setLocation("/auth") }
+
+  const formatSymptoms = (h: any) =>
+    (Array.isArray(h.symptoms) ? h.symptoms : [])
+      .filter((s: string) => !s.includes(":"))
+      .slice(0, 3).join(", ") || "Consultation"
+
+  const formatTopRemedy = (h: any) => {
+    const r = Array.isArray(h.results) ? h.results : []
+    return r[0]?.remedy?.name ? `→ ${r[0].remedy.name}` : ""
+  }
+
+  const formatHealthHistory = (h: any) => {
+    if (!h.health_history) return null
+    return typeof h.health_history === 'object'
+      ? h.health_history.text || null
+      : h.health_history
+  }
+
+  // ── CATEGORY VIEW ────────────────────────────────────────────
   if (selectedCategory) {
     const cat = RUBRIC_CATEGORIES.find(c => c.name === selectedCategory)!
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-        <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-10">
+        <header className="bg-white border-b shadow-sm sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <button onClick={() => { setSelectedCategory(null); setCategoryQuery("") }}
-              className="flex items-center gap-2 hover:opacity-80 transition">
-              <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-lg">🌿</span>
+              className="flex items-center gap-2 hover:opacity-80">
+              <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
+                <span className="text-lg">🌿</span>
               </div>
               <span className="font-bold text-green-700 text-lg">HomeoWell</span>
             </button>
             <button onClick={() => { setSelectedCategory(null); setCategoryQuery("") }}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-              <ArrowLeft size={16} /> Back
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100">
+              <ArrowLeft size={15} /> Back
             </button>
           </div>
         </header>
         <main className="max-w-2xl mx-auto px-4 py-8">
-          <div className="text-center mb-8">
+          <div className="text-center mb-6">
             <div className="text-5xl mb-3">{cat.icon}</div>
             <h1 className="text-2xl font-bold text-gray-900">{cat.name}</h1>
-            <p className="text-gray-500 text-sm mt-1">{cat.desc}</p>
+            <p className="text-gray-400 text-sm mt-1">{cat.desc}</p>
           </div>
           <Card className="p-6">
             <h2 className="font-semibold text-gray-800 mb-4">
-              Search symptoms in <span className="text-green-700">{cat.name}</span>
+              Search in <span className="text-green-700">{cat.name}</span>
             </h2>
-            <form onSubmit={handleCategorySearch}>
+            <form onSubmit={e => { e.preventDefault(); handleCategorySearch(selectedCategory, categoryQuery) }}>
               <div className="flex gap-2 mb-4">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
                   <Input value={categoryQuery} onChange={e => setCategoryQuery(e.target.value)}
-                    placeholder="describe your symptom..." autoFocus
-                    className="pl-10 py-5 border-2 border-green-200 focus:border-green-500" />
+                    placeholder="" className="pl-10 py-5 border-2 border-green-200 focus:border-green-500" autoFocus />
                 </div>
-                <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-5">Search</Button>
+                <Button type="submit" className="bg-green-600 hover:bg-green-700 px-5">Search</Button>
               </div>
             </form>
-            <div>
-              <p className="text-xs text-gray-400 mb-2">Common symptoms:</p>
-              <div className="flex flex-wrap gap-2">
-                {getCommonSymptoms(cat.name).map(s => (
-                  <button key={s} onClick={() => {
-                    const p = new URLSearchParams()
-                    p.set("category", selectedCategory!)
-                    p.set("q", s)
-                    setLocation(`/symptom-analysis?${p.toString()}`)
-                  }} className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1 rounded-full hover:bg-green-100 transition">
-                    {s}
-                  </button>
-                ))}
-              </div>
+            <p className="text-xs text-gray-400 mb-2">Common symptoms:</p>
+            <div className="flex flex-wrap gap-2 mb-5">
+              {getCommonSymptoms(cat.name).map(s => (
+                <button key={s} onClick={() => handleCategorySearch(selectedCategory, s)}
+                  className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-full hover:bg-green-100 transition">
+                  {s}
+                </button>
+              ))}
             </div>
-            <div className="mt-5 pt-4 border-t">
-              <Button onClick={() => setLocation(`/symptom-analysis?category=${encodeURIComponent(selectedCategory!)}`)}
-                variant="outline" className="w-full border-green-300 text-green-700 hover:bg-green-50">
-                Browse all {cat.name} remedies with AI questions →
-              </Button>
-            </div>
+            <Button onClick={() => handleCategorySearch(selectedCategory)} variant="outline"
+              className="w-full border-green-300 text-green-700 hover:bg-green-50">
+              Browse all {cat.name} remedies with AI questions →
+            </Button>
           </Card>
         </main>
       </div>
     )
   }
 
+  // ── MAIN HOME ─────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+
+          {/* Logo */}
           <button onClick={() => { setQuery(""); setSelectedCategory(null) }}
             className="flex items-center gap-2 hover:opacity-80 transition">
-            <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-lg">🌿</span>
+            <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
+              <span className="text-xl">🌿</span>
             </div>
             <span className="font-bold text-green-700 text-lg">HomeoWell</span>
           </button>
-          <div className="flex items-center gap-2">
-            <TranslateWidget />
+
+          <div className="flex items-center gap-1.5">
+
+            {/* Google Translate — widget from index.html */}
+            <div className="relative">
+              <button
+                onClick={() => setShowTranslate(p => !p)}
+                className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
+                  showTranslate
+                    ? "bg-green-50 border-green-300 text-green-700"
+                    : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
+                }`}
+                title="Translate this page"
+              >
+                🌐
+                <span className="hidden sm:inline">Translate</span>
+              </button>
+
+              {showTranslate && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowTranslate(false)} />
+                  <div className="absolute right-0 top-10 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 min-w-48">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-green-700">🌐 Select Language</span>
+                      <button onClick={() => setShowTranslate(false)} className="text-gray-400 hover:text-gray-600">
+                        <X size={14} />
+                      </button>
+                    </div>
+                    {/* Google Translate widget renders here — from index.html script */}
+                    <div id="google_translate_element" />
+                    <p className="text-xs text-gray-400 mt-2 text-center">
+                      Choose language from dropdown
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
             {user && (
               <>
-                <button onClick={() => setShowHistory(v => !v)}
-                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-green-700 px-2 py-1 rounded-lg hover:bg-green-50">
-                  <Clock size={15} />
-                  <span className="hidden sm:inline text-xs">History</span>
+                <button onClick={toggleHistory}
+                  className={`relative flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
+                    showHistory
+                      ? "bg-green-50 border-green-300 text-green-700"
+                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
+                  }`}>
+                  <Clock size={14} />
+                  <span className="hidden sm:inline">History</span>
+                  {history.length > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-green-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                      {Math.min(history.length, 9)}
+                    </span>
+                  )}
                 </button>
-                <button onClick={() => setShowProfile(true)}
-                  className="flex items-center gap-1.5 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-1.5 rounded-full transition">
-                  <User size={14} className="text-green-700" />
-                  <span className="hidden sm:inline text-xs text-gray-700 font-medium">
+
+                <div className="flex items-center gap-1 bg-green-50 px-2 py-1.5 rounded-full border border-green-200">
+                  <User size={13} className="text-green-600" />
+                  <span className="hidden sm:inline text-xs text-gray-700 max-w-24 truncate">
                     {user.user_metadata?.name || user.email?.split("@")[0]}
                   </span>
-                </button>
-                <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 p-1">
-                  <LogOut size={17} />
+                </div>
+
+                <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 p-1.5 transition" title="Logout">
+                  <LogOut size={16} />
                 </button>
               </>
             )}
           </div>
         </div>
       </header>
+
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Find Your Homeopathic Remedy</h1>
           <p className="text-gray-500">Enter symptoms or select a category below</p>
         </div>
+
+        {/* Search */}
         <div className="mb-8">
           <form onSubmit={handleSearch}>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={19} />
                 <Input value={query} onChange={e => setQuery(e.target.value)}
-                  placeholder="e.g. headache with fever, anxiety at night..."
+                  placeholder=""
                   className="pl-12 pr-4 py-6 text-base rounded-xl border-2 border-green-200 focus:border-green-500 shadow-sm" />
               </div>
               <div className="relative">
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple
-                  onChange={() => setLocation("/symptom-analysis?category=Clinical")}
+                  onChange={handleFileUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
                 <Button type="button" variant="outline"
                   className="h-full px-3 rounded-xl border-2 border-green-200 hover:border-green-400 flex flex-col items-center justify-center gap-0.5">
-                  <Paperclip size={18} className="text-green-600" />
+                  <Paperclip size={17} className="text-green-600" />
                   <span className="text-xs text-green-600 leading-none">Clinical</span>
                 </Button>
               </div>
@@ -534,69 +301,100 @@ export default function Home() {
               </Button>
             </div>
           </form>
-          <div className="flex flex-wrap gap-2 mt-3">
-            {["Headache", "Anxiety", "Fever", "Joint pain", "Insomnia", "Cold"].map(s => (
-              <button key={s} onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(s)}`)}
-                className="text-xs bg-white border border-green-200 text-green-700 px-3 py-1 rounded-full hover:bg-green-50 transition">
-                {s}
-              </button>
-            ))}
-          </div>
         </div>
-        {showHistory && history.length > 0 && (
-          <Card className="mb-6 p-4">
-            <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <Clock size={16} /> Recent Searches
-            </h3>
-            <div className="space-y-1">
-              {history.slice(0, 5).map((item, i) => (
-                <button key={i}
-                  onClick={() => setLocation(`/symptom-analysis?q=${encodeURIComponent(item.symptoms?.join(", ") || "")}`)}
-                  className="w-full text-left flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 group">
-                  <span className="text-sm text-gray-600">{item.symptoms?.join(", ")}</span>
-                  <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
-                </button>
-              ))}
+
+        {/* History Panel */}
+        {showHistory && (
+          <Card className="mb-6 p-4 border border-green-200 shadow-md">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm">
+                <Clock size={15} className="text-green-600" />
+                Consultation History
+                {history.length > 0 && <span className="text-xs text-gray-400 font-normal">({history.length} saved)</span>}
+              </h3>
+              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
             </div>
+
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-6 gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600" />
+                <span className="text-sm text-gray-400">Loading...</span>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="text-center py-6">
+                <Clock size={32} className="text-gray-200 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No history yet.</p>
+                <p className="text-xs text-gray-300 mt-1">Searches save automatically after each consultation.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {history.slice(0, 10).map((h, i) => (
+                  <div key={h.id || i}
+                    className="flex items-center justify-between p-2.5 rounded-lg hover:bg-green-50 group border border-transparent hover:border-green-200 transition cursor-pointer"
+                    onClick={() => {
+                      const syms = (Array.isArray(h.symptoms) ? h.symptoms : [])
+                        .filter((s: string) => !s.includes(":")).slice(0, 3).join(", ")
+                      if (syms) setLocation(`/symptom-analysis?q=${encodeURIComponent(syms)}`)
+                    }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700 font-medium truncate">{formatSymptoms(h)}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {formatTopRemedy(h) && (
+                          <span className="text-xs text-green-600 font-medium">{formatTopRemedy(h)}</span>
+                        )}
+                        {formatHealthHistory(h) && (
+                          <span className="text-xs text-blue-500 truncate max-w-32" title={formatHealthHistory(h)!}>
+                            📋 {formatHealthHistory(h)!.slice(0, 20)}...
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400">
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString("en-IN", {
+                            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+                          }) : ""}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                      <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
+                      <button onClick={e => handleDeleteHistory(h.id, e)}
+                        className="text-transparent group-hover:text-red-400 hover:!text-red-600 transition p-0.5">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {history.length > 10 && (
+                  <p className="text-xs text-center text-gray-400 pt-1">
+                    Showing 10 of {history.length} consultations
+                  </p>
+                )}
+              </div>
+            )}
           </Card>
         )}
+
+        {/* Categories */}
         <div>
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Browse by Category</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {RUBRIC_CATEGORIES.map(cat => (
-              <button key={cat.name} onClick={() => { setSelectedCategory(cat.name); setCategoryQuery("") }}
+              <button key={cat.name} onClick={() => setSelectedCategory(cat.name)}
                 className="bg-white border-2 border-gray-100 rounded-xl p-3 text-left hover:border-green-400 hover:shadow-md transition-all group">
                 <div className="text-2xl mb-1">{cat.icon}</div>
                 <div className="font-medium text-sm text-gray-800 group-hover:text-green-700">{cat.name}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{cat.desc}</div>
-                <div className="text-xs text-green-500 mt-1 opacity-0 group-hover:opacity-100 transition">Tap to explore →</div>
+                <div className="text-xs text-green-500 mt-1 opacity-0 group-hover:opacity-100 transition">Tap →</div>
               </button>
             ))}
           </div>
         </div>
+
         <p className="text-center text-xs text-gray-400 mt-8">
           ⚠️ For educational purposes only. Always consult a qualified homeopath.
         </p>
       </main>
     </div>
   )
-}
-
-function getCommonSymptoms(category: string): string[] {
-  const map: Record<string, string[]> = {
-    "Mind": ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Sleeplessness"],
-    "Head": ["Throbbing headache", "One-sided headache", "Headache with nausea", "Vertigo"],
-    "Fever": ["High fever", "Fever with chills", "Fever with sweating", "Low-grade fever"],
-    "Stomach": ["Nausea", "Acidity", "Bloating", "Loss of appetite", "Vomiting"],
-    "Respiration": ["Dry cough", "Wet cough", "Breathlessness", "Wheezing"],
-    "Skin": ["Itching", "Rash", "Eczema", "Dry skin", "Hives"],
-    "Hands, Legs & Back": ["Joint pain", "Back pain", "Stiffness", "Swollen joints", "Sciatica"],
-    "Urinary System": ["Burning urination", "Frequent urination", "UTI", "Kidney pain"],
-    "Heart": ["Palpitations", "Chest pain", "High BP", "Anxiety with heart symptoms"],
-    "Eye": ["Redness", "Itching", "Watering", "Pain", "Blurred vision"],
-    "Ear": ["Earache", "Tinnitus", "Discharge", "Hearing loss"],
-    "Nose": ["Blocked nose", "Running nose", "Sneezing", "Loss of smell"],
-    "Throat": ["Sore throat", "Difficulty swallowing", "Hoarseness", "Tonsillitis"],
-  }
-  return map[category] || ["Acute symptoms", "Chronic symptoms", "Pain", "Inflammation", "Discharge"]
 }

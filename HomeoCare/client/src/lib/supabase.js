@@ -161,6 +161,24 @@ export async function scoreRemediesFromSupabase(symptoms, filters = {}, question
   }).sort((a, b) => b.score - a.score).slice(0, 10)
 }
 
+// ── HEALTH PROFILE ───────────────────────────────────────────
+export async function getHealthProfile() {
+  const user = await getCurrentUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('patients')
+    .select('id, email, name, created_at')
+    .eq('id', user.id)
+    .single()
+  return data || null
+}
+
+export async function saveHealthProfile(profileData) {
+  const user = await getCurrentUser()
+  if (!user) return
+  await supabase.from('patients').upsert({ id: user.id, ...profileData })
+}
+
 // ── MATERIA MEDICA ────────────────────────────────────────────
 export async function getAllRemedies() {
   const { data } = await supabase.from('remedies')

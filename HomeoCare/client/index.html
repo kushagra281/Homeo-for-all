@@ -2,43 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HomeoWell</title>
+    <meta name="description" content="AI-powered Homeopathic Remedy Finder" />
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+      function googleTranslateElementInit() {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'hi,ur,gu,mr,pa,bn,ta,te,kn,ml,ar,en',
+          layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+          autoDisplay: false
+        }, 'google_translate_element');
+      }
+    </script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" type="text/javascript"></script>
+
     <style>
-      /* Hide Google Translate toolbar/banner */
       .goog-te-banner-frame { display: none !important; }
       body { top: 0 !important; }
       .goog-te-gadget { font-size: 0 !important; }
-      .goog-te-gadget select {
+      .goog-te-gadget .goog-te-combo {
         font-size: 13px !important;
-        border: 1px solid #d1fae5;
-        border-radius: 8px;
-        padding: 4px 8px;
-        color: #15803d;
-        background: #f0fdf4;
-        cursor: pointer;
+        border: 1px solid #d1fae5 !important;
+        border-radius: 8px !important;
+        padding: 4px 8px !important;
+        color: #15803d !important;
+        background: #f0fdf4 !important;
+        cursor: pointer !important;
       }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <!-- Google Translate Widget (hidden, triggered by button in header) -->
-    <div id="google_translate_element" style="display:none; position:fixed; top:60px; right:16px; z-index:9999; background:white; border:1px solid #d1fae5; border-radius:12px; padding:10px; box-shadow:0 4px 20px rgba(0,0,0,0.15);"></div>
-    <script type="text/javascript">
-      function googleTranslateElementInit() {
-        new google.translate.TranslateElement(
-          {
-            pageLanguage: 'en',
-            includedLanguages: 'hi,ur,gu,mr,pa,bn,ta,te,kn,ar,en',
-            layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
-            autoDisplay: false
-          },
-          'google_translate_element'
-        );
-      }
-    </script>
-    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async></script>
     <script type="module" src="/src/main.tsx"></script>
-    <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
 </html>

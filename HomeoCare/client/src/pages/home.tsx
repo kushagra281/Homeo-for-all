@@ -1,10 +1,16 @@
 import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
-import { Search, LogOut, User, Clock, ChevronRight, Paperclip, ArrowLeft, X, Trash2 } from "lucide-react"
-import { getCurrentUser, signOut, getSearchHistory, deleteHistoryItem } from "@/lib/supabase"
+import {
+  Search, LogOut, User, Clock, ChevronRight,
+  Paperclip, ArrowLeft, X, Trash2, Globe,
+  Heart, Calendar, Mail, Edit3, Check
+} from "lucide-react"
+import { getCurrentUser, signOut, getSearchHistory, deleteHistoryItem, getHealthProfile, saveHealthProfile } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 
 const RUBRIC_CATEGORIES = [
   { name: "Mind",               icon: "🧠", desc: "Mental & Emotional" },
@@ -54,16 +60,26 @@ function getCommonSymptoms(category: string): string[] {
   return map[category] || ["Pain", "Swelling", "Discharge", "Weakness", "Fever"]
 }
 
+type View = "home" | "history" | "profile" | "category"
+
 export default function Home() {
-  const [, setLocation]         = useLocation()
-  const [user, setUser]         = useState<any>(null)
-  const [query, setQuery]       = useState("")
-  const [history, setHistory]   = useState<any[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [showHistory, setShowHistory]       = useState(false)
-  const [showTranslate, setShowTranslate]   = useState(false)
+  const [, setLocation]    = useLocation()
+  const [user, setUser]    = useState<any>(null)
+  const [query, setQuery]  = useState("")
+  const [view, setView]    = useState<View>("home")
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [categoryQuery, setCategoryQuery]       = useState("")
+
+  // History state
+  const [history, setHistory]           = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Profile state
+  const [profile, setProfile]       = useState<any>(null)
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [profileForm, setProfileForm] = useState({ name: "", health_notes: "" })
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileSaved, setProfileSaved]   = useState(false)
 
   useEffect(() => {
     getCurrentUser().then(u => {
@@ -79,15 +95,43 @@ export default function Home() {
     finally { setHistoryLoading(false) }
   }
 
-  const toggleHistory = () => {
-    if (!showHistory) loadHistory()
-    setShowHistory(p => !p)
+  const loadProfile = async () => {
+    try {
+      const p = await getHealthProfile()
+      setProfile(p)
+      setProfileForm({
+        name: p?.name || user?.user_metadata?.name || "",
+        health_notes: p?.health_notes || ""
+      })
+    } catch { /* ignore */ }
+  }
+
+  const handleShowHistory = () => {
+    setView("history")
+    loadHistory()
+  }
+
+  const handleShowProfile = () => {
+    setView("profile")
+    loadProfile()
   }
 
   const handleDeleteHistory = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     await deleteHistoryItem(id)
     setHistory(p => p.filter(h => h.id !== id))
+  }
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true)
+    try {
+      await saveHealthProfile(profileForm)
+      setProfile({ ...profile, ...profileForm })
+      setEditingProfile(false)
+      setProfileSaved(true)
+      setTimeout(() => setProfileSaved(false), 2000)
+    } catch { /* ignore */ }
+    finally { setSavingProfile(false) }
   }
 
   const handleSearch = (e?: React.FormEvent) => {
@@ -111,8 +155,7 @@ export default function Home() {
 
   const formatSymptoms = (h: any) =>
     (Array.isArray(h.symptoms) ? h.symptoms : [])
-      .filter((s: string) => !s.includes(":"))
-      .slice(0, 3).join(", ") || "Consultation"
+      .filter((s: string) => !s.includes(":")).slice(0, 3).join(", ") || "Consultation"
 
   const formatTopRemedy = (h: any) => {
     const r = Array.isArray(h.results) ? h.results : []
@@ -121,31 +164,86 @@ export default function Home() {
 
   const formatHealthHistory = (h: any) => {
     if (!h.health_history) return null
-    return typeof h.health_history === 'object'
-      ? h.health_history.text || null
-      : h.health_history
+    return typeof h.health_history === "object" ? h.health_history.text : h.health_history
   }
+
+  // ── HEADER (shown on all views) ──────────────────────────────
+  const Header = ({ showBack = false }: { showBack?: boolean }) => (
+    <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
+      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <button
+          onClick={() => { setView("home"); setQuery(""); setSelectedCategory(null) }}
+          className="flex items-center gap-2 hover:opacity-80 transition"
+        >
+          <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
+            <span className="text-xl">🌿</span>
+          </div>
+          <span className="font-bold text-green-700 text-lg">HomeoWell</span>
+        </button>
+
+        {showBack ? (
+          <button onClick={() => setView("home")}
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100">
+            <ArrowLeft size={15} /> Back
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            {/* FIX 1: Google Translate — actual widget rendered directly */}
+            <div className="flex items-center border border-gray-200 rounded-lg px-2 py-1 bg-white hover:border-green-300 transition">
+              <Globe size={14} className="text-green-600 mr-1 shrink-0" />
+              <div id="google_translate_element" className="text-xs" />
+            </div>
+
+            {user && (
+              <>
+                {/* History button */}
+                <button onClick={handleShowHistory}
+                  className={`relative flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
+                    view === "history"
+                      ? "bg-green-50 border-green-300 text-green-700"
+                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
+                  }`}>
+                  <Clock size={14} />
+                  <span className="hidden sm:inline">History</span>
+                  {history.length > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-green-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                      {Math.min(history.length, 9)}
+                    </span>
+                  )}
+                </button>
+
+                {/* FIX 2: Profile button — now opens profile view */}
+                <button onClick={handleShowProfile}
+                  className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
+                    view === "profile"
+                      ? "bg-green-50 border-green-300 text-green-700"
+                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
+                  }`}
+                  title="Health Profile">
+                  <User size={14} />
+                  <span className="hidden sm:inline text-xs max-w-20 truncate">
+                    {user.user_metadata?.name || user.email?.split("@")[0]}
+                  </span>
+                </button>
+
+                <button onClick={handleLogout}
+                  className="text-gray-400 hover:text-red-500 p-1.5 transition" title="Logout">
+                  <LogOut size={16} />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </header>
+  )
 
   // ── CATEGORY VIEW ────────────────────────────────────────────
   if (selectedCategory) {
     const cat = RUBRIC_CATEGORIES.find(c => c.name === selectedCategory)!
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-        <header className="bg-white border-b shadow-sm sticky top-0 z-10">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-            <button onClick={() => { setSelectedCategory(null); setCategoryQuery("") }}
-              className="flex items-center gap-2 hover:opacity-80">
-              <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
-                <span className="text-lg">🌿</span>
-              </div>
-              <span className="font-bold text-green-700 text-lg">HomeoWell</span>
-            </button>
-            <button onClick={() => { setSelectedCategory(null); setCategoryQuery("") }}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100">
-              <ArrowLeft size={15} /> Back
-            </button>
-          </div>
-        </header>
+        <Header showBack />
         <main className="max-w-2xl mx-auto px-4 py-8">
           <div className="text-center mb-6">
             <div className="text-5xl mb-3">{cat.icon}</div>
@@ -185,90 +283,211 @@ export default function Home() {
     )
   }
 
+  // ── HISTORY VIEW ─────────────────────────────────────────────
+  if (view === "history") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
+        <Header showBack />
+        <main className="max-w-2xl mx-auto px-4 py-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <Clock size={20} className="text-green-600" /> Consultation History
+            {history.length > 0 && <span className="text-sm text-gray-400 font-normal">({history.length} saved)</span>}
+          </h2>
+
+          {historyLoading ? (
+            <div className="flex items-center justify-center py-16 gap-2">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600" />
+              <span className="text-gray-400">Loading...</span>
+            </div>
+          ) : history.length === 0 ? (
+            <Card className="p-8 text-center">
+              <Clock size={40} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-gray-400">No history yet.</p>
+              <p className="text-xs text-gray-300 mt-1">Searches save automatically after each consultation.</p>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {history.map((h, i) => (
+                <Card key={h.id || i} className="p-4 hover:border-green-200 transition cursor-pointer group"
+                  onClick={() => {
+                    const syms = (Array.isArray(h.symptoms) ? h.symptoms : [])
+                      .filter((s: string) => !s.includes(":")).slice(0, 3).join(", ")
+                    if (syms) setLocation(`/symptom-analysis?q=${encodeURIComponent(syms)}`)
+                  }}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{formatSymptoms(h)}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {formatTopRemedy(h) && (
+                          <span className="text-sm text-green-600 font-medium">{formatTopRemedy(h)}</span>
+                        )}
+                        {formatHealthHistory(h) && (
+                          <span className="text-xs text-blue-500 flex items-center gap-0.5">
+                            <Heart size={10} /> {String(formatHealthHistory(h)).slice(0, 25)}...
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400 flex items-center gap-0.5">
+                          <Calendar size={10} />
+                          {h.created_at ? new Date(h.created_at).toLocaleDateString("en-IN", {
+                            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+                          }) : ""}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* FIX 3: Delete button — always visible, not just on hover */}
+                    <div className="flex items-center gap-2 ml-3 shrink-0">
+                      <ChevronRight size={16} className="text-gray-300 group-hover:text-green-500" />
+                      <button
+                        onClick={e => handleDeleteHistory(h.id, e)}
+                        className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+    )
+  }
+
+  // ── PROFILE VIEW ─────────────────────────────────────────────
+  if (view === "profile") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
+        <Header showBack />
+        <main className="max-w-2xl mx-auto px-4 py-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <User size={20} className="text-green-600" /> Health Profile
+          </h2>
+
+          <Card className="p-6 mb-4">
+            {/* Avatar */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center shadow-md">
+                <span className="text-white text-2xl font-bold">
+                  {(user?.user_metadata?.name || user?.email || "U")[0].toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">
+                  {user?.user_metadata?.name || "Patient"}
+                </h3>
+                <p className="text-sm text-gray-400 flex items-center gap-1">
+                  <Mail size={13} /> {user?.email}
+                </p>
+                <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                  <Calendar size={12} />
+                  Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : ""}
+                </p>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="bg-green-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-green-700">{history.length || 0}</div>
+                <div className="text-xs text-gray-500">Consultations</div>
+              </div>
+              <div className="bg-blue-50 rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-blue-700">
+                  {history.filter(h => h.health_history).length || 0}
+                </div>
+                <div className="text-xs text-gray-500">With Health History</div>
+              </div>
+            </div>
+
+            {/* Health notes */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                  <Heart size={14} className="text-red-500" /> Health Notes
+                </Label>
+                {!editingProfile ? (
+                  <button onClick={() => setEditingProfile(true)}
+                    className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 px-2 py-1 rounded-lg hover:bg-green-50">
+                    <Edit3 size={12} /> Edit
+                  </button>
+                ) : (
+                  <button onClick={handleSaveProfile} disabled={savingProfile}
+                    className="flex items-center gap-1 text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded-lg">
+                    {savingProfile ? "Saving..." : <><Check size={12} /> Save</>}
+                  </button>
+                )}
+              </div>
+
+              {editingProfile ? (
+                <Textarea
+                  value={profileForm.health_notes}
+                  onChange={e => setProfileForm(p => ({ ...p, health_notes: e.target.value }))}
+                  placeholder="e.g. Diabetic since 10 years, BP patient, thyroid, allergies, medications..."
+                  className="text-sm resize-none border-green-200 focus:border-green-400"
+                  rows={4}
+                  autoFocus
+                />
+              ) : (
+                <div className="bg-gray-50 rounded-xl p-3 min-h-16">
+                  {profile?.health_notes ? (
+                    <p className="text-sm text-gray-700">{profile.health_notes}</p>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">
+                      No health notes added. Tap Edit to add your medical history.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {profileSaved && (
+                <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                  <Check size={12} /> Profile saved successfully!
+                </p>
+              )}
+
+              <p className="text-xs text-gray-400 mt-2">
+                💡 Health notes are automatically sent to AI for better remedy suggestions.
+              </p>
+            </div>
+          </Card>
+
+          {/* Recent consultations preview */}
+          {history.length > 0 && (
+            <Card className="p-4">
+              <h3 className="font-semibold text-gray-700 text-sm mb-3">Recent Consultations</h3>
+              <div className="space-y-2">
+                {history.slice(0, 3).map((h, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 truncate">{formatSymptoms(h)}</span>
+                    {formatTopRemedy(h) && (
+                      <span className="text-green-600 text-xs font-medium ml-2 shrink-0">{formatTopRemedy(h)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleShowHistory}
+                className="text-xs text-green-600 mt-3 hover:underline">
+                View all history →
+              </button>
+            </Card>
+          )}
+
+          <Button onClick={handleLogout} variant="outline"
+            className="w-full mt-4 border-red-200 text-red-500 hover:bg-red-50">
+            <LogOut size={16} className="mr-2" /> Logout
+          </Button>
+        </main>
+      </div>
+    )
+  }
+
   // ── MAIN HOME ─────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-
-          {/* Logo */}
-          <button onClick={() => { setQuery(""); setSelectedCategory(null) }}
-            className="flex items-center gap-2 hover:opacity-80 transition">
-            <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
-              <span className="text-xl">🌿</span>
-            </div>
-            <span className="font-bold text-green-700 text-lg">HomeoWell</span>
-          </button>
-
-          <div className="flex items-center gap-1.5">
-
-            {/* Google Translate — widget from index.html */}
-            <div className="relative">
-              <button
-                onClick={() => setShowTranslate(p => !p)}
-                className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
-                  showTranslate
-                    ? "bg-green-50 border-green-300 text-green-700"
-                    : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
-                }`}
-                title="Translate this page"
-              >
-                🌐
-                <span className="hidden sm:inline">Translate</span>
-              </button>
-
-              {showTranslate && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowTranslate(false)} />
-                  <div className="absolute right-0 top-10 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 min-w-48">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-green-700">🌐 Select Language</span>
-                      <button onClick={() => setShowTranslate(false)} className="text-gray-400 hover:text-gray-600">
-                        <X size={14} />
-                      </button>
-                    </div>
-                    {/* Google Translate widget renders here — from index.html script */}
-                    <div id="google_translate_element" />
-                    <p className="text-xs text-gray-400 mt-2 text-center">
-                      Choose language from dropdown
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {user && (
-              <>
-                <button onClick={toggleHistory}
-                  className={`relative flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
-                    showHistory
-                      ? "bg-green-50 border-green-300 text-green-700"
-                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
-                  }`}>
-                  <Clock size={14} />
-                  <span className="hidden sm:inline">History</span>
-                  {history.length > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-green-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                      {Math.min(history.length, 9)}
-                    </span>
-                  )}
-                </button>
-
-                <div className="flex items-center gap-1 bg-green-50 px-2 py-1.5 rounded-full border border-green-200">
-                  <User size={13} className="text-green-600" />
-                  <span className="hidden sm:inline text-xs text-gray-700 max-w-24 truncate">
-                    {user.user_metadata?.name || user.email?.split("@")[0]}
-                  </span>
-                </div>
-
-                <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 p-1.5 transition" title="Logout">
-                  <LogOut size={16} />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
@@ -296,84 +515,13 @@ export default function Home() {
                   <span className="text-xs text-green-600 leading-none">Clinical</span>
                 </Button>
               </div>
-              <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-6 rounded-xl font-medium">
+              <Button type="submit"
+                className="bg-green-600 hover:bg-green-700 text-white px-6 rounded-xl font-medium">
                 Search
               </Button>
             </div>
           </form>
         </div>
-
-        {/* History Panel */}
-        {showHistory && (
-          <Card className="mb-6 p-4 border border-green-200 shadow-md">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-800 flex items-center gap-2 text-sm">
-                <Clock size={15} className="text-green-600" />
-                Consultation History
-                {history.length > 0 && <span className="text-xs text-gray-400 font-normal">({history.length} saved)</span>}
-              </h3>
-              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={16} />
-              </button>
-            </div>
-
-            {historyLoading ? (
-              <div className="flex items-center justify-center py-6 gap-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : history.length === 0 ? (
-              <div className="text-center py-6">
-                <Clock size={32} className="text-gray-200 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">No history yet.</p>
-                <p className="text-xs text-gray-300 mt-1">Searches save automatically after each consultation.</p>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {history.slice(0, 10).map((h, i) => (
-                  <div key={h.id || i}
-                    className="flex items-center justify-between p-2.5 rounded-lg hover:bg-green-50 group border border-transparent hover:border-green-200 transition cursor-pointer"
-                    onClick={() => {
-                      const syms = (Array.isArray(h.symptoms) ? h.symptoms : [])
-                        .filter((s: string) => !s.includes(":")).slice(0, 3).join(", ")
-                      if (syms) setLocation(`/symptom-analysis?q=${encodeURIComponent(syms)}`)
-                    }}>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 font-medium truncate">{formatSymptoms(h)}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {formatTopRemedy(h) && (
-                          <span className="text-xs text-green-600 font-medium">{formatTopRemedy(h)}</span>
-                        )}
-                        {formatHealthHistory(h) && (
-                          <span className="text-xs text-blue-500 truncate max-w-32" title={formatHealthHistory(h)!}>
-                            📋 {formatHealthHistory(h)!.slice(0, 20)}...
-                          </span>
-                        )}
-                        <span className="text-xs text-gray-400">
-                          {h.created_at ? new Date(h.created_at).toLocaleDateString("en-IN", {
-                            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
-                          }) : ""}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                      <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
-                      <button onClick={e => handleDeleteHistory(h.id, e)}
-                        className="text-transparent group-hover:text-red-400 hover:!text-red-600 transition p-0.5">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {history.length > 10 && (
-                  <p className="text-xs text-center text-gray-400 pt-1">
-                    Showing 10 of {history.length} consultations
-                  </p>
-                )}
-              </div>
-            )}
-          </Card>
-        )}
 
         {/* Categories */}
         <div>

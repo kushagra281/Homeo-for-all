@@ -89,26 +89,26 @@ export default function Home() {
     { code: "ur", label: "اردو" },
   ]
 
-  // Load Google Translate widget silently (hidden), then drive it via custom UI
+  // Load Google Translate widget silently then drive via custom UI
   useEffect(() => {
     if (document.getElementById("google-translate-script")) return
 
-    // Suppress the Google Translate toolbar banner that pushes page down
+    // Hide ONLY the top banner Google Translate injects — NOT the widget div itself
+    // (widget div must be rendered/visible for .goog-te-combo select to initialise)
     if (!document.getElementById("gt-hide-style")) {
       const style = document.createElement("style")
       style.id = "gt-hide-style"
       style.textContent = `
-        .goog-te-banner-frame { display: none !important; }
-        body { top: 0 !important; }
-        #google_translate_element { display: none !important; }
-        .goog-te-balloon-frame { display: none !important; }
+        .goog-te-banner-frame.skiptranslate { display: none !important; }
+        .goog-te-balloon-frame             { display: none !important; }
+        body                               { top: 0px !important; }
       `
       document.head.appendChild(style)
     }
 
     ;(window as any).googleTranslateElementInit = function () {
       new (window as any).google.translate.TranslateElement(
-        { pageLanguage: "en", autoDisplay: false },
+        { pageLanguage: "en", autoDisplay: false, multilanguagePage: true },
         "google_translate_element"
       )
     }
@@ -120,13 +120,24 @@ export default function Home() {
     document.head.appendChild(script)
   }, [])
 
-  // Trigger the hidden Google Translate select — translates in-place, no navigation
+  // Trigger the off-screen Google Translate select — translates page in-place
   const handleTranslate = (langCode: string) => {
     setShowLangMenu(false)
-    const select = document.querySelector(".goog-te-combo") as HTMLSelectElement | null
-    if (select) {
+
+    const doTranslate = () => {
+      const select = document.querySelector(".goog-te-combo") as HTMLSelectElement | null
+      if (!select) return false
       select.value = langCode
       select.dispatchEvent(new Event("change"))
+      return true
+    }
+
+    // Try immediately; if widget not ready yet, retry every 300 ms (max 6 s)
+    if (!doTranslate()) {
+      let tries = 0
+      const timer = setInterval(() => {
+        if (doTranslate() || ++tries > 20) clearInterval(timer)
+      }, 300)
     }
   }
 
@@ -214,8 +225,11 @@ export default function Home() {
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            {/* Hidden Google Translate widget — driven by custom UI below */}
-            <div id="google_translate_element" />
+            {/* Google Translate widget — off-screen so it initialises, but invisible */}
+            <div
+              id="google_translate_element"
+              style={{ position: "fixed", top: -9999, left: -9999, visibility: "hidden" }}
+            />
 
             {/* Custom language selector — triggers the hidden widget in-place */}
             <div className="relative">

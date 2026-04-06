@@ -89,13 +89,45 @@ export default function Home() {
     { code: "ur", label: "اردو" },
   ]
 
+  // Load Google Translate widget silently (hidden), then drive it via custom UI
+  useEffect(() => {
+    if (document.getElementById("google-translate-script")) return
+
+    // Suppress the Google Translate toolbar banner that pushes page down
+    if (!document.getElementById("gt-hide-style")) {
+      const style = document.createElement("style")
+      style.id = "gt-hide-style"
+      style.textContent = `
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        #google_translate_element { display: none !important; }
+        .goog-te-balloon-frame { display: none !important; }
+      `
+      document.head.appendChild(style)
+    }
+
+    ;(window as any).googleTranslateElementInit = function () {
+      new (window as any).google.translate.TranslateElement(
+        { pageLanguage: "en", autoDisplay: false },
+        "google_translate_element"
+      )
+    }
+
+    const script = document.createElement("script")
+    script.id    = "google-translate-script"
+    script.src   = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+    script.async = true
+    document.head.appendChild(script)
+  }, [])
+
+  // Trigger the hidden Google Translate select — translates in-place, no navigation
   const handleTranslate = (langCode: string) => {
     setShowLangMenu(false)
-    const currentUrl = encodeURIComponent(window.location.href)
-    window.open(
-      `https://translate.google.com/translate?sl=auto&tl=${langCode}&u=${currentUrl}`,
-      "_self"
-    )
+    const select = document.querySelector(".goog-te-combo") as HTMLSelectElement | null
+    if (select) {
+      select.value = langCode
+      select.dispatchEvent(new Event("change"))
+    }
   }
 
   useEffect(() => {
@@ -182,7 +214,10 @@ export default function Home() {
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            {/* Language selector */}
+            {/* Hidden Google Translate widget — driven by custom UI below */}
+            <div id="google_translate_element" />
+
+            {/* Custom language selector — triggers the hidden widget in-place */}
             <div className="relative">
               <button
                 onClick={() => setShowLangMenu(v => !v)}
@@ -193,17 +228,24 @@ export default function Home() {
                 <span className="hidden sm:inline">Translate</span>
               </button>
               {showLangMenu && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 min-w-36 overflow-hidden">
-                  {LANGUAGES.map(lang => (
-                    <button
-                      key={lang.code}
-                      onClick={() => handleTranslate(lang.code)}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition"
-                    >
-                      {lang.label}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  {/* Overlay to close menu on outside click */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowLangMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 min-w-36 overflow-hidden">
+                    {LANGUAGES.map(lang => (
+                      <button
+                        key={lang.code}
+                        onClick={() => handleTranslate(lang.code)}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition"
+                      >
+                        {lang.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 

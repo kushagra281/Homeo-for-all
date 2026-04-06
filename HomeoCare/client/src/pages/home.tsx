@@ -12,6 +12,14 @@ import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 
+// Tell TypeScript about the Google Translate global
+declare global {
+  interface Window {
+    googleTranslateElementInit?: () => void
+    google?: any
+  }
+}
+
 const RUBRIC_CATEGORIES = [
   { name: "Mind",               icon: "🧠", desc: "Mental & Emotional" },
   { name: "Head",               icon: "👤", desc: "Headache, Vertigo" },
@@ -60,7 +68,7 @@ function getCommonSymptoms(category: string): string[] {
   return map[category] || ["Pain", "Swelling", "Discharge", "Weakness", "Fever"]
 }
 
-type View = "home" | "history" | "profile" | "category"
+type View = "home" | "history" | "category"
 
 export default function Home() {
   const [, setLocation]    = useLocation()
@@ -71,15 +79,28 @@ export default function Home() {
   const [categoryQuery, setCategoryQuery]       = useState("")
 
   // History state
-  const [history, setHistory]           = useState<any[]>([])
+  const [history, setHistory]               = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // Profile state
-  const [profile, setProfile]       = useState<any>(null)
-  const [editingProfile, setEditingProfile] = useState(false)
-  const [profileForm, setProfileForm] = useState({ name: "", health_notes: "" })
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [profileSaved, setProfileSaved]   = useState(false)
+  // ── FIX 1: Load Google Translate widget script once on mount ──
+  useEffect(() => {
+    // Avoid double-loading
+    if (document.getElementById("google-translate-script")) return
+
+    window.googleTranslateElementInit = () => {
+      if (!window.google?.translate) return
+      new window.google.translate.TranslateElement(
+        { pageLanguage: "en", autoDisplay: false },
+        "google_translate_element"
+      )
+    }
+
+    const script = document.createElement("script")
+    script.id  = "google-translate-script"
+    script.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+    script.async = true
+    document.body.appendChild(script)
+  }, [])
 
   useEffect(() => {
     getCurrentUser().then(u => {
@@ -95,43 +116,20 @@ export default function Home() {
     finally { setHistoryLoading(false) }
   }
 
-  const loadProfile = async () => {
-    try {
-      const p = await getHealthProfile()
-      setProfile(p)
-      setProfileForm({
-        name: p?.name || user?.user_metadata?.name || "",
-        health_notes: p?.health_notes || ""
-      })
-    } catch { /* ignore */ }
-  }
-
   const handleShowHistory = () => {
     setView("history")
     loadHistory()
   }
 
+  // ── FIX 2: Profile button navigates to /profile page ──
   const handleShowProfile = () => {
-    setView("profile")
-    loadProfile()
+    setLocation("/profile")
   }
 
   const handleDeleteHistory = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     await deleteHistoryItem(id)
     setHistory(p => p.filter(h => h.id !== id))
-  }
-
-  const handleSaveProfile = async () => {
-    setSavingProfile(true)
-    try {
-      await saveHealthProfile(profileForm)
-      setProfile({ ...profile, ...profileForm })
-      setEditingProfile(false)
-      setProfileSaved(true)
-      setTimeout(() => setProfileSaved(false), 2000)
-    } catch { /* ignore */ }
-    finally { setSavingProfile(false) }
   }
 
   const handleSearch = (e?: React.FormEvent) => {
@@ -167,7 +165,7 @@ export default function Home() {
     return typeof h.health_history === "object" ? h.health_history.text : h.health_history
   }
 
-  // ── HEADER (shown on all views) ──────────────────────────────
+  // ── HEADER ───────────────────────────────────────────────────
   const Header = ({ showBack = false }: { showBack?: boolean }) => (
     <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -188,7 +186,7 @@ export default function Home() {
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            {/* FIX 1: Google Translate — actual widget rendered directly */}
+            {/* Google Translate widget container */}
             <div className="flex items-center border border-gray-200 rounded-lg px-2 py-1 bg-white hover:border-green-300 transition">
               <Globe size={14} className="text-green-600 mr-1 shrink-0" />
               <div id="google_translate_element" className="text-xs" />
@@ -212,13 +210,9 @@ export default function Home() {
                   )}
                 </button>
 
-                {/* FIX 2: Profile button — now opens profile view */}
+                {/* Profile button — navigates to full /profile page */}
                 <button onClick={handleShowProfile}
-                  className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
-                    view === "profile"
-                      ? "bg-green-50 border-green-300 text-green-700"
-                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
-                  }`}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50 transition"
                   title="Health Profile">
                   <User size={14} />
                   <span className="hidden sm:inline text-xs max-w-20 truncate">
@@ -334,8 +328,6 @@ export default function Home() {
                         </span>
                       </div>
                     </div>
-
-                    {/* FIX 3: Delete button — always visible, not just on hover */}
                     <div className="flex items-center gap-2 ml-3 shrink-0">
                       <ChevronRight size={16} className="text-gray-300 group-hover:text-green-500" />
                       <button
@@ -351,134 +343,6 @@ export default function Home() {
               ))}
             </div>
           )}
-        </main>
-      </div>
-    )
-  }
-
-  // ── PROFILE VIEW ─────────────────────────────────────────────
-  if (view === "profile") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-        <Header showBack />
-        <main className="max-w-2xl mx-auto px-4 py-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <User size={20} className="text-green-600" /> Health Profile
-          </h2>
-
-          <Card className="p-6 mb-4">
-            {/* Avatar */}
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center shadow-md">
-                <span className="text-white text-2xl font-bold">
-                  {(user?.user_metadata?.name || user?.email || "U")[0].toUpperCase()}
-                </span>
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-900 text-lg">
-                  {user?.user_metadata?.name || "Patient"}
-                </h3>
-                <p className="text-sm text-gray-400 flex items-center gap-1">
-                  <Mail size={13} /> {user?.email}
-                </p>
-                <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-                  <Calendar size={12} />
-                  Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : ""}
-                </p>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="bg-green-50 rounded-xl p-3 text-center">
-                <div className="text-2xl font-bold text-green-700">{history.length || 0}</div>
-                <div className="text-xs text-gray-500">Consultations</div>
-              </div>
-              <div className="bg-blue-50 rounded-xl p-3 text-center">
-                <div className="text-2xl font-bold text-blue-700">
-                  {history.filter(h => h.health_history).length || 0}
-                </div>
-                <div className="text-xs text-gray-500">With Health History</div>
-              </div>
-            </div>
-
-            {/* Health notes */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <Label className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                  <Heart size={14} className="text-red-500" /> Health Notes
-                </Label>
-                {!editingProfile ? (
-                  <button onClick={() => setEditingProfile(true)}
-                    className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 px-2 py-1 rounded-lg hover:bg-green-50">
-                    <Edit3 size={12} /> Edit
-                  </button>
-                ) : (
-                  <button onClick={handleSaveProfile} disabled={savingProfile}
-                    className="flex items-center gap-1 text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded-lg">
-                    {savingProfile ? "Saving..." : <><Check size={12} /> Save</>}
-                  </button>
-                )}
-              </div>
-
-              {editingProfile ? (
-                <Textarea
-                  value={profileForm.health_notes}
-                  onChange={e => setProfileForm(p => ({ ...p, health_notes: e.target.value }))}
-                  placeholder="e.g. Diabetic since 10 years, BP patient, thyroid, allergies, medications..."
-                  className="text-sm resize-none border-green-200 focus:border-green-400"
-                  rows={4}
-                  autoFocus
-                />
-              ) : (
-                <div className="bg-gray-50 rounded-xl p-3 min-h-16">
-                  {profile?.health_notes ? (
-                    <p className="text-sm text-gray-700">{profile.health_notes}</p>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">
-                      No health notes added. Tap Edit to add your medical history.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {profileSaved && (
-                <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
-                  <Check size={12} /> Profile saved successfully!
-                </p>
-              )}
-
-              <p className="text-xs text-gray-400 mt-2">
-                💡 Health notes are automatically sent to AI for better remedy suggestions.
-              </p>
-            </div>
-          </Card>
-
-          {/* Recent consultations preview */}
-          {history.length > 0 && (
-            <Card className="p-4">
-              <h3 className="font-semibold text-gray-700 text-sm mb-3">Recent Consultations</h3>
-              <div className="space-y-2">
-                {history.slice(0, 3).map((h, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 truncate">{formatSymptoms(h)}</span>
-                    {formatTopRemedy(h) && (
-                      <span className="text-green-600 text-xs font-medium ml-2 shrink-0">{formatTopRemedy(h)}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button onClick={handleShowHistory}
-                className="text-xs text-green-600 mt-3 hover:underline">
-                View all history →
-              </button>
-            </Card>
-          )}
-
-          <Button onClick={handleLogout} variant="outline"
-            className="w-full mt-4 border-red-200 text-red-500 hover:bg-red-50">
-            <LogOut size={16} className="mr-2" /> Logout
-          </Button>
         </main>
       </div>
     )

@@ -89,26 +89,43 @@ export default function Home() {
     { code: "ur", label: "اردو" },
   ]
 
-  // Load Google Translate widget silently then drive via custom UI
+  // Cookie-based Google Translate — sets googtrans cookie then reloads same URL
+  const handleTranslate = (langCode: string) => {
+    setShowLangMenu(false)
+    if (langCode === "en") {
+      // Reset: delete translation cookie and reload
+      document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/"
+      document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + window.location.hostname
+      document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=." + window.location.hostname
+    } else {
+      // Set translation cookie for this language
+      document.cookie = `googtrans=/en/${langCode}; path=/`
+      document.cookie = `googtrans=/en/${langCode}; path=/; domain=${window.location.hostname}`
+      document.cookie = `googtrans=/en/${langCode}; path=/; domain=.${window.location.hostname}`
+    }
+    // Reload the same page — Google Translate picks up the cookie automatically
+    window.location.reload()
+  }
+
+  // Load Google Translate script so it reads the cookie on each page load
   useEffect(() => {
     if (document.getElementById("google-translate-script")) return
 
-    // Hide ONLY the top banner Google Translate injects — NOT the widget div itself
-    // (widget div must be rendered/visible for .goog-te-combo select to initialise)
     if (!document.getElementById("gt-hide-style")) {
       const style = document.createElement("style")
       style.id = "gt-hide-style"
       style.textContent = `
-        .goog-te-banner-frame.skiptranslate { display: none !important; }
-        .goog-te-balloon-frame             { display: none !important; }
-        body                               { top: 0px !important; }
+        .goog-te-banner-frame { display: none !important; }
+        .goog-te-balloon-frame { display: none !important; }
+        #google_translate_element { display: none !important; }
+        body { top: 0px !important; }
       `
       document.head.appendChild(style)
     }
 
     ;(window as any).googleTranslateElementInit = function () {
       new (window as any).google.translate.TranslateElement(
-        { pageLanguage: "en", autoDisplay: false, multilanguagePage: true },
+        { pageLanguage: "en", autoDisplay: false },
         "google_translate_element"
       )
     }
@@ -119,27 +136,6 @@ export default function Home() {
     script.async = true
     document.head.appendChild(script)
   }, [])
-
-  // Trigger the off-screen Google Translate select — translates page in-place
-  const handleTranslate = (langCode: string) => {
-    setShowLangMenu(false)
-
-    const doTranslate = () => {
-      const select = document.querySelector(".goog-te-combo") as HTMLSelectElement | null
-      if (!select) return false
-      select.value = langCode
-      select.dispatchEvent(new Event("change"))
-      return true
-    }
-
-    // Try immediately; if widget not ready yet, retry every 300 ms (max 6 s)
-    if (!doTranslate()) {
-      let tries = 0
-      const timer = setInterval(() => {
-        if (doTranslate() || ++tries > 20) clearInterval(timer)
-      }, 300)
-    }
-  }
 
   useEffect(() => {
     getCurrentUser().then(u => {
@@ -225,11 +221,8 @@ export default function Home() {
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            {/* Google Translate widget — off-screen so it initialises, but invisible */}
-            <div
-              id="google_translate_element"
-              style={{ position: "fixed", top: -9999, left: -9999, visibility: "hidden" }}
-            />
+            {/* Hidden Google Translate widget — reads googtrans cookie on load */}
+            <div id="google_translate_element" />
 
             {/* Custom language selector — triggers the hidden widget in-place */}
             <div className="relative">

@@ -82,13 +82,19 @@ export default function Home() {
   const [history, setHistory]               = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // ── FIX 1: Load Google Translate widget script once on mount ──
+  // ── Load Google Translate widget script once on mount ──
   useEffect(() => {
-    // Avoid double-loading
-    if (document.getElementById("google-translate-script")) return
+    if (document.getElementById("google-translate-script")) {
+      if (window.google?.translate) {
+        new window.google.translate.TranslateElement(
+          { pageLanguage: "en", autoDisplay: false },
+          "google_translate_element"
+        )
+      }
+      return
+    }
 
-    window.googleTranslateElementInit = () => {
-      if (!window.google?.translate) return
+    window.googleTranslateElementInit = function () {
       new window.google.translate.TranslateElement(
         { pageLanguage: "en", autoDisplay: false },
         "google_translate_element"
@@ -96,10 +102,10 @@ export default function Home() {
     }
 
     const script = document.createElement("script")
-    script.id  = "google-translate-script"
-    script.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+    script.id    = "google-translate-script"
+    script.src   = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
     script.async = true
-    document.body.appendChild(script)
+    document.head.appendChild(script)
   }, [])
 
   useEffect(() => {
@@ -189,7 +195,7 @@ export default function Home() {
             {/* Google Translate widget container */}
             <div className="flex items-center border border-gray-200 rounded-lg px-2 py-1 bg-white hover:border-green-300 transition">
               <Globe size={14} className="text-green-600 mr-1 shrink-0" />
-              <div id="google_translate_element" className="text-xs" />
+              <div id="google_translate_element" className="text-xs" style={{ minWidth: 80 }} />
             </div>
 
             {user && (

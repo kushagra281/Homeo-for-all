@@ -12,14 +12,6 @@ import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 
-// Tell TypeScript about the Google Translate global
-declare global {
-  interface Window {
-    googleTranslateElementInit?: () => void
-    google?: any
-  }
-}
-
 const RUBRIC_CATEGORIES = [
   { name: "Mind",               icon: "🧠", desc: "Mental & Emotional" },
   { name: "Head",               icon: "👤", desc: "Headache, Vertigo" },
@@ -82,31 +74,29 @@ export default function Home() {
   const [history, setHistory]               = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // ── Load Google Translate widget script once on mount ──
-  useEffect(() => {
-    if (document.getElementById("google-translate-script")) {
-      if (window.google?.translate) {
-        new window.google.translate.TranslateElement(
-          { pageLanguage: "en", autoDisplay: false },
-          "google_translate_element"
-        )
-      }
-      return
-    }
+  const [showLangMenu, setShowLangMenu] = useState(false)
 
-    window.googleTranslateElementInit = function () {
-      new window.google.translate.TranslateElement(
-        { pageLanguage: "en", autoDisplay: false },
-        "google_translate_element"
-      )
-    }
+  const LANGUAGES = [
+    { code: "en", label: "English" },
+    { code: "hi", label: "हिंदी" },
+    { code: "bn", label: "বাংলা" },
+    { code: "te", label: "తెలుగు" },
+    { code: "mr", label: "मराठी" },
+    { code: "ta", label: "தமிழ்" },
+    { code: "gu", label: "ગુજરાતી" },
+    { code: "kn", label: "ಕನ್ನಡ" },
+    { code: "pa", label: "ਪੰਜਾਬੀ" },
+    { code: "ur", label: "اردو" },
+  ]
 
-    const script = document.createElement("script")
-    script.id    = "google-translate-script"
-    script.src   = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
-    script.async = true
-    document.head.appendChild(script)
-  }, [])
+  const handleTranslate = (langCode: string) => {
+    setShowLangMenu(false)
+    const currentUrl = encodeURIComponent(window.location.href)
+    window.open(
+      `https://translate.google.com/translate?sl=auto&tl=${langCode}&u=${currentUrl}`,
+      "_self"
+    )
+  }
 
   useEffect(() => {
     getCurrentUser().then(u => {
@@ -192,10 +182,29 @@ export default function Home() {
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            {/* Google Translate widget container */}
-            <div className="flex items-center border border-gray-200 rounded-lg px-2 py-1 bg-white hover:border-green-300 transition">
-              <Globe size={14} className="text-green-600 mr-1 shrink-0" />
-              <div id="google_translate_element" className="text-xs" style={{ minWidth: 80 }} />
+            {/* Language selector */}
+            <div className="relative">
+              <button
+                onClick={() => setShowLangMenu(v => !v)}
+                className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:text-green-700 hover:border-green-300 transition"
+                title="Translate page"
+              >
+                <Globe size={14} className="text-green-600" />
+                <span className="hidden sm:inline">Translate</span>
+              </button>
+              {showLangMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 min-w-36 overflow-hidden">
+                  {LANGUAGES.map(lang => (
+                    <button
+                      key={lang.code}
+                      onClick={() => handleTranslate(lang.code)}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition"
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {user && (

@@ -367,14 +367,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         {
           id:                   userId,
           email:                email || "",
+          // Basic info
           name:                 profile.name || "",
           age:                  profile.age ? parseInt(profile.age) : null,
           gender:               profile.gender || null,
-          blood_group:          profile.blood_group || null,
-          weight_kg:            profile.weight_kg ? parseFloat(profile.weight_kg) : null,
           height_cm:            profile.height_cm ? parseFloat(profile.height_cm) : null,
+          weight_kg:            profile.weight_kg ? parseFloat(profile.weight_kg) : null,
+          blood_group:          profile.blood_group || null,
+          // Medical conditions (pill selectors from ProfilePage)
+          diabetes:             profile.diabetes || null,
+          blood_pressure:       profile.blood_pressure || null,
+          obesity:              profile.obesity || null,
+          cholesterol:          profile.cholesterol || null,
+          thyroid:              profile.thyroid || null,
+          asthma:               profile.asthma || null,
+          allergy:              profile.allergy || null,
+          gastritis:            profile.gastritis || null,
+          constipation:         profile.constipation || null,
+          pcod:                 profile.pcod || null,
+          arthritis:            profile.arthritis || null,
+          kidney:               profile.kidney || null,
+          heart_disease:        profile.heart_disease || null,
+          migraine:             profile.migraine || null,
+          skin_condition:       profile.skin_condition || null,
+          depression_anxiety:   profile.depression_anxiety || null,
+          hair_fall:            profile.hair_fall || null,
+          // Free text
+          injury_history:       profile.injury_history || null,
+          other_conditions:     profile.other_conditions || null,
+          // Legacy fields
           chronic_conditions:   profile.chronic_conditions || null,
-          allergies:            profile.allergies || null,
           current_medications:  profile.current_medications || null,
           dietary_preference:   profile.dietary_preference || null,
           updated_at:           new Date().toISOString(),
@@ -402,7 +424,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { data, error } = await supabase
         .from("patients")
         .select(
-          "name, age, gender, blood_group, weight_kg, height_cm, chronic_conditions, allergies, current_medications, dietary_preference, updated_at"
+          "name, age, gender, height_cm, weight_kg, blood_group, " +
+          "diabetes, blood_pressure, obesity, cholesterol, thyroid, asthma, allergy, " +
+          "gastritis, constipation, pcod, arthritis, kidney, heart_disease, migraine, " +
+          "skin_condition, depression_anxiety, hair_fall, " +
+          "injury_history, other_conditions, " +
+          "chronic_conditions, current_medications, dietary_preference, updated_at"
         )
         .eq("id", userId)
         .single();

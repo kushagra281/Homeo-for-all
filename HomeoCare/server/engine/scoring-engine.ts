@@ -160,11 +160,27 @@ export function calculateConfidence(
 ): number {
   if (totalRubricsInCase === 0) return 0;
 
-  const rubricCoverage = entry.rubric_count / totalRubricsInCase; // 0-1
-  const avgGrade       = entry.grade_sum / Math.max(entry.rubric_count, 1); // 1-4
-  const gradeBonus     = (avgGrade - 1) / 3; // 0-1
+  // Coverage: how many case rubrics does this remedy cover
+  const rubricCoverage = entry.rubric_count / totalRubricsInCase;
 
-  const confidence = (rubricCoverage * 0.7 + gradeBonus * 0.3) * 100;
+  // Grade quality: average Kent grade (1-4), normalised to 0-1
+  const avgGrade   = entry.grade_sum / Math.max(entry.rubric_count, 1);
+  const gradeScore = (avgGrade - 1) / 3;
+
+  // Mental bonus: mental rubrics (weight=3) carry extra confidence
+  const mentalRubrics = entry.covered_rubrics.filter(r => r.weight === 3).length;
+  const mentalBonus   = Math.min(0.2, mentalRubrics * 0.07);
+
+  // Grade 3+ bonus: high-grade matches are more reliable
+  const highGradeCount = entry.covered_rubrics.filter(r => r.grade >= 3).length;
+  const highGradeBonus = Math.min(0.15, highGradeCount * 0.05);
+
+  const confidence =
+    (rubricCoverage * 0.55 +
+     gradeScore     * 0.25 +
+     mentalBonus         +
+     highGradeBonus) * 100;
+
   return Math.min(100, Math.round(confidence));
 }
 

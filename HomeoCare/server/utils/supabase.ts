@@ -86,14 +86,31 @@ export async function searchScraperRubrics(
 ): Promise<ScraperRubric[]> {
   if (!terms.length) return [];
 
-  const cacheKey = `sr:${terms.join("|")}:${section || ""}`;
+  // Split symptom phrases into individual keywords
+  // Rubric_text contains short phrases like "Anxiety", "Restlessness", "Night"
+  // so we must search individual words, not the full symptom string
+  const STOP = new Set(["worse","better","after","before","from","with","and","the","for","more","less","very","also","when","that","this","have","been","into","over","some"]);
+  const keywords = [...new Set(
+    terms.flatMap((t) =>
+      t.split(/[\s,;]+/)
+        .map((w) => w.toLowerCase().replace(/[^a-z]/g, ""))
+        .filter((w) => w.length > 3 && !STOP.has(w))
+    )
+  )].slice(0, 12);
+
+  // Combine keywords + original terms for broader coverage
+  const searchTerms = [...new Set([...keywords, ...terms.map(t => t.toLowerCase()).slice(0, 3)])];
+
+  const cacheKey = `sr:${searchTerms.join("|")}:${section || ""}`;
   const cached = fromCache<ScraperRubric[]>(cacheKey);
   if (cached) return cached;
 
   const db = scraperDB();
   const allRows: ScraperRubric[] = [];
 
-  for (const term of terms.slice(0, 6)) {
+  console.log(`[DB] Scraper rubric keywords:`, keywords.slice(0, 8).join(", "));
+
+  for (const term of searchTerms.slice(0, 10)) {
     let q = db
       .from("rubrics")
       .select("id, parent_id, section, rubric_text, full_path, depth, symptom_type, is_eliminating")

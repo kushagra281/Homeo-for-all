@@ -1,265 +1,241 @@
 // server/services/searchService.ts
-// SEARCH SERVICE — Orchestrates the full pipeline:
-// Input symptoms → Rubric mapping → DB fetch → Score → Format output
-// No HTTP logic here. No AI remedy suggestions.
+// SEARCH SERVICE — Full pipeline using scraper DB (17,755 rubrics)
+// Flow: symptoms → rubric text search → score by grade×weight → format results
 
 import { mapSymptoms } from "./rubricService";
+import { scoreRemedies, buildSafetyFlags, gradeToDosage } from "./scoringService";
+import type { RemedyScore, SafetyFlag, Contradiction } from "./scoringService";
 import {
-  scoreRemedies,
-  buildSafetyFlags,
-  gradeToDosage,
-  type RemedyScore,
-  type SafetyFlag,
-  type Contradiction,
-} from "./scoringService";
-import {
-  fetchRubricRemedyRows,
+  searchScraperRubrics,
+  getRemediesForRubricIds,
+  searchScraperRemedySymptoms,
   fetchLegacySymptoms,
-  fetchLegacyRemedySymptoms,
+  type ScraperRubric,
+  type ScraperRemedyRow,
 } from "../utils/supabase";
 
-// ── Input / Output types ─────────────────────────────────────────
-export interface SearchInput {
-  symptoms:      string[];
-  filters:       SearchFilters;
-  healthProfile?: HealthProfile;
-}
-
+// ── Types ─────────────────────────────────────────────────────────
 export interface SearchFilters {
-  age_group?:       string;
-  gender?:          string;
-  condition_type?:  string;
+  age_group?:        string;
+  gender?:           string;
+  condition_type?:   string;
   symptom_location?: string;
-  category?:        string;
-  potency?:         string;
+  category?:         string;
+  potency?:          string;
 }
 
 export interface HealthProfile {
-  name?:               string;
-  age?:                number;
-  gender?:             string;
-  blood_group?:        string;
-  weight_kg?:          number;
-  height_cm?:          number;
-  diabetes?:           string;
-  blood_pressure?:     string;
-  obesity?:            string;
-  thyroid?:            string;
-  arthritis?:          string;
-  heart_disease?:      string;
-  kidney?:             string;
-  depression_anxiety?: string;
-  chronic_conditions?: string;
-  current_medications?:string;
-  injury_history?:     string;
-  other_conditions?:   string;
+  name?: string; age?: number; gender?: string;
+  blood_group?: string; weight_kg?: number; height_cm?: number;
+  diabetes?: string; blood_pressure?: string; obesity?: string;
+  thyroid?: string; arthritis?: string; heart_disease?: string;
+  kidney?: string; depression_anxiety?: string;
+  chronic_conditions?: string; current_medications?: string;
+  injury_history?: string; other_conditions?: string;
 }
 
 export interface RemedyResult {
-  name:            string;
-  score:           number;       // 0–100
-  confidence:      number;       // 0–100
-  dosage:          string;
-  category:        string;
-  explanation:     string[];     // ["Fear of darkness (grade 3, mental, +9)"]
-  why_explanation: string;       // single prose sentence
+  name:              string;
+  score:             number;
+  confidence:        number;
+  dosage:            string;
+  category:          string;
+  explanation:       string[];
+  why_explanation:   string;
   matching_symptoms: string[];
-  covered_rubrics: Array<{
-    rubric_code:  string;
-    label:        string;
-    grade:        number;
-    weight:       number;
-    contribution: number;
-  }>;
-  safety_flags:    SafetyFlag[];
-  ai_insight?:     string;
+  covered_rubrics:   any[];
+  safety_flags:      SafetyFlag[];
+  ai_insight?:       string;
 }
 
 export interface SearchResult {
-  remedies:       RemedyResult[];   // top 3
-  alternatives:   RemedyResult[];   // #4–#5
+  remedies:       RemedyResult[];
+  alternatives:   RemedyResult[];
   contradictions: Contradiction[];
   rubrics_used:   string[];
-  engine:         "rubric" | "legacy";
+  rubric_count:   number;
+  engine:         "scraper" | "remedy_symptoms" | "legacy";
 }
 
-// ── Clean symptom input ───────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────
 function cleanSymptoms(symptoms: string[]): string[] {
-  return symptoms
-    .map((s) => s.toLowerCase().trim())
-    .filter(
-      (s) =>
-        s.length > 2 &&
-        !s.startsWith("category:") &&
-        !s.startsWith("age:") &&
-        !s.startsWith("gender:") &&
-        !s.startsWith("disease duration:")
-    );
+  return symptoms.map((s) => s.toLowerCase().trim()).filter(
+    (s) => s.length > 2 &&
+      !s.startsWith("category:") && !s.startsWith("age:") &&
+      !s.startsWith("gender:") && !s.startsWith("disease duration:")
+  );
 }
 
 function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Format a RemedyScore into a RemedyResult ──────────────────────
-function formatRemedy(
-  entry: RemedyScore,
-  profile?: HealthProfile
-): RemedyResult {
+function formatResult(entry: RemedyScore, profile?: HealthProfile): RemedyResult {
   const avgGrade = entry.grade_sum / Math.max(entry.rubric_count, 1);
-  const categories = [...new Set(
-    entry.covered_rubrics.map((r) => r.rubric_code.split(".")[0])
-  )].join(", ");
-
+  const sections = [...new Set(entry.covered_rubrics.map((r: any) => r.section || r.rubric_code?.split(".")[0] || "General"))].join(", ");
   const topRubrics = entry.covered_rubrics
-    .sort((a, b) => b.contribution - a.contribution)
-    .slice(0, 3)
-    .map((r) => `"${r.label}"`)
+    .sort((a: any, b: any) => b.contribution - a.contribution)
+    .slice(0, 3).map((r: any) => `"${r.label || r.rubric_text}"`)
     .join(", ");
 
-  const whyExplanation = entry.rubric_count > 0
-    ? `${toTitleCase(entry.remedy_name)} covers ${entry.rubric_count} rubric(s) — ${topRubrics} — with average Kent grade ${avgGrade.toFixed(1)}.`
-    : `${toTitleCase(entry.remedy_name)} matched via symptom database.`;
-
   return {
-    name:              toTitleCase(entry.remedy_name),
-    score:             entry.score,
-    confidence:        entry.confidence,
-    dosage:            gradeToDosage(avgGrade),
-    category:          categories || "General",
-    explanation:       entry.explanation,
-    why_explanation:   whyExplanation,
-    matching_symptoms: entry.covered_rubrics.map((r) => r.label).slice(0, 5),
+    name:            toTitleCase(entry.remedy_name),
+    score:           entry.score,
+    confidence:      entry.confidence,
+    dosage:          gradeToDosage(avgGrade),
+    category:        sections || "General",
+    explanation:     entry.explanation,
+    why_explanation: entry.rubric_count > 0
+      ? `${toTitleCase(entry.remedy_name)} covers ${entry.rubric_count} rubric(s) — ${topRubrics} — avg grade ${avgGrade.toFixed(1)}.`
+      : `${toTitleCase(entry.remedy_name)} matched via symptom database.`,
+    matching_symptoms: entry.covered_rubrics.map((r: any) => r.label || r.rubric_text || "").slice(0, 5),
     covered_rubrics:   entry.covered_rubrics,
     safety_flags:      buildSafetyFlags(entry.remedy_name, profile),
   };
 }
 
+// ── Convert scraper rubric rows to scoring engine format ──────────
+function toScoringRows(rows: ScraperRemedyRow[]) {
+  return rows.map((r) => ({
+    rubric_code:  String(r.rubric_id),
+    rubric_label: r.rubric_text,
+    body_system:  r.section,
+    symptom_type: r.symptom_type || "particular",
+    weight:       r.symptom_type === "mental" ? 3 : r.symptom_type === "general" ? 2 : 1,
+    is_negative:  false,
+    remedy_name:  r.remedy_name,
+    grade:        r.grade,
+  }));
+}
+
+function toRubricMatches(rubrics: ScraperRubric[], originalSymptoms: string[]) {
+  const text = originalSymptoms.join(" ").toLowerCase();
+  return rubrics.map((r) => ({
+    rubric_code:      String(r.id),
+    label:            r.rubric_text,
+    confidence:       0.8,
+    original_symptom: originalSymptoms.find((s) =>
+      r.rubric_text.toLowerCase().split(" ").some((w) => w.length > 3 && s.includes(w))
+    ) || r.rubric_text,
+    is_eliminating: r.is_eliminating || false,
+  }));
+}
+
 // ── MAIN PIPELINE ─────────────────────────────────────────────────
-export async function search(input: SearchInput): Promise<SearchResult> {
+export async function search(input: {
+  symptoms: string[];
+  filters: SearchFilters;
+  healthProfile?: HealthProfile;
+}): Promise<SearchResult> {
   const { symptoms, filters, healthProfile } = input;
   const clean = cleanSymptoms(symptoms);
 
-  if (!clean.length) {
-    return { remedies: [], alternatives: [], contradictions: [], rubrics_used: [], engine: "rubric" };
-  }
+  if (!clean.length) return { remedies: [], alternatives: [], contradictions: [], rubrics_used: [], rubric_count: 0, engine: "scraper" };
 
-  const bodySystem = filters.symptom_location || filters.category || undefined;
+  const section = filters.symptom_location || filters.category || undefined;
+  console.log(`[Search] ${clean.length} symptoms, section=${section || "any"}`);
 
-  console.log(`[Search] ${clean.length} symptoms, system=${bodySystem || "any"}`);
+  // ── STEP 1: AI + keyword mapping for extra search terms ───────
+  const [aiRubricMatches, scraperRubrics] = await Promise.all([
+    mapSymptoms(clean, section),
+    searchScraperRubrics(clean, section),
+  ]);
 
-  // ── Step 1: Map symptoms → rubric codes ──────────────────────
-  const rubricMatches = await mapSymptoms(clean, bodySystem);
-  const rubricCodes = rubricMatches.map((m) => m.rubric_code);
+  console.log(`[Search] AI/keyword: ${aiRubricMatches.length} matches, Scraper rubrics: ${scraperRubrics.length}`);
 
-  console.log(`[Search] ${rubricMatches.length} rubric matches:`,
-    rubricMatches.map((m) => m.rubric_code).join(", "));
+  // ── STEP 2: Score using scraper rubrics (17k rubrics) ─────────
+  if (scraperRubrics.length > 0) {
+    const rubricIds = scraperRubrics.map((r) => r.id);
+    const remedyRows = await getRemediesForRubricIds(rubricIds);
+    console.log(`[Search] ${remedyRows.length} remedy rows from scraper DB`);
 
-  // ── Step 2: Fetch rubric-remedy data (JOIN query) ────────────
-  if (rubricCodes.length > 0) {
-    const rows = await fetchRubricRemedyRows(rubricCodes);
-
-    if (rows.length > 0) {
-      // ── Step 3: Score remedies ────────────────────────────────
-      const { remedies, contradictions } = scoreRemedies(rubricMatches, rows);
+    if (remedyRows.length > 0) {
+      const rubricMatches = toRubricMatches(scraperRubrics, clean);
+      const scoringRows = toScoringRows(remedyRows);
+      const { remedies, contradictions } = scoreRemedies(rubricMatches, scoringRows);
 
       if (remedies.length >= 2) {
-        console.log(`[Search] Rubric engine: ${remedies.length} results, top=${remedies[0]?.remedy_name}`);
+        const top3  = remedies.slice(0, 3).map((r) => formatResult(r, healthProfile));
+        const alts  = remedies.slice(3, 5).map((r) => formatResult(r, healthProfile));
+        const rubricLabels = scraperRubrics.slice(0, 10).map((r) => r.rubric_text);
 
-        const top3    = remedies.slice(0, 3).map((r) => formatRemedy(r, healthProfile));
-        const alts    = remedies.slice(3, 5).map((r) => formatRemedy(r, healthProfile));
-
-        return {
-          remedies:       top3,
-          alternatives:   alts,
-          contradictions,
-          rubrics_used:   rubricCodes,
-          engine:         "rubric",
-        };
+        console.log(`[Search] Scraper engine: ${remedies.length} results, top=${remedies[0]?.remedy_name}`);
+        return { remedies: top3, alternatives: alts, contradictions, rubrics_used: rubricLabels, rubric_count: scraperRubrics.length, engine: "scraper" };
       }
     }
   }
 
-  // ── Step 4: Legacy fallback ───────────────────────────────────
-  console.log(`[Search] Falling back to legacy symptom tables`);
-  const legacyResults = await legacySearch(clean, bodySystem, healthProfile);
+  // ── STEP 3: Fallback — remedy_symptoms table (17,678 rows) ────
+  console.log(`[Search] Falling back to remedy_symptoms table`);
+  const remSymRows = await searchScraperRemedySymptoms(clean, section);
 
-  return {
-    ...legacyResults,
-    rubrics_used:   rubricCodes,
-    contradictions: [],
-    engine:         "legacy",
-  };
-}
+  if (remSymRows.length > 0) {
+    const scoreMap = new Map<string, { total: number; count: number; matched: string[]; sections: Set<string> }>();
+    for (const row of remSymRows) {
+      const name = row.remedy_name;
+      if (!name) continue;
+      const hits = clean.filter((t) => row.symptom?.toLowerCase().includes(t) || row.heading?.toLowerCase().includes(t)).length;
+      if (!hits) continue;
+      if (!scoreMap.has(name)) scoreMap.set(name, { total: 0, count: 0, matched: [], sections: new Set() });
+      const e = scoreMap.get(name)!;
+      e.total += hits * 2;
+      e.count += 1;
+      e.matched.push(row.symptom);
+      e.sections.add(row.heading || "");
+    }
 
-// ── Legacy scoring (uses symptoms + remedy_symptoms tables) ───────
-async function legacySearch(
-  terms: string[],
-  category: string | undefined,
-  profile?: HealthProfile
-): Promise<Pick<SearchResult, "remedies" | "alternatives">> {
-  const [symRows, remSymRows] = await Promise.all([
-    fetchLegacySymptoms(terms, category),
-    fetchLegacyRemedySymptoms(terms, category),
-  ]);
+    if (scoreMap.size > 0) {
+      const sorted = Array.from(scoreMap.entries()).sort((a, b) => b[1].total - a[1].total);
+      const maxScore = sorted[0][1].total;
+      const all: RemedyResult[] = sorted.slice(0, 8).map(([name, e]) => {
+        const pct = Math.round((e.total / maxScore) * 100);
+        const uniq = [...new Set(e.matched)].slice(0, 5);
+        return {
+          name: toTitleCase(name), score: pct,
+          confidence: Math.min(100, e.count * 8),
+          dosage: gradeToDosage(2),
+          category: [...e.sections].filter(Boolean).join(", ") || section || "General",
+          explanation: uniq,
+          why_explanation: `${toTitleCase(name)} matched ${e.count} symptom(s) in materia medica. Score: ${pct}/100.`,
+          matching_symptoms: uniq, covered_rubrics: [],
+          safety_flags: buildSafetyFlags(name, healthProfile),
+        };
+      });
+      console.log(`[Search] remedy_symptoms: ${all.length} results`);
+      return { remedies: all.slice(0, 3), alternatives: all.slice(3, 5), contradictions: [], rubrics_used: [], rubric_count: 0, engine: "remedy_symptoms" };
+    }
+  }
 
-  const scoreMap = new Map<string, {
-    total: number; count: number;
-    matched: string[]; cats: Set<string>;
-  }>();
-
-  for (const row of symRows) {
-    const name = row.remedy;
-    if (!name) continue;
-    const hits = terms.filter((t) => row.symptom?.toLowerCase().includes(t)).length;
+  // ── STEP 4: Last resort — legacy symptoms table ───────────────
+  console.log(`[Search] Last resort: legacy symptoms table`);
+  const legRows = await fetchLegacySymptoms(clean, section);
+  const scoreMap = new Map<string, { total: number; count: number; matched: string[] }>();
+  for (const row of legRows) {
+    const hits = clean.filter((t) => row.symptom?.toLowerCase().includes(t)).length;
     if (!hits) continue;
-    if (!scoreMap.has(name)) scoreMap.set(name, { total: 0, count: 0, matched: [], cats: new Set() });
-    const e = scoreMap.get(name)!;
+    if (!scoreMap.has(row.remedy)) scoreMap.set(row.remedy, { total: 0, count: 0, matched: [] });
+    const e = scoreMap.get(row.remedy)!;
     e.total += hits * (row.intensity || 1);
     e.count += 1;
     e.matched.push(row.symptom);
-    e.cats.add(row.category || "");
   }
-
-  for (const row of remSymRows) {
-    const name = row.remedy_name;
-    if (!name) continue;
-    const hits = terms.filter(
-      (t) => row.symptom?.toLowerCase().includes(t) || row.heading?.toLowerCase().includes(t)
-    ).length;
-    if (!hits) continue;
-    if (!scoreMap.has(name)) scoreMap.set(name, { total: 0, count: 0, matched: [], cats: new Set() });
-    const e = scoreMap.get(name)!;
-    e.total += hits * 3; // remedy_symptoms treated as grade 3
-    e.count += 1;
-    e.matched.push(row.symptom);
-    e.cats.add(row.heading || "");
-  }
-
-  if (!scoreMap.size) return { remedies: [], alternatives: [] };
 
   const sorted = Array.from(scoreMap.entries()).sort((a, b) => b[1].total - a[1].total);
-  const maxScore = sorted[0][1].total;
-
+  const maxScore = sorted[0]?.[1]?.total || 1;
   const all: RemedyResult[] = sorted.slice(0, 8).map(([name, e]) => {
     const pct = Math.round((e.total / maxScore) * 100);
-    const avgGrade = e.total / Math.max(e.count, 1);
-    const cats = [...e.cats].filter(Boolean).join(", ");
-    const uniqMatched = [...new Set(e.matched)].slice(0, 5);
-
+    const uniq = [...new Set(e.matched)].slice(0, 5);
     return {
-      name:            toTitleCase(name),
-      score:           pct,
-      confidence:      Math.min(100, e.count * 10),
-      dosage:          gradeToDosage(avgGrade),
-      category:        cats || category || "General",
-      explanation:     uniqMatched.map((s) => s),
-      why_explanation: `${toTitleCase(name)} matched ${e.count} symptom(s) in database. Score: ${pct}/100.`,
-      matching_symptoms: uniqMatched,
-      covered_rubrics: [],
-      safety_flags:    buildSafetyFlags(name, profile),
+      name: toTitleCase(name), score: pct,
+      confidence: Math.min(100, e.count * 10),
+      dosage: gradeToDosage(1.5),
+      category: section || "General",
+      explanation: uniq,
+      why_explanation: `${toTitleCase(name)} matched ${e.count} symptom(s). Score: ${pct}/100.`,
+      matching_symptoms: uniq, covered_rubrics: [],
+      safety_flags: buildSafetyFlags(name, healthProfile),
     };
   });
 
-  return { remedies: all.slice(0, 3), alternatives: all.slice(3, 5) };
+  return { remedies: all.slice(0, 3), alternatives: all.slice(3, 5), contradictions: [], rubrics_used: [], rubric_count: 0, engine: "legacy" };
 }

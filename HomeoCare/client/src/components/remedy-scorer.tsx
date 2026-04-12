@@ -110,12 +110,12 @@ function SafetyFlags({ flags }: { flags: Array<{ level: string; message: string 
 // ── Confidence badge ──────────────────────────────────────────────
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   const color =
-    confidence >= 70 ? "bg-green-100 text-green-700 border-green-300" :
-    confidence >= 40 ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
+    confidence >= 60 ? "bg-green-100 text-green-700 border-green-300" :
+    confidence >= 35 ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
                        "bg-gray-100 text-gray-500 border-gray-300";
   const label =
-    confidence >= 70 ? "High confidence" :
-    confidence >= 40 ? "Moderate confidence" : "Low confidence";
+    confidence >= 60 ? "High confidence" :
+    confidence >= 35 ? "Moderate confidence" : "Low confidence";
 
   return (
     <span className={`text-xs border rounded-full px-2 py-0.5 font-medium ${color}`}>

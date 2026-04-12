@@ -190,29 +190,28 @@ function calculateConfidence(
   entry: RemedyScore,
   totalRubrics: number
 ): number {
-  if (entry.rubric_count === 0) return 0;
+  if (totalRubrics === 0) return 0;
 
-  const avgGrade   = entry.grade_sum / entry.rubric_count;
-  const gradeScore = (avgGrade - 1) / 3; // 0–1
+  const rubricCoverage = entry.rubric_count / totalRubrics;
+  const avgGrade       = entry.grade_sum / Math.max(entry.rubric_count, 1);
+  const gradeScore     = (avgGrade - 1) / 3; // normalised 0–1
 
-  // Mental rubric bonus (weight=3 means Mind symptom)
-  const mentalCount    = entry.covered_rubrics.filter((r) => r.weight === 3).length;
-  const mentalBonus    = Math.min(0.25, mentalCount * 0.1);
+  // Mental rubric bonus
+  const mentalCount = entry.covered_rubrics.filter((r) => r.weight === 3).length;
+  const mentalBonus = Math.min(0.2, mentalCount * 0.07);
 
-  // High grade (3-4) bonus
+  // High grade bonus
   const highGradeCount = entry.covered_rubrics.filter((r) => r.grade >= 3).length;
-  const highGradeBonus = Math.min(0.2, highGradeCount * 0.07);
+  const highGradeBonus = Math.min(0.15, highGradeCount * 0.05);
 
-  // Rubric depth bonus — deeper rubrics = more specific = higher confidence
-  const deepCount  = entry.covered_rubrics.filter((r: any) => (r.depth || 1) >= 2).length;
-  const depthBonus = Math.min(0.15, deepCount * 0.05);
+  // Grade quality score (main driver)
+  const gradeBase = gradeScore * 0.4 + mentalBonus + highGradeBonus;
 
-  const confidence =
-    gradeScore     * 0.4  +
-    mentalBonus          +
-    highGradeBonus       +
-    depthBonus;
+  // Coverage bonus: rewards covering more of patient's rubrics
+  // Small so a single grade-3 mental match still scores well
+  const coverageBonus = Math.min(0.3, entry.rubric_count * 0.04);
 
+  const confidence = gradeBase + coverageBonus;
   return Math.min(100, Math.round(confidence * 100));
 }
 

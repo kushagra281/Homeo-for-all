@@ -86,29 +86,69 @@ export async function searchScraperRubrics(
 ): Promise<ScraperRubric[]> {
   if (!terms.length) return [];
 
-  // Split symptom phrases into individual keywords
-  // Rubric_text contains short phrases like "Anxiety", "Restlessness", "Night"
-  // so we must search individual words, not the full symptom string
-  const STOP = new Set(["worse","better","after","before","from","with","and","the","for","more","less","very","also","when","that","this","have","been","into","over","some"]);
-  const keywords = [...new Set(
+  // Synonym map for common homeopathy terms
+  const SYNONYMS: Record<string, string[]> = {
+    "fever": ["febrile","temperature","pyrexia","heat"],
+    "cough": ["coughing","tussis","expectoration"],
+    "headache": ["cephalgia","head pain","migraine","hemicrania"],
+    "anxiety": ["anxious","worry","apprehension","nervousness"],
+    "fear": ["fright","phobia","terror","dread"],
+    "restless": ["restlessness","agitation","fidgety","tossing"],
+    "burning": ["burns","smarting","scalding","heat sensation"],
+    "itching": ["itches","pruritus","scratching"],
+    "nausea": ["nauseous","queasiness","sick feeling"],
+    "diarrhea": ["diarrhoea","loose stool","dysentery"],
+    "constipation": ["constipated","difficult stool","no stool"],
+    "vomiting": ["vomit","retching","throwing up"],
+    "weakness": ["debility","prostration","exhaustion","fatigue"],
+    "pain": ["painful","aching","sore","hurts"],
+    "swelling": ["swollen","oedema","puffiness","bloated"],
+    "thirst": ["thirsty","desire for water","craving water"],
+    "cold": ["chilly","coldness","chilliness"],
+    "heat": ["warmth","hot","flushed","burning hot"],
+    "night": ["nocturnal","midnight","evening"],
+    "morning": ["on waking","early morning","rising"],
+    "skin": ["cutaneous","dermal","eruption"],
+    "rash": ["eruption","hives","urticaria","exanthem"],
+    "throat": ["pharynx","larynx","tonsil"],
+    "stomach": ["gastric","epigastric","abdomen"],
+    "back": ["lumbar","spine","dorsal","sacral"],
+    "joint": ["joints","articular","arthralgia"],
+    "chest": ["thorax","pectoral","breast","lung"],
+    "mind": ["mental","emotional","psychological","mood"],
+  };
+
+  const STOP = new Set(["worse","better","after","before","from","with","and","the","for","more","less","very","also","when","that","this","have","been","into","over","some","during","while"]);
+
+  // Extract keywords + expand with synonyms
+  const baseKeywords = [...new Set(
     terms.flatMap((t) =>
       t.split(/[\s,;]+/)
         .map((w) => w.toLowerCase().replace(/[^a-z]/g, ""))
         .filter((w) => w.length > 3 && !STOP.has(w))
     )
-  )].slice(0, 12);
+  )];
 
-  // Combine keywords + original terms for broader coverage
-  const searchTerms = [...new Set([...keywords, ...terms.map(t => t.toLowerCase()).slice(0, 3)])];
+  // Add synonyms for each keyword
+  const expandedKeywords = [...new Set([
+    ...baseKeywords,
+    ...baseKeywords.flatMap((k) => SYNONYMS[k] || []),
+  ])].slice(0, 15);
 
-  const cacheKey = `sr:${searchTerms.join("|")}:${section || ""}`;
+  // Combine with original full terms for broader coverage
+  const searchTerms = [...new Set([
+    ...expandedKeywords,
+    ...terms.map(t => t.toLowerCase().trim()).slice(0, 4),
+  ])];
+
+  const cacheKey = `sr:${searchTerms.slice(0,8).join("|")}:${section || ""}`;
   const cached = fromCache<ScraperRubric[]>(cacheKey);
   if (cached) return cached;
 
   const db = scraperDB();
   const allRows: ScraperRubric[] = [];
 
-  console.log(`[DB] Scraper rubric keywords:`, keywords.slice(0, 8).join(", "));
+  console.log(`[DB] Scraper rubric keywords:`, expandedKeywords.slice(0, 8).join(", "));
 
   for (const term of searchTerms.slice(0, 10)) {
     let q = db
@@ -223,16 +263,35 @@ export async function searchScraperRemedySymptoms(
 ): Promise<Array<{ remedy_name: string; heading: string; symptom: string }>> {
   const db = scraperDB();
   const all: any[] = [];
-  for (const term of terms.slice(0, 5)) {
+
+  // Search with section filter first
+  for (const term of terms.slice(0, 6)) {
     let q = db.from("remedy_symptoms")
       .select("remedy_name, heading, symptom")
       .ilike("symptom", `%${term}%`)
+      .not("remedy_name", "is", null)
       .limit(200);
     if (section) q = q.ilike("heading", `%${section}%`);
     const { data, error } = await q;
     if (error) console.error("[DB] searchScraperRemedySymptoms:", error.message);
-    if (data) all.push(...data);
+    if (data) all.push(...data.filter((r: any) => r.remedy_name));
   }
+
+  // If section filter returned nothing, try WITHOUT section filter
+  if (all.length === 0 && section) {
+    console.log("[DB] No remedy_symptoms with section filter — retrying without section");
+    for (const term of terms.slice(0, 6)) {
+      const { data, error } = await db.from("remedy_symptoms")
+        .select("remedy_name, heading, symptom")
+        .ilike("symptom", `%${term}%`)
+        .not("remedy_name", "is", null)
+        .limit(200);
+      if (error) console.error("[DB] searchScraperRemedySymptoms (no section):", error.message);
+      if (data) all.push(...data.filter((r: any) => r.remedy_name));
+    }
+  }
+
+  console.log(`[DB] remedy_symptoms found ${all.length} rows`);
   return all;
 }
 
@@ -248,11 +307,41 @@ export async function fetchProfile(userId: string): Promise<any | null> {
 }
 
 export async function upsertProfileRow(userId: string, email: string, profile: Record<string, any>): Promise<void> {
-  const { error } = await mainDB().from("patients").upsert(
-    { id: userId, email, ...profile, updated_at: new Date().toISOString() },
-    { onConflict: "id" }
-  );
-  if (error) throw new Error(error.message);
+  // Build safe profile object — only include columns that are not undefined/null empty
+  const safeProfile: Record<string, any> = { id: userId, email, updated_at: new Date().toISOString() };
+
+  const ALLOWED_COLUMNS = [
+    "name","age","gender","height_cm","weight_kg","blood_group",
+    "diabetes","blood_pressure","obesity","cholesterol","thyroid","asthma",
+    "allergy","gastritis","constipation","pcod","arthritis","kidney",
+    "heart_disease","migraine","skin_condition","depression_anxiety","hair_fall",
+    "injury_history","other_conditions","chronic_conditions","current_medications",
+    "dietary_preference","health_notes",
+  ];
+
+  for (const col of ALLOWED_COLUMNS) {
+    if (profile[col] !== undefined && profile[col] !== null) {
+      safeProfile[col] = profile[col];
+    }
+  }
+
+  console.log("[DB] Upserting profile for userId:", userId, "columns:", Object.keys(safeProfile).length);
+
+  const { error } = await mainDB().from("patients").upsert(safeProfile, { onConflict: "id" });
+  if (error) {
+    // If error is about missing column, retry without that column
+    if (error.message.includes("column") && error.message.includes("does not exist")) {
+      const col = error.message.match(/"([^"]+)"/)?.[1];
+      if (col) {
+        console.warn(`[DB] Column ${col} missing — retrying without it`);
+        delete safeProfile[col];
+        const { error: error2 } = await mainDB().from("patients").upsert(safeProfile, { onConflict: "id" });
+        if (error2) throw new Error(error2.message);
+        return;
+      }
+    }
+    throw new Error(error.message);
+  }
 }
 
 export async function insertSearchHistory(patientId: string, symptoms: string[], rubricsUsed: string[], results: any[], confidence: number): Promise<void> {

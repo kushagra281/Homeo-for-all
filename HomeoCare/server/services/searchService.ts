@@ -88,7 +88,7 @@ function formatResult(entry: RemedyScore, profile?: HealthProfile): RemedyResult
     why_explanation: entry.rubric_count > 0
       ? `${toTitleCase(entry.remedy_name)} covers ${entry.rubric_count} rubric(s) — ${topRubrics} — avg grade ${avgGrade.toFixed(1)}.`
       : `${toTitleCase(entry.remedy_name)} matched via symptom database.`,
-    matching_symptoms: entry.covered_rubrics.map((r: any) => r.label || r.rubric_text || "").slice(0, 5),
+    matching_symptoms: [...new Set(entry.covered_rubrics.map((r: any) => r.label || r.rubric_text || "").filter(Boolean))].slice(0, 5),
     covered_rubrics:   entry.covered_rubrics,
     safety_flags:      buildSafetyFlags(entry.remedy_name, profile),
   };
@@ -134,6 +134,8 @@ export async function search(input: {
 
   const section = filters.symptom_location || filters.category || undefined;
   console.log(`[Search] ${clean.length} symptoms, section=${section || "any"}`);
+
+  console.log(`[Search] Input symptoms:`, clean);
 
   // ── STEP 1: AI + keyword mapping for extra search terms ───────
   const [aiRubricMatches, scraperRubrics] = await Promise.all([
@@ -197,7 +199,7 @@ export async function search(input: {
           category: [...e.sections].filter(Boolean).join(", ") || section || "General",
           explanation: uniq,
           why_explanation: `${toTitleCase(name)} matched ${e.count} symptom(s) in materia medica. Score: ${pct}/100.`,
-          matching_symptoms: uniq, covered_rubrics: [],
+          matching_symptoms: [...new Set(uniq)].slice(0, 5), covered_rubrics: [],
           safety_flags: buildSafetyFlags(name, healthProfile),
         };
       });

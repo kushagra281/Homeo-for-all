@@ -311,7 +311,7 @@ export default function RemedyScorer({
           reader.readAsDataURL(file);
         });
 
-        const response = await fetch("/api/analyze-report", {
+        const response = await fetch("/api/remedies/analyze-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: base64, mimeType: file.type || "image/jpeg" }),

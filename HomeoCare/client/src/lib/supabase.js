@@ -111,12 +111,19 @@ export async function scoreRemediesFromSupabase(symptoms, filters = {}, question
 export async function getHealthProfile() {
   const user = await getCurrentUser()
   if (!user) return null
-  const { data } = await supabase
-    .from('patients')
-    .select('id, email, name, created_at')
-    .eq('id', user.id)
-    .single()
-  return data || null
+  // The profile page and the safety checks need every saved column (age, heart disease, ...).
+  // The old query selected only id/email/name/created_at, so saved data never reappeared.
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/profile/me', {
+      headers: { Authorization: `Bearer ${session?.access_token || ''}` }
+    })
+    if (!res.ok) return null
+    return (await res.json()) || null
+  } catch (e) {
+    console.error('[API] getHealthProfile failed:', e)
+    return null
+  }
 }
 
 export async function saveHealthProfile(profileData) {

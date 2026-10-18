@@ -114,12 +114,12 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
     confidence >= 35 ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
                        "bg-gray-100 text-gray-500 border-gray-300";
   const label =
-    confidence >= 60 ? "High confidence" :
-    confidence >= 35 ? "Moderate confidence" : "Low confidence";
+    confidence >= 60 ? "Broad match" :
+    confidence >= 35 ? "Partial match" : "Narrow match";
 
   return (
     <span className={`text-xs border rounded-full px-2 py-0.5 font-medium ${color}`}>
-      {confidence}% — {label}
+      {label}
     </span>
   );
 }
@@ -200,6 +200,7 @@ export default function RemedyScorer({
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [analyzingFiles, setAnalyzingFiles] = useState<string[]>([]);
+  const [reportError, setReportError] = useState("");
   const [healthProfile, setHealthProfile] = useState<Record<string, any> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -313,6 +314,11 @@ export default function RemedyScorer({
     setUploadedFiles((prev) => [...prev, ...files]);
 
     for (const file of files) {
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type) || file.size > 7 * 1024 * 1024) {
+        setReportError(`${file.name}: only JPEG/PNG/WebP/GIF images up to 7 MB can be read. Type the symptoms instead.`);
+        continue;
+      }
+      setReportError("");
       const placeholder = `🔍 Analyzing: ${file.name}...`;
       setAnalyzingFiles((prev) => [...prev, file.name]);
       setSymptoms((prev) => [...prev, placeholder]);
@@ -337,15 +343,15 @@ export default function RemedyScorer({
         if (response.ok) {
           const result = await response.json();
           const extracted = [...(result.symptoms || []), ...(result.conditions || [])].filter(Boolean);
-          setSymptoms((prev) => [...prev, ...(extracted.length ? extracted : [`Report: ${file.name}`])]);
+          if (extracted.length) setSymptoms((prev) => [...prev, ...extracted]);
+          else setReportError(`No symptoms could be read from ${file.name}. Please type them instead.`);
         } else {
-          setSymptoms((prev) => [...prev, `Report: ${file.name}`]);
+          setReportError(`Could not read ${file.name}. Please type the symptoms instead.`);
         }
       } catch {
-        setSymptoms((prev) =>
-          prev.filter((s) => s !== placeholder).concat(`Report: ${file.name}`)
-        );
+        setSymptoms((prev) => prev.filter((s) => s !== placeholder));
         setAnalyzingFiles((prev) => prev.filter((n) => n !== file.name));
+        setReportError(`Could not read ${file.name}. Please type the symptoms instead.`);
       }
     }
     e.target.value = "";
@@ -361,7 +367,7 @@ export default function RemedyScorer({
     setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
     setShowResults(false); setShowQuestionnaire(false);
     setQuestionAnswers({}); setCurrentQuestionIdx(0);
-    setAnalyzingFiles([]);
+    setAnalyzingFiles([]); setReportError("");
     scoreMutation.reset();
   };
 
@@ -471,7 +477,7 @@ export default function RemedyScorer({
                 <h2 className="text-2xl font-bold">Top Remedy Recommendations</h2>
                 <p className="text-neutral-500 text-sm">
                   Best {topResults.length} matches{activeCategory ? ` for ${activeCategory}` : ""}
-                  {" "}— Scored by Repertory Engine
+                  {" "}— matched against materia medica text
                 </p>
                 {healthProfile && (healthProfile.age || healthProfile.gender || healthProfile.chronic_conditions) && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -525,7 +531,7 @@ export default function RemedyScorer({
                     </div>
                     <div className="text-right shrink-0 ml-3">
                       <div className="text-2xl font-bold text-green-600">{result.score}%</div>
-                      <div className="text-xs text-gray-400">match score</div>
+                      <div className="text-xs text-gray-400">relative match</div>
                     </div>
                   </div>
 
@@ -823,6 +829,12 @@ export default function RemedyScorer({
                 <div className="mt-3 flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500" />
                   AI is reading your report... please wait before searching.
+                </div>
+              )}
+
+              {reportError && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+                  {reportError}
                 </div>
               )}
 

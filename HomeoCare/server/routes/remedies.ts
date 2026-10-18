@@ -18,10 +18,22 @@ const analyzeLimit = rateLimit({ name: "analyze", windowMs: 60_000, max: 6 });
 // Returns: SearchResult
 router.post("/score", searchLimit, async (req, res) => {
   try {
-    const { symptoms, filters = {}, healthProfile } = req.body;
+    const { filters = {}, healthProfile } = req.body || {};
+    const raw = req.body?.symptoms;
 
-    if (!symptoms || !Array.isArray(symptoms) || symptoms.length === 0) {
+    if (!Array.isArray(raw) || raw.length === 0) {
       return res.status(400).json({ message: "symptoms array is required" });
+    }
+    // Only text is accepted; anything else would crash the keyword code with a 500.
+    const symptoms = raw
+      .filter((s: unknown): s is string => typeof s === "string")
+      .map((s) => s.slice(0, 300))
+      .slice(0, 40);
+    if (symptoms.length === 0) {
+      return res.status(400).json({ message: "symptoms must be text" });
+    }
+    if (typeof filters !== "object" || Array.isArray(filters)) {
+      return res.status(400).json({ message: "filters must be an object" });
     }
 
     console.log(
@@ -67,7 +79,8 @@ router.post("/score", searchLimit, async (req, res) => {
     res.json(flat);
   } catch (error: any) {
     console.error("[Route] score error:", error);
-    res.status(500).json({ message: "Failed to score remedies", detail: error?.message });
+    // The real reason stays in the server log; it can contain database URLs and settings.
+    res.status(500).json({ message: "Failed to score remedies" });
   }
 });
 
@@ -76,7 +89,10 @@ router.post("/score", searchLimit, async (req, res) => {
 router.post("/analyze-report", analyzeLimit, async (req, res) => {
   try {
     const { imageBase64, mimeType } = req.body;
-    if (!imageBase64) return res.status(400).json({ message: "imageBase64 required" });
+    if (typeof imageBase64 !== "string" || !imageBase64) return res.status(400).json({ message: "imageBase64 required" });
+    if (mimeType !== undefined && !/^image\/(jpeg|png|webp|gif)$/.test(String(mimeType))) {
+      return res.status(400).json({ message: "Only JPEG, PNG, WebP or GIF images can be analysed" });
+    }
     if (!hasGroqKey()) return res.status(500).json({ message: "GROQ_OPENAI_API not configured" });
 
     const response = await groq().chat.completions.create({
@@ -117,7 +133,7 @@ Return ONLY JSON (no markdown):
     });
   } catch (error: any) {
     console.error("[Route] analyze-report error:", error);
-    res.status(500).json({ message: "Failed to analyze report", detail: error?.message });
+    res.status(500).json({ message: "Failed to analyze report" });
   }
 });
 

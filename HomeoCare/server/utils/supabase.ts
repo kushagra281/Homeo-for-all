@@ -110,7 +110,9 @@ function orFilter(columns: string[], groups: KeywordGroup[]): string {
 }
 
 function sectionFilter(column: string, patterns: string[]): string {
-  return patterns.map((p) => `${column}.ilike.%${p}%`).join(",");
+  // "^male" = section must START with "male" (so it does not also match "Female");
+  // "^ear" must not match "Heart". Everything else is a contains-match.
+  return patterns.map((p) => (p.startsWith("^") ? `${column}.ilike.${p.slice(1)}%` : `${column}.ilike.%${p}%`)).join(",");
 }
 
 async function pool<T>(tasks: Array<() => Promise<T>>, size = 6): Promise<T[]> {

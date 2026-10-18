@@ -68,6 +68,9 @@ t("remedy name normalisation", () => {
 t("category → section patterns", () => {
   assert.deepEqual(sectionPatterns("Respiration"), ["respirat", "cough", "chest", "larynx"]);
   assert.ok(sectionPatterns("Hands, Legs & Back")!.includes("extremit"));
+  // checked against real data: "ear" must not match Heart, "male" must not match Female
+  assert.ok(sectionPatterns("Ear")!.every((x) => x !== "ear"));
+  assert.ok(sectionPatterns("Male Genitalia")!.includes("^male") && !sectionPatterns("Male Genitalia")!.includes("male"));
   assert.equal(sectionPatterns("Others"), undefined); assert.equal(sectionPatterns("Clinical"), undefined);
   assert.equal(sectionPatterns(undefined), undefined);
 });

@@ -5,13 +5,18 @@
 import { Router } from "express";
 import { search } from "../services/searchService";
 import { groq, hasGroqKey } from "../utils/groq";
+import { rateLimit } from "../utils/rateLimit";
 
 const router = Router();
+
+// Searching hits the database; report analysis calls a paid AI model.
+const searchLimit  = rateLimit({ name: "search",  windowMs: 60_000, max: 30 });
+const analyzeLimit = rateLimit({ name: "analyze", windowMs: 60_000, max: 6 });
 
 // ── POST /api/remedies/score ──────────────────────────────────────
 // Body: { symptoms: string[], filters: {}, healthProfile: {} }
 // Returns: SearchResult
-router.post("/score", async (req, res) => {
+router.post("/score", searchLimit, async (req, res) => {
   try {
     const { symptoms, filters = {}, healthProfile } = req.body;
 
@@ -68,7 +73,7 @@ router.post("/score", async (req, res) => {
 
 // ── POST /api/remedies/analyze-report ────────────────────────────
 // Groq Vision — extract symptoms from uploaded medical report image
-router.post("/analyze-report", async (req, res) => {
+router.post("/analyze-report", analyzeLimit, async (req, res) => {
   try {
     const { imageBase64, mimeType } = req.body;
     if (!imageBase64) return res.status(400).json({ message: "imageBase64 required" });

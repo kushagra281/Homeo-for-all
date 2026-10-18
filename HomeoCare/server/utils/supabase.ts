@@ -82,6 +82,9 @@ export interface ScraperRubric {
 }
 
 /** A rubric plus how well it matches the patient's keywords. */
+/** Section name the scraper gives to Kent's lectures (one block of prose per remedy). */
+const KENT_SECTION = "Kent Lectures";
+
 export interface RankedRubric extends ScraperRubric {
   matched:   number;   // how many of the patient's keyword groups this rubric matches
   relevance: number;   // 0–1, used to weight the rubric in scoring
@@ -259,11 +262,14 @@ export async function searchScraperRubrics(
     if (!matched) continue;   // matched only through SQL substring noise
 
     const modality = modalityScore(text, kw.modalities);
+    // Kent's lectures are long prose: a long sentence mentions many words by chance, so it
+    // would out-rank a precise Boericke line. Count it for less.
+    const prose = r.section === KENT_SECTION;
     ranked.push({
       ...r,
       matched,
-      relevance: Math.min(1, matched / Math.min(total, 3)),
-      _score: matched * 10 + inOwnText * 3 + modality * 2 + Math.min(r.depth || 0, 5) * 0.1,
+      relevance: Math.min(1, matched / Math.min(total, 3)) * (prose ? 0.7 : 1),
+      _score: matched * 10 + inOwnText * 3 + modality * 2 + Math.min(r.depth || 0, 5) * 0.1 - (prose ? 8 : 0),
     });
   }
 

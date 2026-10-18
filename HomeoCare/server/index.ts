@@ -39,7 +39,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-app.use(express.json({ limit: "10mb" }));
+// Only the report-image route needs a big body; everything else is small JSON.
+app.set("trust proxy", 1);   // behind Render/Railway: use the real client IP (rate limiting)
+app.use("/api/remedies/analyze-report", express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "200kb" }));
 app.use(express.urlencoded({ extended: false }));
 
 // Request logger

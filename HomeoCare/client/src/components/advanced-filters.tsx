@@ -11,6 +11,7 @@ export interface FilterState {
   age_group: string;
   gender: string;
   condition_type: string;
+  potency?: string;
 }
 
 interface AdvancedFiltersProps {

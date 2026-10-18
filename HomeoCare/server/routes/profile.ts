@@ -35,7 +35,7 @@ router.post("/save", async (req, res) => {
   }
 });
 
-// ── GET /api/history/:userId ──────────────────────────────────────
+// ── GET /api/profile/history/:userId ──────────────────────────────────────
 router.get("/history/:userId", async (req, res) => {
   try {
     const data = await fetchSearchHistory(req.params.userId);

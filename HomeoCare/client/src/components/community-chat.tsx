@@ -37,7 +37,7 @@ export function CommunityChat() {
     if (!username.trim()) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
     
     wsRef.current = new WebSocket(wsUrl);
 

@@ -66,10 +66,10 @@ export class MemStorage implements IStorage {
                 symptoms: symptomObj.Chest ? [symptomObj.Head, symptomObj.Chest] : [symptomObj.Head],
                 keywords: [remedyName.toLowerCase(), "head", "headache", symptomObj.Head.toLowerCase()],
                 symptom_mappings: this.createSymptomMappings([symptomObj.Head]),
-                modalities: { better: ["rest", "pressure"], worse: ["movement", "light"] },
-                potencies: ["6C", "30C", "200C"],
-                age_groups: index % 3 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"],
-                genders: index % 4 === 0 ? ["male"] : index % 4 === 1 ? ["female"] : ["male", "female", "any"],
+                modalities: { better: [], worse: [] },
+                potencies: [],
+                age_groups: [],
+                genders: [],
                 synonym_names: [remedyName.toLowerCase()]
               };
               this.remedies.set(remedy.id, remedy);
@@ -94,10 +94,10 @@ export class MemStorage implements IStorage {
                 symptoms: symptomObj.Head ? [symptomObj.Mind, symptomObj.Head] : [symptomObj.Mind],
                 keywords: [remedyName.toLowerCase(), "mind", "mental", "emotional", symptomObj.Mind.toLowerCase()],
                 symptom_mappings: this.createSymptomMappings([symptomObj.Mind]),
-                modalities: { better: ["company", "warmth"], worse: ["alone", "cold"] },
-                potencies: ["30C", "200C", "1M"],
-                age_groups: index % 2 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"],
-                genders: index % 3 === 0 ? ["female"] : index % 3 === 1 ? ["male"] : ["male", "female", "any"],
+                modalities: { better: [], worse: [] },
+                potencies: [],
+                age_groups: [],
+                genders: [],
                 synonym_names: [remedyName.toLowerCase()]
               };
               this.remedies.set(remedy.id, remedy);
@@ -123,10 +123,10 @@ export class MemStorage implements IStorage {
                   symptoms: [symptom, "head-related symptoms"],
                   keywords: [remedyName.toLowerCase(), "head", symptom.toLowerCase(), "headache"],
                   symptom_mappings: this.createSymptomMappings([symptom]),
-                  modalities: { better: ["rest"], worse: ["movement"] },
-                  potencies: ["6C", "30C", "200C"],
-                  age_groups: ["child", "adult", "senior"],
-                  genders: ["male", "female", "any"],
+                  modalities: { better: [], worse: [] },
+                  potencies: [],
+                  age_groups: [],
+                  genders: [],
                   synonym_names: [remedyName.toLowerCase()]
                 };
                 this.remedies.set(remedy.id, remedy);
@@ -153,10 +153,10 @@ export class MemStorage implements IStorage {
                   symptoms: [symptom, "emotional symptoms", "mental symptoms"],
                   keywords: [remedyName.toLowerCase(), "mind", "mental", "emotional", symptom.toLowerCase()],
                   symptom_mappings: this.createSymptomMappings([symptom, "emotional symptoms"]),
-                  modalities: { better: ["company", "consolation"], worse: ["alone", "stress"] },
-                  potencies: ["30C", "200C"],
-                  age_groups: ["adult", "senior"],
-                  genders: ["male", "female", "any"],
+                  modalities: { better: [], worse: [] },
+                  potencies: [],
+                  age_groups: [],
+                  genders: [],
                   synonym_names: [remedyName.toLowerCase()]
                 };
                 this.remedies.set(remedy.id, remedy);
@@ -205,9 +205,9 @@ export class MemStorage implements IStorage {
                 better: sym.modalities?.better || [],
                 worse: sym.modalities?.worse || [],
               },
-              potencies: ["6C", "30C", "200C"],
-              age_groups: ["child", "adult", "senior"],
-              genders: ["male", "female", "any"],
+              potencies: [],
+              age_groups: [],
+              genders: [],
               synonym_names: [remedyName.toLowerCase()],
             };
             this.remedies.set(remedy.id, remedy);
@@ -292,9 +292,9 @@ export class MemStorage implements IStorage {
         keywords: remedy.keywords || [],
         symptom_mappings: remedy.symptom_mappings || {},
         modalities: remedy.modalities || { better: [], worse: [] },
-        potencies: remedy.potencies || ["30C"],
-        age_groups: remedy.age_groups || ["adult"],
-        genders: remedy.genders || ["any"],
+        potencies: remedy.potencies || [],
+        age_groups: remedy.age_groups || [],
+        genders: remedy.genders || [],
         synonym_names: remedy.synonym_names || []
       });
     });
@@ -409,18 +409,18 @@ export class MemStorage implements IStorage {
 
   private passesFilters(remedy: Remedy, filters?: RemedyFilters): boolean {
     if (!filters) return true;
-    if (filters.age_group && remedy.age_groups) {
+    if (filters.age_group && remedy.age_groups?.length) {
       const ageNum = parseInt(filters.age_group.split('-')[0]);
       const isChild = ageNum <= 13;
       const isSenior = ageNum >= 63;
       if (isChild && !remedy.age_groups.includes("child")) return false;
       if (isSenior && !remedy.age_groups.includes("senior")) return false;
     }
-    if (filters.gender && remedy.genders) {
+    if (filters.gender && remedy.genders?.length) {
       const g = filters.gender.toLowerCase();
       if (!remedy.genders.includes(g) && !remedy.genders.includes("any")) return false;
     }
-    if (filters.potency && remedy.potencies && !remedy.potencies.includes(filters.potency)) return false;
+    if (filters.potency && remedy.potencies?.length && !remedy.potencies.includes(filters.potency)) return false;
     if (filters.symptom_location && remedy.symptoms) {
       const hasMatch = remedy.symptoms.some(s => s.toLowerCase().includes(filters.symptom_location!.toLowerCase()))
         || remedy.keywords?.some(k => k.includes(filters.symptom_location!.toLowerCase()));
@@ -451,9 +451,9 @@ export class MemStorage implements IStorage {
       keywords: insertRemedy.keywords || [],
       symptom_mappings: insertRemedy.symptom_mappings || {},
       modalities: insertRemedy.modalities || { better: [], worse: [] },
-      potencies: insertRemedy.potencies || ["30C"],
-      age_groups: insertRemedy.age_groups || ["adult"],
-      genders: insertRemedy.genders || ["any"],
+      potencies: insertRemedy.potencies || [],
+      age_groups: insertRemedy.age_groups || [],
+      genders: insertRemedy.genders || [],
       synonym_names: insertRemedy.synonym_names || []
     };
     this.remedies.set(id, remedy);

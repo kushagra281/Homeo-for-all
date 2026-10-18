@@ -3,7 +3,15 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (!supabaseUrl || !supabaseAnonKey) {
+  // createClient() throws on empty values, which would leave the whole app on a blank page.
+  console.error('[supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set - login and history are disabled')
+}
+
+export const supabase = createClient(
+  supabaseUrl || 'http://localhost:54321',
+  supabaseAnonKey || 'missing-anon-key'
+)
 export default supabase
 
 // ── AUTH ─────────────────────────────────────────────────────

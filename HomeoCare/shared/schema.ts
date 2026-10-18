@@ -41,6 +41,18 @@ export interface Remedy {
   genders: string[];
   synonym_names: string[];
   ai_indication?: string;
+  /** Optional weights used by the in-memory fallback search (symptom text -> weight). */
+  symptom_mappings?: Record<string, number>;
+}
+
+export interface MedicalTerm {
+  id: string;
+  term: string;
+  definition: string;
+  category: string;
+  synonyms: string[];
+  relatedRemedies: string[];
+  translations?: Record<string, string>;
 }
 
 export interface InsertRemedy extends Omit<Remedy, "id"> {}

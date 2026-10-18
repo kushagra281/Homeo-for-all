@@ -37,11 +37,13 @@ router.post("/score", async (req, res) => {
         description:   r.why_explanation,
         dosage:        r.dosage,
         symptoms:      r.matching_symptoms,
+        // The scraped database has no potency / age / gender data, so these are
+        // left empty (= "not specified") instead of inventing values.
         keywords:      [],
         modalities:    { better: [], worse: [] },
-        potencies:     ["6C", "30C", "200C"],
-        age_groups:    ["child", "adult", "senior"],
-        genders:       ["male", "female", "any"],
+        potencies:     [],
+        age_groups:    [],
+        genders:       [],
         synonym_names: [],
       },
       score:             r.score,

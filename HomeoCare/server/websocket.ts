@@ -70,6 +70,7 @@ class ChatServer {
 
   private handleJoin(ws: WebSocket, userId: string, username: string) {
     // Clean username
+    if (typeof username !== 'string') return;
     const cleanUsername = username.trim().substring(0, 20);
     if (!cleanUsername) return;
 

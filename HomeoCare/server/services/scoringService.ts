@@ -282,9 +282,11 @@ export function buildSafetyFlags(
   return flags;
 }
 
-// ── Grade → dosage ────────────────────────────────────────────────
-export function gradeToDosage(avgGrade: number): string {
-  if (avgGrade >= 3) return "200C — 3 pellets twice daily for 3 days, then once weekly";
-  if (avgGrade >= 2) return "30C — 3 pellets three times daily for 5 days";
-  return "6C — 3 pellets four times daily for 7 days";
+// ── Dosage ────────────────────────────────────────────────────────
+// The scraped data contains no potency or dose, and the "grade" it carries is not a
+// clinical strength (97% of rows are 1). The old function turned that into a specific
+// dose ("200C, 3 pellets twice daily..."), which is invented medical advice.
+// The argument is kept so existing callers do not change.
+export function gradeToDosage(_avgGrade?: number): string {
+  return "Potency and dose are not part of this data - consult a qualified homeopath";
 }

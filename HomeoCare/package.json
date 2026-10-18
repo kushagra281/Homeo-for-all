@@ -8,6 +8,7 @@
     "build": "npx vite build && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "test": "tsx server/tests/keywords.test.ts && tsx server/tests/search-pipeline.test.ts main && tsx server/tests/search-pipeline.test.ts noenv",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

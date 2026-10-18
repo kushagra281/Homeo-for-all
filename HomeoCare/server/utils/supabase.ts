@@ -4,8 +4,17 @@
 //   scraperDB() → rtfjnfepikhahzospnqq  (rubrics×17755, rubric_remedies×23564, remedy_symptoms×17678)
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import {
+  type ExtractedKeywords,
+  type KeywordGroup,
+  variantPatterns,
+  groupMatches,
+  modalityScore,
+} from "./keywords";
 
 // ── Cache (rubric data is static — safe to cache 15 min) ─────────
+// Only non-empty, successful results are ever stored (see callers), so a
+// transient DB failure can no longer be cached as "no answer".
 const _cache = new Map<string, { value: any; ts: number }>();
 const TTL = 15 * 60 * 1000;
 export function fromCache<T>(key: string): T | null {
@@ -15,6 +24,14 @@ export function fromCache<T>(key: string): T | null {
 }
 export function toCache(key: string, value: any) {
   _cache.set(key, { value, ts: Date.now() });
+}
+
+/** Thrown when every query against a database failed (paused project, bad key, network). */
+export class DbUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DbUnavailableError";
+  }
 }
 
 // ── Main DB ───────────────────────────────────────────────────────
@@ -35,8 +52,8 @@ export function scraperDB(): SupabaseClient {
   const url = process.env.SCRAPER_SUPABASE_URL || "";
   const key = process.env.SCRAPER_SUPABASE_KEY || "";
   if (!url || !key) {
-    console.warn("[DB] SCRAPER_SUPABASE_URL/KEY not set — using main DB as fallback");
-    return mainDB();
+    // Querying the main DB for rubric tables can never work — fail loudly instead.
+    throw new DbUnavailableError("SCRAPER_SUPABASE_URL / SCRAPER_SUPABASE_KEY are not set");
   }
   _scraper = createClient(url, key);
   console.log("[DB] Scraper DB connected:", url);
@@ -64,6 +81,12 @@ export interface ScraperRubric {
   is_eliminating: boolean;
 }
 
+/** A rubric plus how well it matches the patient's keywords. */
+export interface RankedRubric extends ScraperRubric {
+  matched:   number;   // how many of the patient's keyword groups this rubric matches
+  relevance: number;   // 0–1, used to weight the rubric in scoring
+}
+
 export interface ScraperRemedyRow {
   rubric_id:    number;
   rubric_text:  string;
@@ -75,224 +98,324 @@ export interface ScraperRemedyRow {
   grade:        number;
 }
 
-/**
- * Search scraper rubrics by symptom terms.
- * Searches rubric_text and full_path using ILIKE.
- */
-export async function searchScraperRubrics(
-  terms: string[],
-  section?: string,
-  limit = 40
-): Promise<ScraperRubric[]> {
-  if (!terms.length) return [];
+// ── Query helpers ─────────────────────────────────────────────────
+/** PostgREST or-filter: any column ILIKE any variant of any given group. */
+function orFilter(columns: string[], groups: KeywordGroup[]): string {
+  const parts: string[] = [];
+  for (const g of groups)
+    for (const v of g.variants)
+      for (const p of variantPatterns(v))
+        for (const c of columns) parts.push(`${c}.ilike.${p}`);
+  return parts.join(",");
+}
 
-  // Synonym map for common homeopathy terms
-  const SYNONYMS: Record<string, string[]> = {
-    "fever": ["febrile","temperature","pyrexia","heat"],
-    "cough": ["coughing","tussis","expectoration"],
-    "headache": ["cephalgia","head pain","migraine","hemicrania"],
-    "anxiety": ["anxious","worry","apprehension","nervousness"],
-    "fear": ["fright","phobia","terror","dread"],
-    "restless": ["restlessness","agitation","fidgety","tossing"],
-    "burning": ["burns","smarting","scalding","heat sensation"],
-    "itching": ["itches","pruritus","scratching"],
-    "nausea": ["nauseous","queasiness","sick feeling"],
-    "diarrhea": ["diarrhoea","loose stool","dysentery"],
-    "constipation": ["constipated","difficult stool","no stool"],
-    "vomiting": ["vomit","retching","throwing up"],
-    "weakness": ["debility","prostration","exhaustion","fatigue"],
-    "pain": ["painful","aching","sore","hurts"],
-    "swelling": ["swollen","oedema","puffiness","bloated"],
-    "thirst": ["thirsty","desire for water","craving water"],
-    "cold": ["chilly","coldness","chilliness"],
-    "heat": ["warmth","hot","flushed","burning hot"],
-    "night": ["nocturnal","midnight","evening"],
-    "morning": ["on waking","early morning","rising"],
-    "skin": ["cutaneous","dermal","eruption"],
-    "rash": ["eruption","hives","urticaria","exanthem"],
-    "throat": ["pharynx","larynx","tonsil"],
-    "stomach": ["gastric","epigastric","abdomen"],
-    "back": ["lumbar","spine","dorsal","sacral"],
-    "joint": ["joints","articular","arthralgia"],
-    "chest": ["thorax","pectoral","breast","lung"],
-    "mind": ["mental","emotional","psychological","mood"],
+function sectionFilter(column: string, patterns: string[]): string {
+  return patterns.map((p) => `${column}.ilike.%${p}%`).join(",");
+}
+
+async function pool<T>(tasks: Array<() => Promise<T>>, size = 6): Promise<T[]> {
+  const out: T[] = new Array(tasks.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const i = next++;
+      out[i] = await tasks[i]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(size, tasks.length) }, worker));
+  return out;
+}
+
+interface GroupSearchOptions {
+  db:          SupabaseClient;
+  table:       string;
+  select:      string;
+  textCols:    string[];
+  sectionCol?: string;
+  sectionPats?: string[];
+  kw:          ExtractedKeywords;
+  perQuery:    number;
+  label:       string;
+  orderBy?:    { column: string; ascending: boolean };
+  notNullCol?: string;
+}
+
+/**
+ * Searches a table for every keyword group (one query per group, OR over its
+ * variants) PLUS a few "must match two keywords" queries for the most specific
+ * pairs, so rows matching several of the patient's words are not drowned out by
+ * the thousands of rows matching one common word.
+ * If a section filter returns nothing, the whole search is retried without it.
+ * Throws DbUnavailableError when every query failed.
+ */
+async function searchByGroups<T>(o: GroupSearchOptions): Promise<T[]> {
+  let queries = 0;
+  let failures = 0;
+  let lastError = "";
+
+  const run = async (groups: KeywordGroup[], mode: "any" | "all", useSection: boolean): Promise<T[]> => {
+    let q = o.db.from(o.table).select(o.select);
+    if (o.notNullCol) q = q.not(o.notNullCol, "is", null);
+    if (mode === "any") q = q.or(orFilter(o.textCols, groups));
+    else for (const g of groups) q = q.or(orFilter(o.textCols, [g]));   // AND of ORs
+    if (useSection && o.sectionCol && o.sectionPats?.length) q = q.or(sectionFilter(o.sectionCol, o.sectionPats));
+    if (o.orderBy) q = q.order(o.orderBy.column, { ascending: o.orderBy.ascending });
+    queries++;
+    const { data, error } = await q.limit(o.perQuery);
+    if (error) {
+      failures++;
+      lastError = error.message;
+      console.error(`[DB] ${o.label}:`, error.message);
+      return [];
+    }
+    return (data || []) as unknown as T[];
   };
 
-  const STOP = new Set(["worse","better","after","before","from","with","and","the","for","more","less","very","also","when","that","this","have","been","into","over","some","during","while"]);
+  const specific = [...o.kw.groups].sort((a, b) => b.key.length - a.key.length).slice(0, 4);
+  const pairs: KeywordGroup[][] = [];
+  for (let i = 0; i < specific.length; i++)
+    for (let j = i + 1; j < specific.length; j++) pairs.push([specific[i], specific[j]]);
 
-  // Extract keywords + expand with synonyms
-  const baseKeywords = [...new Set(
-    terms.flatMap((t) =>
-      t.split(/[\s,;]+/)
-        .map((w) => w.toLowerCase().replace(/[^a-z]/g, ""))
-        .filter((w) => w.length > 3 && !STOP.has(w))
-    )
-  )];
+  const plan = [
+    ...o.kw.groups.map((g) => ({ groups: [g], mode: "any" as const })),
+    ...pairs.slice(0, 4).map((p) => ({ groups: p, mode: "all" as const })),
+  ];
 
-  // Add synonyms for each keyword
-  const expandedKeywords = [...new Set([
-    ...baseKeywords,
-    ...baseKeywords.flatMap((k) => SYNONYMS[k] || []),
-  ])].slice(0, 15);
+  const execute = async (useSection: boolean): Promise<T[]> =>
+    (await pool(plan.map((p) => () => run(p.groups, p.mode, useSection)), 6)).flat();
 
-  // Combine with original full terms for broader coverage
-  const searchTerms = [...new Set([
-    ...expandedKeywords,
-    ...terms.map(t => t.toLowerCase().trim()).slice(0, 4),
-  ])];
-
-  const cacheKey = `sr:${searchTerms.slice(0,8).join("|")}:${section || ""}`;
-  const cached = fromCache<ScraperRubric[]>(cacheKey);
-  if (cached) return cached;
-
-  const db = scraperDB();
-  const allRows: ScraperRubric[] = [];
-
-  console.log(`[DB] Scraper rubric keywords:`, expandedKeywords.slice(0, 8).join(", "));
-
-  for (const term of searchTerms.slice(0, 10)) {
-    let q = db
-      .from("rubrics")
-      .select("id, parent_id, section, rubric_text, full_path, depth, symptom_type, is_eliminating")
-      .or(`rubric_text.ilike.%${term}%,full_path.ilike.%${term}%`)
-      .order("depth", { ascending: false })
-      .limit(limit);
-    if (section) q = q.ilike("section", `%${section}%`);
-
-    const { data, error } = await q;
-    if (error) console.error("[DB] searchScraperRubrics:", error.message);
-    if (data) allRows.push(...(data as ScraperRubric[]));
+  let rows = await execute(true);
+  if (!rows.length && o.sectionPats?.length) {
+    console.log(`[DB] ${o.label}: nothing in section [${o.sectionPats.join(", ")}] — retrying without section filter`);
+    rows = await execute(false);
   }
 
-  // Deduplicate by id
-  const seen = new Set<number>();
-  const unique = allRows.filter((r) => {
-    if (seen.has(r.id)) return false;
-    seen.add(r.id); return true;
+  if (queries > 0 && failures === queries) {
+    throw new DbUnavailableError(`${o.label}: all ${queries} queries failed (${lastError})`);
+  }
+  return rows;
+}
+
+// ── Rubric search ─────────────────────────────────────────────────
+const RUBRIC_COLS = "id, parent_id, section, rubric_text, full_path, depth, symptom_type, is_eliminating";
+const MAX_RUBRICS = 80;
+
+/**
+ * Finds rubrics for the patient's keywords and RANKS them by how many of the
+ * keywords each rubric matches (rubric_text matches count extra; modality
+ * agreement like "worse at night" adds a bonus). Returns the best MAX_RUBRICS.
+ */
+export async function searchScraperRubrics(
+  kw: ExtractedKeywords,
+  sectionPats?: string[]
+): Promise<RankedRubric[]> {
+  if (!kw.groups.length) return [];
+
+  const cacheKey = "sr2:" + JSON.stringify([
+    kw.groups.map((g) => g.variants.map((v) => v.text)),
+    kw.modalities,
+    sectionPats || null,
+  ]);
+  const cached = fromCache<RankedRubric[]>(cacheKey);
+  if (cached) return cached;
+
+  console.log(`[DB] Scraper rubric keywords:`, kw.groups.map((g) => g.key).join(", "));
+
+  const rows = await searchByGroups<ScraperRubric>({
+    db: scraperDB(),
+    table: "rubrics",
+    select: RUBRIC_COLS,
+    textCols: ["rubric_text", "full_path"],
+    sectionCol: "section",
+    sectionPats,
+    kw,
+    perQuery: 150,
+    label: "searchScraperRubrics",
+    orderBy: { column: "depth", ascending: false },
   });
 
-  toCache(cacheKey, unique);
-  console.log(`[DB] Found ${unique.length} rubrics in scraper DB`);
-  return unique;
+  // Deduplicate by id
+  const byId = new Map<number, ScraperRubric>();
+  for (const r of rows) if (!byId.has(r.id)) byId.set(r.id, r);
+
+  const total = kw.groups.length;
+  const ranked: Array<RankedRubric & { _score: number }> = [];
+  for (const r of Array.from(byId.values())) {
+    // A rubric flagged as "eliminating" is a negated symptom; the patient did not deny anything, so never use it.
+    if (r.is_eliminating) continue;
+
+    const own  = (r.rubric_text || "").toLowerCase();
+    const text = `${own} ${(r.full_path || "").toLowerCase()}`;
+    let matched = 0;
+    let inOwnText = 0;
+    for (const g of kw.groups) {
+      if (groupMatches(text, g)) {
+        matched++;
+        if (groupMatches(own, g)) inOwnText++;
+      }
+    }
+    if (!matched) continue;   // matched only through SQL substring noise
+
+    const modality = modalityScore(text, kw.modalities);
+    ranked.push({
+      ...r,
+      matched,
+      relevance: Math.min(1, matched / Math.min(total, 3)),
+      _score: matched * 10 + inOwnText * 3 + modality * 2 + Math.min(r.depth || 0, 5) * 0.1,
+    });
+  }
+
+  ranked.sort((a, b) => b._score - a._score);
+  const top: RankedRubric[] = ranked.slice(0, MAX_RUBRICS).map(({ _score, ...r }) => r);
+
+  console.log(`[DB] ${byId.size} candidate rubrics → kept top ${top.length} (best matches ${top[0]?.matched ?? 0}/${total} keywords)`);
+  if (top.length) toCache(cacheKey, top);
+  return top;
+}
+
+// ── Remedies for rubrics ──────────────────────────────────────────
+const PAGE = 1000;   // PostgREST default max rows per response
+const CHUNK = 100;   // rubric ids per request
+
+const RR_JOIN = `
+  rubric_id,
+  remedy_name,
+  grade,
+  rubrics!inner (
+    rubric_text,
+    full_path,
+    section,
+    symptom_type,
+    depth
+  )
+`;
+
+async function fetchChunkJoin(db: SupabaseClient, chunk: number[]): Promise<ScraperRemedyRow[]> {
+  const out: ScraperRemedyRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .from("rubric_remedies")
+      .select(RR_JOIN)
+      .in("rubric_id", chunk)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    for (const r of (data || []) as any[]) {
+      const rub = Array.isArray(r.rubrics) ? r.rubrics[0] : r.rubrics;
+      out.push({
+        rubric_id:    r.rubric_id,
+        rubric_text:  rub?.rubric_text || "",
+        full_path:    rub?.full_path || "",
+        section:      rub?.section || "",
+        symptom_type: rub?.symptom_type || "particular",
+        depth:        rub?.depth || 1,
+        remedy_name:  r.remedy_name,
+        grade:        r.grade,
+      });
+    }
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
+async function fetchChunkTwoQuery(db: SupabaseClient, chunk: number[]): Promise<ScraperRemedyRow[]> {
+  const rubricsRes = await db
+    .from("rubrics")
+    .select("id, rubric_text, full_path, section, symptom_type, depth")
+    .in("id", chunk);
+  if (rubricsRes.error) throw new DbUnavailableError(`rubrics lookup failed: ${rubricsRes.error.message}`);
+  const rubricMap = new Map<number, any>((rubricsRes.data || []).map((r: any) => [r.id, r]));
+
+  const out: ScraperRemedyRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .from("rubric_remedies")
+      .select("rubric_id, remedy_name, grade")
+      .in("rubric_id", chunk)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new DbUnavailableError(`rubric_remedies lookup failed: ${error.message}`);
+    for (const r of (data || []) as any[]) {
+      const rub = rubricMap.get(r.rubric_id) || {};
+      out.push({
+        rubric_id:    r.rubric_id,
+        rubric_text:  rub.rubric_text || "",
+        full_path:    rub.full_path || "",
+        section:      rub.section || "",
+        symptom_type: rub.symptom_type || "particular",
+        depth:        rub.depth || 1,
+        remedy_name:  r.remedy_name,
+        grade:        r.grade,
+      });
+    }
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
 }
 
 /**
  * Fetch remedy-rubric rows for given rubric IDs.
- * Uses JOIN for single round-trip. Falls back to two queries if JOIN fails.
+ * Requests are chunked and paginated, so no rows are silently dropped by the
+ * API's per-response row cap. Uses a JOIN and falls back to two queries.
  */
-export async function getRemediesForRubricIds(
-  rubricIds: number[]
-): Promise<ScraperRemedyRow[]> {
+export async function getRemediesForRubricIds(rubricIds: number[]): Promise<ScraperRemedyRow[]> {
   if (!rubricIds.length) return [];
 
-  const cacheKey = `rr:${[...rubricIds].sort().join(",")}`;
+  const ids = Array.from(new Set(rubricIds)).sort((a, b) => a - b);
+  const cacheKey = `rr2:${ids.join(",")}`;
   const cached = fromCache<ScraperRemedyRow[]>(cacheKey);
   if (cached) return cached;
 
   const db = scraperDB();
+  const rows: ScraperRemedyRow[] = [];
+  let useJoin = true;
 
-  // Try JOIN first
-  const { data, error } = await db
-    .from("rubric_remedies")
-    .select(`
-      rubric_id,
-      remedy_name,
-      grade,
-      rubrics!inner (
-        rubric_text,
-        full_path,
-        section,
-        symptom_type,
-        depth
-      )
-    `)
-    .in("rubric_id", rubricIds)
-    .order("grade", { ascending: false });
-
-  if (!error && data) {
-    const rows: ScraperRemedyRow[] = data.map((r: any) => ({
-      rubric_id:    r.rubric_id,
-      rubric_text:  r.rubrics?.rubric_text || "",
-      full_path:    r.rubrics?.full_path || "",
-      section:      r.rubrics?.section || "",
-      symptom_type: r.rubrics?.symptom_type || "particular",
-      depth:        r.rubrics?.depth || 1,
-      remedy_name:  r.remedy_name,
-      grade:        r.grade,
-    }));
-    toCache(cacheKey, rows);
-    console.log(`[DB] ${rows.length} rubric_remedy rows fetched`);
-    return rows;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    if (useJoin) {
+      try {
+        rows.push(...(await fetchChunkJoin(db, chunk)));
+        continue;
+      } catch (e: any) {
+        console.warn("[DB] JOIN failed, using two-query fallback:", e?.message);
+        useJoin = false;
+      }
+    }
+    rows.push(...(await fetchChunkTwoQuery(db, chunk)));
   }
 
-  // Fallback: two separate queries
-  console.warn("[DB] JOIN failed, using two-query fallback:", error?.message);
-  const [rubricsRes, remediesRes] = await Promise.all([
-    db.from("rubrics").select("id, rubric_text, full_path, section, symptom_type, depth").in("id", rubricIds),
-    db.from("rubric_remedies").select("rubric_id, remedy_name, grade").in("rubric_id", rubricIds).order("grade", { ascending: false }),
-  ]);
-
-  const rubricMap = new Map<number, any>(
-    (rubricsRes.data || []).map((r: any) => [r.id, r])
-  );
-
-  const rows: ScraperRemedyRow[] = (remediesRes.data || []).map((r: any) => {
-    const rub = rubricMap.get(r.rubric_id) || {};
-    return {
-      rubric_id: r.rubric_id,
-      rubric_text: rub.rubric_text || "",
-      full_path: rub.full_path || "",
-      section: rub.section || "",
-      symptom_type: rub.symptom_type || "particular",
-      depth: rub.depth || 1,
-      remedy_name: r.remedy_name,
-      grade: r.grade,
-    };
-  });
-
-  toCache(cacheKey, rows);
+  console.log(`[DB] ${rows.length} rubric_remedy rows fetched for ${ids.length} rubrics`);
+  if (rows.length) toCache(cacheKey, rows);
   return rows;
 }
 
-/**
- * Search remedy_symptoms in scraper DB (17,678 rows).
- */
+// ── remedy_symptoms (materia medica sentences) ────────────────────
+export interface RemedySymptomRow {
+  remedy_name: string;
+  heading:     string;
+  symptom:     string;
+}
+
+/** Search remedy_symptoms in scraper DB. */
 export async function searchScraperRemedySymptoms(
-  terms: string[],
-  section?: string
-): Promise<Array<{ remedy_name: string; heading: string; symptom: string }>> {
-  const db = scraperDB();
-  const all: any[] = [];
-
-  // Search with section filter first
-  for (const term of terms.slice(0, 6)) {
-    let q = db.from("remedy_symptoms")
-      .select("remedy_name, heading, symptom")
-      .ilike("symptom", `%${term}%`)
-      .not("remedy_name", "is", null)
-      .limit(200);
-    if (section) q = q.ilike("heading", `%${section}%`);
-    const { data, error } = await q;
-    if (error) console.error("[DB] searchScraperRemedySymptoms:", error.message);
-    if (data) all.push(...data.filter((r: any) => r.remedy_name));
-  }
-
-  // If section filter returned nothing, try WITHOUT section filter
-  if (all.length === 0 && section) {
-    console.log("[DB] No remedy_symptoms with section filter — retrying without section");
-    for (const term of terms.slice(0, 6)) {
-      const { data, error } = await db.from("remedy_symptoms")
-        .select("remedy_name, heading, symptom")
-        .ilike("symptom", `%${term}%`)
-        .not("remedy_name", "is", null)
-        .limit(200);
-      if (error) console.error("[DB] searchScraperRemedySymptoms (no section):", error.message);
-      if (data) all.push(...data.filter((r: any) => r.remedy_name));
-    }
-  }
-
-  console.log(`[DB] remedy_symptoms found ${all.length} rows`);
-  return all;
+  kw: ExtractedKeywords,
+  sectionPats?: string[]
+): Promise<RemedySymptomRow[]> {
+  if (!kw.groups.length) return [];
+  const rows = await searchByGroups<RemedySymptomRow>({
+    db: scraperDB(),
+    table: "remedy_symptoms",
+    select: "remedy_name, heading, symptom",
+    textCols: ["symptom"],
+    sectionCol: "heading",
+    sectionPats,
+    kw,
+    perQuery: 400,
+    label: "searchScraperRemedySymptoms",
+    notNullCol: "remedy_name",
+  });
+  console.log(`[DB] remedy_symptoms found ${rows.length} rows`);
+  return rows.filter((r) => r.remedy_name);
 }
 
 // ================================================================
@@ -358,14 +481,17 @@ export async function fetchSearchHistory(patientId: string): Promise<any[]> {
 }
 
 // Legacy fallback
-export async function fetchLegacySymptoms(terms: string[], category?: string): Promise<any[]> {
-  const all: any[] = [];
-  for (const term of terms.slice(0, 5)) {
-    let q = mainDB().from("symptoms").select("remedy, symptom, category, intensity").ilike("symptom", `%${term}%`).limit(150);
-    if (category) q = q.ilike("category", `%${category}%`);
-    const { data, error } = await q;
-    if (error) console.error("[DB] fetchLegacySymptoms:", error.message);
-    if (data) all.push(...data);
-  }
-  return all;
+export async function fetchLegacySymptoms(kw: ExtractedKeywords, sectionPats?: string[]): Promise<any[]> {
+  if (!kw.groups.length) return [];
+  return searchByGroups<any>({
+    db: mainDB(),
+    table: "symptoms",
+    select: "remedy, symptom, category, intensity",
+    textCols: ["symptom"],
+    sectionCol: "category",
+    sectionPats,
+    kw,
+    perQuery: 300,
+    label: "fetchLegacySymptoms",
+  });
 }

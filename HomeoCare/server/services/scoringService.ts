@@ -5,9 +5,22 @@
 // Output: scored, ranked remedy list with explanations
 
 import type { RubricMatch } from "./rubricService";
-import type { RubricRemedyRow } from "../utils/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────
+// (RubricRemedyRow used to be imported from utils/supabase but was never exported there.)
+export interface RubricRemedyRow {
+  rubric_code:  string;
+  rubric_label: string;
+  body_system:  string;
+  symptom_type: string;
+  weight:       number;
+  is_negative:  boolean;
+  remedy_name:  string;
+  grade:        number;
+  /** 0–1: how many of the patient's keywords this rubric matched. Missing = 1 (full weight). */
+  relevance?:   number;
+}
+
 export interface CoveredRubric {
   rubric_code:  string;
   label:        string;
@@ -101,7 +114,10 @@ export function scoreRemedies(
     if (!positiveCodes.has(row.rubric_code)) continue;
 
     const weight = WEIGHT[row.symptom_type] ?? 1;
-    const contribution = row.grade * weight;
+    // Rubrics that match more of the patient's keywords count for more, so a remedy
+    // that merely appears in many loosely-related rubrics no longer wins by volume.
+    const relevance = row.relevance ?? 1;
+    const contribution = Math.round(row.grade * weight * relevance * 10) / 10;
 
     if (!remedyMap.has(row.remedy_name)) {
       remedyMap.set(row.remedy_name, {

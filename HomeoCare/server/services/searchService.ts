@@ -17,7 +17,6 @@ import {
   searchScraperRubrics,
   getRemediesForRubricIds,
   searchScraperRemedySymptoms,
-  fetchLegacySymptoms,
   type RankedRubric,
   type ScraperRemedyRow,
 } from "../utils/supabase";
@@ -69,7 +68,7 @@ export interface SearchResult {
   contradictions: Contradiction[];
   rubrics_used:   string[];
   rubric_count:   number;
-  engine:         "scraper" | "remedy_symptoms" | "legacy";
+  engine:         "scraper" | "remedy_symptoms";
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -252,57 +251,13 @@ export async function search(input: {
     console.error("[Search] remedy_symptoms fallback failed:", e?.message || e);
   }
 
-  // ── STEP 3: Last resort — legacy symptoms table ───────────────
-  console.log(`[Search] Last resort: legacy symptoms table`);
-  try {
-    const legRows = await fetchLegacySymptoms(kw, sectionPats);
-    const scoreMap = new Map<string, { name: string; total: number; count: number; matched: string[]; seen: Set<string> }>();
-
-    for (const row of legRows) {
-      if (!row.remedy || !row.symptom) continue;
-      const text = String(row.symptom).toLowerCase();
-      const hits = countGroupMatches(text, kw.groups);
-      if (!hits) continue;
-
-      const key = normalizeRemedyName(row.remedy);
-      if (!key) continue;
-      if (!scoreMap.has(key)) scoreMap.set(key, { name: row.remedy, total: 0, count: 0, matched: [], seen: new Set() });
-      const e = scoreMap.get(key)!;
-
-      if (e.seen.has(text)) continue;
-      e.seen.add(text);
-      e.total += hits * hits * (row.intensity || 1);
-      e.count += 1;
-      e.matched.push(row.symptom);
-    }
-
-    if (scoreMap.size > 0) {
-      const sorted = Array.from(scoreMap.values()).sort((a, b) => b.total - a.total);
-      const maxScore = sorted[0].total || 1;
-      const all: RemedyResult[] = sorted.slice(0, 8).map((e) => {
-        const pct = Math.round((e.total / maxScore) * 100);
-        const uniq = [...new Set(e.matched)].slice(0, 5);
-        return {
-          name: toTitleCase(e.name), score: pct,
-          confidence: Math.min(100, e.count * 10),
-          dosage: gradeToDosage(1.5),
-          category: section || "General",
-          explanation: uniq,
-          why_explanation: `${toTitleCase(e.name)} matched ${e.count} symptom(s). Score: ${pct}/100.`,
-          matching_symptoms: uniq, covered_rubrics: [],
-          safety_flags: buildSafetyFlags(e.name, healthProfile),
-        };
-      });
-      return { remedies: all.slice(0, 3), alternatives: all.slice(3, 5), contradictions: [], rubrics_used: [], rubric_count: 0, engine: "legacy" };
-    }
-  } catch (e: any) {
-    dbError = e;
-    console.error("[Search] legacy fallback failed:", e?.message || e);
-  }
+  // (There used to be a third step reading the main database's `symptoms` table. That table holds
+  // 15,000 generated rows - the same templated sentence attached to many different remedies - so it
+  // produced invented suggestions. It is no longer read.)
 
   // Nothing found anywhere. If a database call failed along the way, say so
   // (the route returns HTTP 500, the UI shows "Something went wrong") instead of
   // pretending the symptoms simply have no remedies.
   if (dbError) throw dbError;
-  return emptyResult("legacy");
+  return emptyResult("remedy_symptoms");
 }

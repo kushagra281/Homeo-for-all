@@ -487,19 +487,3 @@ export async function fetchSearchHistory(patientId: string): Promise<any[]> {
   if (error) { console.error("[DB] fetchSearchHistory:", error); return []; }
   return data || [];
 }
-
-// Legacy fallback
-export async function fetchLegacySymptoms(kw: ExtractedKeywords, sectionPats?: string[]): Promise<any[]> {
-  if (!kw.groups.length) return [];
-  return searchByGroups<any>({
-    db: mainDB(),
-    table: "symptoms",
-    select: "remedy, symptom, category, intensity",
-    textCols: ["symptom"],
-    sectionCol: "category",
-    sectionPats,
-    kw,
-    perQuery: 300,
-    label: "fetchLegacySymptoms",
-  });
-}

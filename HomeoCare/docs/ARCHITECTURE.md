@@ -27,13 +27,13 @@ server/storage.ts                  in-memory remedy list used only by the browse
 2. `searchScraperRubrics` finds matching rubrics in the scraper database and ranks them by how many
    keywords they contain (Kent lecture prose counts for less than a precise Boericke line).
 3. `getRemediesForRubricIds` loads the remedies of those rubrics; `scoreRemedies` ranks them.
-4. If nothing is found it falls back to `remedy_symptoms`, then to the legacy `symptoms` table.
+4. If nothing is found it falls back to `remedy_symptoms`. If that finds nothing either, the result is empty (or an error if a database call failed). The generated `symptoms` table in the main project is deliberately not read.
 5. If every query failed (database paused, wrong key) the route answers with an error - it does
    not pretend there are no results.
 
 ## Data
 Two Supabase projects:
-- **main** (`SUPABASE_URL`): `patients`, `search_history`, legacy `symptoms`.
+- **main** (`SUPABASE_URL`): `patients`, `search_history` (a generated `symptoms` table also exists there but is unused).
 - **scraper** (`SCRAPER_SUPABASE_URL` / `SCRAPER_SUPABASE_KEY`): `remedies`, `remedy_sections`,
   `remedy_symptoms`, `rubrics`, `rubric_remedies`. Built by the `materia-medica-scraper` repo from
   Boericke's and Kent's Materia Medica. These are materia medica texts, not a repertory: they carry

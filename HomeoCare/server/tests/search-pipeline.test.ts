@@ -122,14 +122,15 @@ if (scenario === "main") {
 }
 
 if (scenario === "noenv") {
-  await t("scraper env vars missing: clear error from scraperDB, legacy table in main DB still answers", async () => {
+  await t("scraper env vars missing: search fails with a clear error (the generated legacy table is NOT used)", async () => {
     handler = (u) => u.pathname.endsWith("/symptoms")
-      ? { body: [{ remedy: "Belladonna", symptom: "Throbbing headache worse from light", category: "HEAD", intensity: 3 },
-                 { remedy: "Bryonia", symptom: "Headache worse from motion", category: "HEAD", intensity: 2 }] }
+      ? { body: [{ remedy: "Belladonna", symptom: "Throbbing headache worse from light", category: "HEAD", intensity: 3 }] }
       : { body: [] };
-    const res = await search({ symptoms: ["throbbing headache worse from light"], filters: {} });
-    assert.equal(res.engine, "legacy"); assert.equal(res.remedies[0].name, "Belladonna");
-    assert.ok(!calls.some((u) => u.host === "scraper.test"));
+    await assert.rejects(
+      () => search({ symptoms: ["throbbing headache worse from light"], filters: {} }),
+      /SCRAPER_SUPABASE/
+    );
+    assert.ok(!calls.some((u) => u.pathname.endsWith("/symptoms")), "the legacy symptoms table must not be queried");
   });
 }
 console.log(`\n${n} checks passed (${scenario})`);

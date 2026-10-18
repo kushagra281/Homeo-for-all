@@ -3,7 +3,15 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (!supabaseUrl || !supabaseAnonKey) {
+  // createClient() throws on empty values, which would leave the whole app on a blank page.
+  console.error('[supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set - login and history are disabled')
+}
+
+export const supabase = createClient(
+  supabaseUrl || 'http://localhost:54321',
+  supabaseAnonKey || 'missing-anon-key'
+)
 export default supabase
 
 // ── AUTH ─────────────────────────────────────────────────────
@@ -117,10 +125,15 @@ export async function saveHealthProfile(profileData) {
 
   // Route through backend API — handles missing columns gracefully
   try {
+    // The server takes the user id from this token, not from the request body.
+    const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch('/api/profile/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, email: user.email, profile: profileData })
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token || ''}`
+      },
+      body: JSON.stringify({ profile: profileData })
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))

@@ -5,9 +5,22 @@
 // Output: scored, ranked remedy list with explanations
 
 import type { RubricMatch } from "./rubricService";
-import type { RubricRemedyRow } from "../utils/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────
+// (RubricRemedyRow used to be imported from utils/supabase but was never exported there.)
+export interface RubricRemedyRow {
+  rubric_code:  string;
+  rubric_label: string;
+  body_system:  string;
+  symptom_type: string;
+  weight:       number;
+  is_negative:  boolean;
+  remedy_name:  string;
+  grade:        number;
+  /** 0–1: how many of the patient's keywords this rubric matched. Missing = 1 (full weight). */
+  relevance?:   number;
+}
+
 export interface CoveredRubric {
   rubric_code:  string;
   label:        string;
@@ -101,7 +114,10 @@ export function scoreRemedies(
     if (!positiveCodes.has(row.rubric_code)) continue;
 
     const weight = WEIGHT[row.symptom_type] ?? 1;
-    const contribution = row.grade * weight;
+    // Rubrics that match more of the patient's keywords count for more, so a remedy
+    // that merely appears in many loosely-related rubrics no longer wins by volume.
+    const relevance = row.relevance ?? 1;
+    const contribution = Math.round(row.grade * weight * relevance * 10) / 10;
 
     if (!remedyMap.has(row.remedy_name)) {
       remedyMap.set(row.remedy_name, {
@@ -266,9 +282,11 @@ export function buildSafetyFlags(
   return flags;
 }
 
-// ── Grade → dosage ────────────────────────────────────────────────
-export function gradeToDosage(avgGrade: number): string {
-  if (avgGrade >= 3) return "200C — 3 pellets twice daily for 3 days, then once weekly";
-  if (avgGrade >= 2) return "30C — 3 pellets three times daily for 5 days";
-  return "6C — 3 pellets four times daily for 7 days";
+// ── Dosage ────────────────────────────────────────────────────────
+// The scraped data contains no potency or dose, and the "grade" it carries is not a
+// clinical strength (97% of rows are 1). The old function turned that into a specific
+// dose ("200C, 3 pellets twice daily..."), which is invented medical advice.
+// The argument is kept so existing callers do not change.
+export function gradeToDosage(_avgGrade?: number): string {
+  return "Potency and dose are not part of this data - consult a qualified homeopath";
 }

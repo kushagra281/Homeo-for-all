@@ -62,14 +62,14 @@ export class MemStorage implements IStorage {
                 id: randomUUID(), name: remedyName, category: "HEAD",
                 condition: "Head Conditions",
                 description: `${remedyName} is indicated for: ${symptomObj.Head}.${symptomObj.Chest ? ` Also: ${symptomObj.Chest}` : ''}`,
-                dosage: "30C potency, 3 pellets under tongue",
+                dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
                 symptoms: symptomObj.Chest ? [symptomObj.Head, symptomObj.Chest] : [symptomObj.Head],
                 keywords: [remedyName.toLowerCase(), "head", "headache", symptomObj.Head.toLowerCase()],
                 symptom_mappings: this.createSymptomMappings([symptomObj.Head]),
-                modalities: { better: ["rest", "pressure"], worse: ["movement", "light"] },
-                potencies: ["6C", "30C", "200C"],
-                age_groups: index % 3 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"],
-                genders: index % 4 === 0 ? ["male"] : index % 4 === 1 ? ["female"] : ["male", "female", "any"],
+                modalities: { better: [], worse: [] },
+                potencies: [],
+                age_groups: [],
+                genders: [],
                 synonym_names: [remedyName.toLowerCase()]
               };
               this.remedies.set(remedy.id, remedy);
@@ -90,14 +90,14 @@ export class MemStorage implements IStorage {
                 id: randomUUID(), name: remedyName, category: "MIND",
                 condition: "Mental & Emotional Conditions",
                 description: `${remedyName} for mental symptoms: ${symptomObj.Mind}.`,
-                dosage: "30C potency, 3 pellets twice daily",
+                dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
                 symptoms: symptomObj.Head ? [symptomObj.Mind, symptomObj.Head] : [symptomObj.Mind],
                 keywords: [remedyName.toLowerCase(), "mind", "mental", "emotional", symptomObj.Mind.toLowerCase()],
                 symptom_mappings: this.createSymptomMappings([symptomObj.Mind]),
-                modalities: { better: ["company", "warmth"], worse: ["alone", "cold"] },
-                potencies: ["30C", "200C", "1M"],
-                age_groups: index % 2 === 0 ? ["adult", "senior"] : ["child", "adult", "senior"],
-                genders: index % 3 === 0 ? ["female"] : index % 3 === 1 ? ["male"] : ["male", "female", "any"],
+                modalities: { better: [], worse: [] },
+                potencies: [],
+                age_groups: [],
+                genders: [],
                 synonym_names: [remedyName.toLowerCase()]
               };
               this.remedies.set(remedy.id, remedy);
@@ -119,14 +119,14 @@ export class MemStorage implements IStorage {
                   id: randomUUID(), name: remedyName, category: "HEAD",
                   condition: `${symptom.charAt(0).toUpperCase() + symptom.slice(1)}`,
                   description: `${remedyName} indicated for ${symptom} and head conditions.`,
-                  dosage: "30C potency, 3 pellets as needed",
+                  dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
                   symptoms: [symptom, "head-related symptoms"],
                   keywords: [remedyName.toLowerCase(), "head", symptom.toLowerCase(), "headache"],
                   symptom_mappings: this.createSymptomMappings([symptom]),
-                  modalities: { better: ["rest"], worse: ["movement"] },
-                  potencies: ["6C", "30C", "200C"],
-                  age_groups: ["child", "adult", "senior"],
-                  genders: ["male", "female", "any"],
+                  modalities: { better: [], worse: [] },
+                  potencies: [],
+                  age_groups: [],
+                  genders: [],
                   synonym_names: [remedyName.toLowerCase()]
                 };
                 this.remedies.set(remedy.id, remedy);
@@ -149,14 +149,14 @@ export class MemStorage implements IStorage {
                   id: randomUUID(), name: remedyName, category: "MIND",
                   condition: `${symptom.charAt(0).toUpperCase() + symptom.slice(1)}`,
                   description: `${remedyName} indicated for ${symptom} and mental-emotional conditions.`,
-                  dosage: "30C potency, 3 pellets twice daily",
+                  dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
                   symptoms: [symptom, "emotional symptoms", "mental symptoms"],
                   keywords: [remedyName.toLowerCase(), "mind", "mental", "emotional", symptom.toLowerCase()],
                   symptom_mappings: this.createSymptomMappings([symptom, "emotional symptoms"]),
-                  modalities: { better: ["company", "consolation"], worse: ["alone", "stress"] },
-                  potencies: ["30C", "200C"],
-                  age_groups: ["adult", "senior"],
-                  genders: ["male", "female", "any"],
+                  modalities: { better: [], worse: [] },
+                  potencies: [],
+                  age_groups: [],
+                  genders: [],
                   synonym_names: [remedyName.toLowerCase()]
                 };
                 this.remedies.set(remedy.id, remedy);
@@ -190,7 +190,7 @@ export class MemStorage implements IStorage {
               category: (sym.category || sym.section || "GENERALS").toUpperCase(),
               condition: sym.rubric || sym.symptom || sym.name || "",
               description: `${remedyName} is indicated for: ${sym.rubric || sym.symptom || ""}. Location: ${sym.location || "general"}.`,
-              dosage: "30C potency, 3 pellets as needed",
+              dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
               symptoms: [sym.rubric || sym.symptom || "", sym.location || ""].filter(Boolean),
               keywords: [
                 remedyName.toLowerCase(),
@@ -205,9 +205,9 @@ export class MemStorage implements IStorage {
                 better: sym.modalities?.better || [],
                 worse: sym.modalities?.worse || [],
               },
-              potencies: ["6C", "30C", "200C"],
-              age_groups: ["child", "adult", "senior"],
-              genders: ["male", "female", "any"],
+              potencies: [],
+              age_groups: [],
+              genders: [],
               synonym_names: [remedyName.toLowerCase()],
             };
             this.remedies.set(remedy.id, remedy);
@@ -231,7 +231,7 @@ export class MemStorage implements IStorage {
       {
         name: "Belladonna", category: "HEAD", condition: "Throbbing Headaches",
         description: "Classic remedy for sudden, intense headaches with heat and redness.",
-        dosage: "30C potency, 3 pellets under tongue",
+        dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
         symptoms: ["Sudden onset", "Throbbing pain", "Heat sensation"],
         keywords: ["belladonna", "head", "headache", "throbbing", "sudden", "heat"],
         symptom_mappings: this.createSymptomMappings(["Sudden onset", "Throbbing pain"]),
@@ -242,7 +242,7 @@ export class MemStorage implements IStorage {
       {
         name: "Arsenicum Album", category: "MIND", condition: "Anxiety",
         description: "For anxiety with restlessness and perfectionism.",
-        dosage: "30C potency, 3 pellets under tongue",
+        dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
         symptoms: ["Restlessness", "Anxiety", "Perfectionism"],
         keywords: ["arsenicum", "mind", "anxiety", "restlessness"],
         symptom_mappings: this.createSymptomMappings(["Restlessness", "Anxiety"]),
@@ -253,7 +253,7 @@ export class MemStorage implements IStorage {
       {
         name: "Nux Vomica", category: "STOMACH", condition: "Digestive complaints",
         description: "For digestive issues from overindulgence, stress, sedentary lifestyle.",
-        dosage: "30C potency, 3 pellets under tongue",
+        dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
         symptoms: ["Nausea", "Constipation", "Irritability", "Overwork"],
         keywords: ["nux vomica", "stomach", "digestion", "nausea", "constipation", "liver"],
         symptom_mappings: this.createSymptomMappings(["Nausea", "Constipation"]),
@@ -264,7 +264,7 @@ export class MemStorage implements IStorage {
       {
         name: "Pulsatilla", category: "FEMALE", condition: "Female complaints",
         description: "For weepy, gentle patients who need consolation.",
-        dosage: "30C potency, 3 pellets twice daily",
+        dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
         symptoms: ["Weeping", "Changeable symptoms", "Craving consolation"],
         keywords: ["pulsatilla", "female", "weeping", "changeable", "menses"],
         symptom_mappings: this.createSymptomMappings(["Weeping", "Changeable symptoms"]),
@@ -275,7 +275,7 @@ export class MemStorage implements IStorage {
       {
         name: "Rhus Toxicodendron", category: "EXTREMITIES", condition: "Joint and muscle pain",
         description: "For stiffness and pain worse on first motion, better continued movement.",
-        dosage: "30C potency, 3 pellets as needed",
+        dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
         symptoms: ["Joint stiffness", "Pain worse rest", "Pain better movement", "Restlessness"],
         keywords: ["rhus tox", "joints", "muscles", "stiffness", "arthritis", "rheumatism"],
         symptom_mappings: this.createSymptomMappings(["Joint stiffness", "Pain worse rest"]),
@@ -292,9 +292,9 @@ export class MemStorage implements IStorage {
         keywords: remedy.keywords || [],
         symptom_mappings: remedy.symptom_mappings || {},
         modalities: remedy.modalities || { better: [], worse: [] },
-        potencies: remedy.potencies || ["30C"],
-        age_groups: remedy.age_groups || ["adult"],
-        genders: remedy.genders || ["any"],
+        potencies: remedy.potencies || [],
+        age_groups: remedy.age_groups || [],
+        genders: remedy.genders || [],
         synonym_names: remedy.synonym_names || []
       });
     });
@@ -409,18 +409,18 @@ export class MemStorage implements IStorage {
 
   private passesFilters(remedy: Remedy, filters?: RemedyFilters): boolean {
     if (!filters) return true;
-    if (filters.age_group && remedy.age_groups) {
+    if (filters.age_group && remedy.age_groups?.length) {
       const ageNum = parseInt(filters.age_group.split('-')[0]);
       const isChild = ageNum <= 13;
       const isSenior = ageNum >= 63;
       if (isChild && !remedy.age_groups.includes("child")) return false;
       if (isSenior && !remedy.age_groups.includes("senior")) return false;
     }
-    if (filters.gender && remedy.genders) {
+    if (filters.gender && remedy.genders?.length) {
       const g = filters.gender.toLowerCase();
       if (!remedy.genders.includes(g) && !remedy.genders.includes("any")) return false;
     }
-    if (filters.potency && remedy.potencies && !remedy.potencies.includes(filters.potency)) return false;
+    if (filters.potency && remedy.potencies?.length && !remedy.potencies.includes(filters.potency)) return false;
     if (filters.symptom_location && remedy.symptoms) {
       const hasMatch = remedy.symptoms.some(s => s.toLowerCase().includes(filters.symptom_location!.toLowerCase()))
         || remedy.keywords?.some(k => k.includes(filters.symptom_location!.toLowerCase()));
@@ -451,9 +451,9 @@ export class MemStorage implements IStorage {
       keywords: insertRemedy.keywords || [],
       symptom_mappings: insertRemedy.symptom_mappings || {},
       modalities: insertRemedy.modalities || { better: [], worse: [] },
-      potencies: insertRemedy.potencies || ["30C"],
-      age_groups: insertRemedy.age_groups || ["adult"],
-      genders: insertRemedy.genders || ["any"],
+      potencies: insertRemedy.potencies || [],
+      age_groups: insertRemedy.age_groups || [],
+      genders: insertRemedy.genders || [],
       synonym_names: insertRemedy.synonym_names || []
     };
     this.remedies.set(id, remedy);

@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { initializeWebSocket } from "./websocket";
 
 const app = express();
 
@@ -38,7 +39,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-app.use(express.json({ limit: "10mb" }));
+// Only the report-image route needs a big body; everything else is small JSON.
+app.set("trust proxy", 1);   // behind Render/Railway: use the real client IP (rate limiting)
+app.use("/api/remedies/analyze-report", express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "200kb" }));
 app.use(express.urlencoded({ extended: false }));
 
 // Request logger
@@ -72,6 +76,13 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+  initializeWebSocket(server);   // community chat at /ws/chat (was never started)
+
+  // Unknown /api paths must be a JSON 404, not the single-page-app HTML with status 200
+  // (that made every missing endpoint look like it had "worked" and returned garbage).
+  app.use("/api", (req: Request, res: Response) => {
+    res.status(404).json({ message: `No such API route: ${req.method} ${req.originalUrl}` });
+  });
 
   // ── FIX 2a: removed "throw err" — was crashing Node process in production
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

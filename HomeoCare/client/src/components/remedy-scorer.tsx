@@ -247,10 +247,24 @@ export default function RemedyScorer({
     },
   });
 
+  // Turn a questionnaire answer into a searchable phrase. The old code sent the bare
+  // answer ("Cold", "None", "No thirst"), which lost whether it was a "worse" or a
+  // "better" answer and searched for the opposite of negative answers.
+  const answerToPhrase = (question: string, answer: string): string => {
+    const a = answer.trim();
+    const lower = a.toLowerCase();
+    const NEGATIVE = ["none", "nothing", "nothing specific", "no pattern", "no change", "no difficulty", "no pain", "no sensation", "no thirst"];
+    if (!a || NEGATIVE.includes(lower)) return "";                     // not a symptom to search for
+    if (/severe/i.test(question)) return "";                           // Mild / Moderate / Severe / Unbearable
+    if (/worse/i.test(question) && !/^(worse|better)\b/i.test(a)) return `worse ${a}`;
+    if (/better/i.test(question) && !/^(worse|better)\b/i.test(a)) return `better ${a}`;
+    return a;
+  };
+
   const submitToAI = (syms: string[], answers: Record<string, string>) => {
     const allSymptoms = [
       ...syms,
-      ...Object.values(answers),
+      ...Object.entries(answers).map(([q, a]) => answerToPhrase(q, a)),
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
     ].filter(Boolean);
 

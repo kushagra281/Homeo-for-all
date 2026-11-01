@@ -498,6 +498,15 @@ export async function upsertProfileRow(userId: string, email: string, profile: R
     }
   }
 
+  // Number columns reject "" (an untouched form field) and text such as "35 yrs": send a number or null.
+  for (const col of ["age", "height_cm", "weight_kg"]) {
+    if (col in safeProfile) {
+      const n = Number(String(safeProfile[col]).trim());
+      safeProfile[col] = String(safeProfile[col]).trim() !== "" && Number.isFinite(n) ? n : null;
+    }
+  }
+  if (typeof safeProfile.age === "number") safeProfile.age = Math.round(safeProfile.age);
+
   console.log("[DB] Upserting profile for userId:", userId, "columns:", Object.keys(safeProfile).length);
 
   // If the table is missing a column, drop just that column and try again (up to a few times)

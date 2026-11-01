@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { checkReportFile, setPendingReports } from "@/lib/pendingReports"
 
 const RUBRIC_CATEGORIES = [
   { name: "Mind",               icon: "🧠", desc: "Mental & Emotional" },
@@ -75,6 +76,7 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false)
 
   const [showLangMenu, setShowLangMenu] = useState(false)
+  const [reportError, setReportError]   = useState("")
 
   const LANGUAGES = [
     { code: "en", label: "English" },
@@ -180,8 +182,17 @@ export default function Home() {
     setLocation(`/symptom-analysis?${p.toString()}`)
   }
 
+  // The chosen files are kept in memory and read on the symptom page, which extracts the
+  // symptoms and adds them to the search. (They used to be discarded here.)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) setLocation(`/symptom-analysis?category=Clinical`)
+    const files = Array.from(e.target.files || [])
+    e.target.value = ""
+    if (!files.length) return
+    const problem = files.map(f => ({ f, msg: checkReportFile(f) })).find(x => x.msg)
+    if (problem) { setReportError(`${problem.f.name}: ${problem.msg}.`); return }
+    setReportError("")
+    setPendingReports(files)
+    setLocation("/symptom-analysis?report=1")
   }
 
   const handleLogout = async () => { await signOut(); setLocation("/auth") }
@@ -434,7 +445,7 @@ export default function Home() {
                   className="pl-12 pr-4 py-6 text-base rounded-xl border-2 border-green-200 focus:border-green-500 shadow-sm" />
               </div>
               <div className="relative">
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple
+                <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif,image/*" multiple
                   onChange={handleFileUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
                 <Button type="button" variant="outline"
@@ -449,6 +460,11 @@ export default function Home() {
               </Button>
             </div>
           </form>
+          {reportError && (
+            <p className="mt-2 text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+              {reportError}
+            </p>
+          )}
         </div>
 
         {/* Categories */}

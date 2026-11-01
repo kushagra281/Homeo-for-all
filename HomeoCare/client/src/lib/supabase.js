@@ -44,18 +44,30 @@ export async function getCurrentUser() {
 // ── HISTORY ──────────────────────────────────────────────────
 export async function saveSearchHistory(symptoms, results, healthHistory) {
   const user = await getCurrentUser()
-  if (!user) return
+  if (!user) return { ok: false, reason: 'not signed in' }
+
+  // Keep only what the history list needs; the full result objects carry every matched
+  // rubric and are several times larger.
+  const slim = (Array.isArray(results) ? results : []).slice(0, 3).map(r => ({
+    remedy: { name: r?.remedy?.name || '' },
+    score: r?.score ?? null,
+    matching_symptoms: (r?.matching_symptoms || []).slice(0, 5),
+    history_matches: r?.history_matches || []
+  }))
 
   const { error } = await supabase.from('search_history').insert({
     patient_id:     user.id,
-    symptoms:       Array.isArray(symptoms) ? symptoms : [],
-    results:        Array.isArray(results)  ? results.slice(0, 3) : [],
-    // FIX: save as { text: "..." } — not null
+    symptoms:       Array.isArray(symptoms) ? symptoms.filter(s => !String(s).startsWith('🔍')) : [],
+    results:        slim,
     health_history: healthHistory && healthHistory.trim()
       ? { text: healthHistory.trim() }
       : null
   })
-  if (error) console.error('saveSearchHistory error:', error)
+  if (error) {
+    console.error('saveSearchHistory error:', error)
+    return { ok: false, reason: error.message }
+  }
+  return { ok: true }
 }
 
 export async function getSearchHistory() {

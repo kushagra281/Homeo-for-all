@@ -41,7 +41,8 @@ router.post("/score", searchLimit, async (req, res) => {
       `system=${filters.symptom_location || filters.category || "any"}`
     );
 
-    const result = await search({ symptoms, filters, healthProfile });
+    const healthHistory = typeof req.body?.healthHistory === "string" ? req.body.healthHistory.slice(0, 600) : undefined;
+    const result = await search({ symptoms, filters, healthProfile, healthHistory });
 
     // Flatten to array for backward compatibility with existing frontend
     // Frontend expects: [{ remedy: {...}, score, confidence, ... }]
@@ -71,6 +72,8 @@ router.post("/score", searchLimit, async (req, res) => {
       explanation:       r.explanation,
       safety_flags:      r.safety_flags,
       ai_insight:        r.ai_insight,
+      history_matches:   r.history_matches || [],
+      history_considered: result.history_considered || [],
       engine:            result.engine,
       contradictions:    result.contradictions,
       rubrics_used:      result.rubrics_used,

@@ -45,6 +45,28 @@ export function mainDB(): SupabaseClient {
   return _main;
 }
 
+// The project the BROWSER signs in to (VITE_*) is, by definition, the one that issued the user's
+// token. If the server's SUPABASE_URL ever points at another project, every token is rejected as
+// "invalid" and users are told their session expired, so token checks and per-user queries use the
+// browser's project first.
+function userProject(): { url: string; key: string } {
+  const viteUrl = process.env.VITE_SUPABASE_URL, viteKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (viteUrl && viteKey) return { url: viteUrl, key: viteKey };
+  return {
+    url: process.env.SUPABASE_URL || "",
+    key: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_KEY || "",
+  };
+}
+
+let _auth: SupabaseClient | null = null;
+export function authDB(): SupabaseClient {
+  if (_auth) return _auth;
+  const { url, key } = userProject();
+  if (!url || !key) throw new Error("Supabase URL / anon key missing");
+  _auth = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return _auth;
+}
+
 // ── Scraper DB ────────────────────────────────────────────────────
 let _scraper: SupabaseClient | null = null;
 export function scraperDB(): SupabaseClient {
@@ -436,8 +458,7 @@ export async function searchScraperRemedySymptoms(
 // own access token, exactly like the browser does, and RLS lets them reach their own rows.
 export function userDB(accessToken?: string): SupabaseClient {
   if (process.env.SUPABASE_SERVICE_KEY || !accessToken) return mainDB();
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+  const { url, key } = userProject();
   if (!url || !key) throw new Error("Main SUPABASE_URL / SUPABASE_ANON_KEY missing");
   return createClient(url, key, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },

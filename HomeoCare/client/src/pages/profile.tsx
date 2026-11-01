@@ -140,7 +140,9 @@ export default function ProfilePage() {
     const load = async () => {
       const user = await getCurrentUser()
       if (!user) { setLocation("/auth"); return }
-      const profile = await getHealthProfile()
+      let profile: any = null
+      try { profile = await getHealthProfile() }
+      catch { setError("Your saved profile could not be loaded. Please refresh the page.") }
       if (profile) {
         setForm({
           name:               profile.name || "",

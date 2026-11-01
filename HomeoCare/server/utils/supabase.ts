@@ -430,14 +430,29 @@ export async function searchScraperRemedySymptoms(
 // MAIN DB QUERIES
 // ================================================================
 
-export async function fetchProfile(userId: string): Promise<any | null> {
-  const { data, error } = await mainDB().from("patients").select("*").eq("id", userId).single();
+// Database access for one signed-in user. With a service key (bypasses RLS) the shared client is
+// used. Without one, the server would only hold the anon key, and row-level security then hides
+// every row (reads came back empty, writes were refused) - so the request is made WITH the user's
+// own access token, exactly like the browser does, and RLS lets them reach their own rows.
+export function userDB(accessToken?: string): SupabaseClient {
+  if (process.env.SUPABASE_SERVICE_KEY || !accessToken) return mainDB();
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+  if (!url || !key) throw new Error("Main SUPABASE_URL / SUPABASE_ANON_KEY missing");
+  return createClient(url, key, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+export async function fetchProfile(userId: string, accessToken?: string): Promise<any | null> {
+  const { data, error } = await userDB(accessToken).from("patients").select("*").eq("id", userId).single();
   if (error?.code === "PGRST116") return null;
   if (error) console.error("[DB] fetchProfile:", error.message);
   return data || null;
 }
 
-export async function upsertProfileRow(userId: string, email: string, profile: Record<string, any>): Promise<void> {
+export async function upsertProfileRow(userId: string, email: string, profile: Record<string, any>, accessToken?: string): Promise<void> {
   // Build safe profile object — only include columns that are not undefined/null empty
   const safeProfile: Record<string, any> = { id: userId, email, updated_at: new Date().toISOString() };
 
@@ -458,7 +473,7 @@ export async function upsertProfileRow(userId: string, email: string, profile: R
 
   console.log("[DB] Upserting profile for userId:", userId, "columns:", Object.keys(safeProfile).length);
 
-  const { error } = await mainDB().from("patients").upsert(safeProfile, { onConflict: "id" });
+  const { error } = await userDB(accessToken).from("patients").upsert(safeProfile, { onConflict: "id" });
   if (error) {
     // If error is about missing column, retry without that column
     if (error.message.includes("column") && error.message.includes("does not exist")) {
@@ -466,7 +481,7 @@ export async function upsertProfileRow(userId: string, email: string, profile: R
       if (col) {
         console.warn(`[DB] Column ${col} missing — retrying without it`);
         delete safeProfile[col];
-        const { error: error2 } = await mainDB().from("patients").upsert(safeProfile, { onConflict: "id" });
+        const { error: error2 } = await userDB(accessToken).from("patients").upsert(safeProfile, { onConflict: "id" });
         if (error2) throw new Error(error2.message);
         return;
       }
@@ -480,8 +495,8 @@ export async function insertSearchHistory(patientId: string, symptoms: string[],
   if (error) console.error("[DB] insertSearchHistory:", error.message);
 }
 
-export async function fetchSearchHistory(patientId: string): Promise<any[]> {
-  const { data, error } = await mainDB().from("search_history")
+export async function fetchSearchHistory(patientId: string, accessToken?: string): Promise<any[]> {
+  const { data, error } = await userDB(accessToken).from("search_history")
     .select("id, symptoms, rubrics_used, results, confidence, created_at")
     .eq("patient_id", patientId).order("created_at", { ascending: false }).limit(20);
   if (error) { console.error("[DB] fetchSearchHistory:", error); return []; }

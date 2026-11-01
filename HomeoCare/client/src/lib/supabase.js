@@ -124,29 +124,23 @@ export async function getHealthProfile() {
   const user = await getCurrentUser()
   if (!user) return null
   // The profile page and the safety checks need every saved column (age, heart disease, ...).
-  // The old query selected only id/email/name/created_at, so saved data never reappeared.
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/api/profile/me', {
-      headers: { Authorization: `Bearer ${session?.access_token || ''}` }
-    })
-    if (!res.ok) return null
-    return (await res.json()) || null
-  } catch (e) {
-    console.error('[API] getHealthProfile failed:', e)
-    return null
-  }
+  const { data: { session } } = await supabase.auth.getSession()
+  const res = await fetch('/api/profile/me', {
+    headers: { Authorization: `Bearer ${session?.access_token || ''}` }
+  })
+  if (!res.ok) throw new Error('profile request failed: ' + res.status)
+  return (await res.json()) || null   // null = nothing saved yet
 }
 
 export async function saveHealthProfile(profileData) {
   const user = await getCurrentUser()
-  if (!user) return
+  if (!user) throw new Error('Please sign in again to save your profile.')
 
-  // Route through backend API — handles missing columns gracefully
+  // The server takes the user id from this token, not from the request body.
+  const { data: { session } } = await supabase.auth.getSession()
+  let res
   try {
-    // The server takes the user id from this token, not from the request body.
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/api/profile/save', {
+    res = await fetch('/api/profile/save', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -154,12 +148,16 @@ export async function saveHealthProfile(profileData) {
       },
       body: JSON.stringify({ profile: profileData })
     })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      console.error('[API] saveHealthProfile failed:', err.message)
-    }
   } catch (e) {
     console.error('[API] saveHealthProfile error:', e)
+    throw new Error('Could not reach the server. Your profile was NOT saved.')
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    console.error('[API] saveHealthProfile failed:', res.status, err.message)
+    throw new Error(res.status === 401
+      ? 'Your session has expired. Please sign in again.'
+      : 'Your profile could not be saved. Please try again.')
   }
 }
 

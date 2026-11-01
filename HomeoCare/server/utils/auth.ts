@@ -11,6 +11,7 @@ declare module "express-serve-static-core" {
   interface Request {
     userId?: string;
     userEmail?: string;
+    accessToken?: string;
   }
 }
 
@@ -24,6 +25,7 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
     if (error || !data?.user) return res.status(401).json({ message: "Invalid or expired session" });
     req.userId = data.user.id;
     req.userEmail = data.user.email || "";
+    req.accessToken = token;
     next();
   } catch (e: any) {
     console.error("[Auth] could not verify token:", e?.message);

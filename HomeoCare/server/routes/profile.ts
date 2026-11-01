@@ -16,7 +16,7 @@ router.use(requireUser);
 // ── GET /api/profile/me ───────────────────────────────────────────
 router.get("/me", async (req, res) => {
   try {
-    res.json(await fetchProfile(req.userId!));
+    res.json(await fetchProfile(req.userId!, req.accessToken));
   } catch (error: any) {
     console.error("[Route] profile get:", error);
     res.status(500).json({ message: "Failed to fetch profile" });
@@ -28,7 +28,7 @@ router.get("/me", async (req, res) => {
 router.post("/save", async (req, res) => {
   try {
     const { profile } = req.body || {};
-    await upsertProfileRow(req.userId!, req.userEmail || "", profile || {});
+    await upsertProfileRow(req.userId!, req.userEmail || "", profile || {}, req.accessToken);
     res.json({ success: true });
   } catch (error: any) {
     console.error("[Route] profile save:", error);
@@ -39,7 +39,7 @@ router.post("/save", async (req, res) => {
 // ── GET /api/profile/history ──────────────────────────────────────
 router.get("/history", async (req, res) => {
   try {
-    res.json(await fetchSearchHistory(req.userId!));
+    res.json(await fetchSearchHistory(req.userId!, req.accessToken));
   } catch (error: any) {
     res.status(500).json({ message: "Failed to fetch history" });
   }

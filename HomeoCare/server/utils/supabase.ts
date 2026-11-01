@@ -457,7 +457,13 @@ export async function searchScraperRemedySymptoms(
 // every row (reads came back empty, writes were refused) - so the request is made WITH the user's
 // own access token, exactly like the browser does, and RLS lets them reach their own rows.
 export function userDB(accessToken?: string): SupabaseClient {
-  if (process.env.SUPABASE_SERVICE_KEY || !accessToken) return mainDB();
+  // The service key may only be used on the project it belongs to. If the server's SUPABASE_URL
+  // is a different project from the one users sign in to, fall back to the user's own token on
+  // the browser's project, so health data is never written to the wrong database.
+  const norm = (u?: string) => (u || "").replace(/\/+$/, "");
+  const sameProject = !process.env.VITE_SUPABASE_URL || !process.env.SUPABASE_URL
+    || norm(process.env.VITE_SUPABASE_URL) === norm(process.env.SUPABASE_URL);
+  if (!accessToken || (process.env.SUPABASE_SERVICE_KEY && sameProject)) return mainDB();
   const { url, key } = userProject();
   if (!url || !key) throw new Error("Main SUPABASE_URL / SUPABASE_ANON_KEY missing");
   return createClient(url, key, {

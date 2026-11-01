@@ -44,18 +44,30 @@ export async function getCurrentUser() {
 // ── HISTORY ──────────────────────────────────────────────────
 export async function saveSearchHistory(symptoms, results, healthHistory) {
   const user = await getCurrentUser()
-  if (!user) return
+  if (!user) return { ok: false, reason: 'not signed in' }
+
+  // Keep only what the history list needs; the full result objects carry every matched
+  // rubric and are several times larger.
+  const slim = (Array.isArray(results) ? results : []).slice(0, 3).map(r => ({
+    remedy: { name: r?.remedy?.name || '' },
+    score: r?.score ?? null,
+    matching_symptoms: (r?.matching_symptoms || []).slice(0, 5),
+    history_matches: r?.history_matches || []
+  }))
 
   const { error } = await supabase.from('search_history').insert({
     patient_id:     user.id,
-    symptoms:       Array.isArray(symptoms) ? symptoms : [],
-    results:        Array.isArray(results)  ? results.slice(0, 3) : [],
-    // FIX: save as { text: "..." } — not null
+    symptoms:       Array.isArray(symptoms) ? symptoms.filter(s => !String(s).startsWith('🔍')) : [],
+    results:        slim,
     health_history: healthHistory && healthHistory.trim()
       ? { text: healthHistory.trim() }
       : null
   })
-  if (error) console.error('saveSearchHistory error:', error)
+  if (error) {
+    console.error('saveSearchHistory error:', error)
+    return { ok: false, reason: error.message }
+  }
+  return { ok: true }
 }
 
 export async function getSearchHistory() {
@@ -111,12 +123,19 @@ export async function scoreRemediesFromSupabase(symptoms, filters = {}, question
 export async function getHealthProfile() {
   const user = await getCurrentUser()
   if (!user) return null
-  const { data } = await supabase
-    .from('patients')
-    .select('id, email, name, created_at')
-    .eq('id', user.id)
-    .single()
-  return data || null
+  // The profile page and the safety checks need every saved column (age, heart disease, ...).
+  // The old query selected only id/email/name/created_at, so saved data never reappeared.
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/profile/me', {
+      headers: { Authorization: `Bearer ${session?.access_token || ''}` }
+    })
+    if (!res.ok) return null
+    return (await res.json()) || null
+  } catch (e) {
+    console.error('[API] getHealthProfile failed:', e)
+    return null
+  }
 }
 
 export async function saveHealthProfile(profileData) {

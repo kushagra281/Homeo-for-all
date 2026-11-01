@@ -1,5 +1,5 @@
 // server/utils/groq.ts
-// Groq AI client — single instance, used only by rubricService and reportService
+// Groq AI client — single instance, used by the report-analysis route
 
 import OpenAI from "openai";
 

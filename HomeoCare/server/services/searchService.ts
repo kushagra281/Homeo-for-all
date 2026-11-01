@@ -49,6 +49,7 @@ export interface HealthProfile {
 }
 
 export interface RemedyResult {
+  history_matches?:  string[];   // parts of the patient history this remedy also covers
   name:              string;
   score:             number;
   confidence:        number;
@@ -69,6 +70,7 @@ export interface SearchResult {
   rubrics_used:   string[];
   rubric_count:   number;
   engine:         "scraper" | "remedy_symptoms";
+  history_considered?: string[];   // history phrases that were looked up
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -80,6 +82,69 @@ function cleanSymptoms(symptoms: string[]): string[] {
   );
 }
 
+// ── Patient history ───────────────────────────────────────────────
+// History does NOT add new remedies: it only re-orders remedies that already match the
+// complaint. A remedy that also appears under rubrics for the patient's existing conditions
+// gets a small bonus (at most +24%), and the card says which condition it matched.
+const NO_HISTORY = new Set(["", "none", "no", "nil", "normal", "n/a", "na", "-", "nothing"]);
+const STRUCTURED_HISTORY: [keyof HealthProfile, string][] = [
+  ["diabetes", "diabetes"], ["thyroid", "thyroid"], ["arthritis", "arthritis"],
+  ["heart_disease", "heart"], ["kidney", "kidney"], ["depression_anxiety", "anxiety depression"],
+];
+
+export function historyPhrases(text?: string, profile?: HealthProfile): string[] {
+  const parts: string[] = [];
+  const addText = (v: unknown) => { if (typeof v === "string") parts.push(...v.slice(0, 600).split(/[,;\n]/)); };
+  if (typeof text === "string" && text.trim()) {
+    addText(text);
+  } else if (profile) {
+    addText(profile.chronic_conditions); addText(profile.other_conditions); addText(profile.injury_history);
+    for (const [key, label] of STRUCTURED_HISTORY) {
+      const v = profile[key];
+      if (typeof v === "string" && !NO_HISTORY.has(v.trim().toLowerCase())) parts.push(label);
+    }
+  }
+  return [...new Set(
+    parts.map((p) => p.trim().toLowerCase()).filter((p) => p.length >= 3 && p.length <= 60 && !NO_HISTORY.has(p))
+  )].slice(0, 4);
+}
+
+async function remediesForHistory(phrases: string[]): Promise<Map<string, Set<string>>> {
+  const byRemedy = new Map<string, Set<string>>();
+  for (const phrase of phrases) {
+    const hk = extractKeywords([phrase]);
+    if (!hk.groups.length) continue;
+    const rubrics = (await searchScraperRubrics(hk, undefined)).slice(0, 15);
+    if (!rubrics.length) continue;
+    const rows = await getRemediesForRubricIds(rubrics.map((r) => r.id));
+    for (const row of rows) {
+      const name = normalizeRemedyName(row.remedy_name);
+      if (!name) continue;
+      if (!byRemedy.has(name)) byRemedy.set(name, new Set());
+      byRemedy.get(name)!.add(phrase);
+    }
+  }
+  return byRemedy;
+}
+
+function applyHistory<T extends RemedyScore & { history_matches?: string[] }>(
+  remedies: T[], byRemedy: Map<string, Set<string>>
+): T[] {
+  const top = remedies.slice(0, 10);
+  let max = 0;
+  for (const r of top) {
+    const hits = [...(byRemedy.get(normalizeRemedyName(r.remedy_name)) || [])];
+    if (hits.length) {
+      r.history_matches = hits;
+      r.score = r.score * (1 + 0.08 * Math.min(hits.length, 3));
+    }
+    max = Math.max(max, r.score);
+  }
+  if (max > 0) for (const r of top) r.score = Math.round((r.score / max) * 100);
+  top.sort((a, b) => b.score - a.score);
+  return [...top, ...remedies.slice(10)];
+}
+
 function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -88,7 +153,7 @@ function emptyResult(engine: SearchResult["engine"]): SearchResult {
   return { remedies: [], alternatives: [], contradictions: [], rubrics_used: [], rubric_count: 0, engine };
 }
 
-function formatResult(entry: RemedyScore, profile?: HealthProfile): RemedyResult {
+function formatResult(entry: RemedyScore & { history_matches?: string[] }, profile?: HealthProfile): RemedyResult {
   const avgGrade = entry.grade_sum / Math.max(entry.rubric_count, 1);
   const sections = [...new Set(entry.covered_rubrics.map((r: any) => r.section || r.rubric_code?.split(".")[0] || "General"))].join(", ");
   const topRubrics = entry.covered_rubrics
@@ -106,6 +171,7 @@ function formatResult(entry: RemedyScore, profile?: HealthProfile): RemedyResult
     why_explanation: entry.rubric_count > 0
       ? `${toTitleCase(entry.remedy_name)} covers ${entry.rubric_count} rubric(s) — ${topRubrics} — avg grade ${avgGrade.toFixed(1)}.`
       : `${toTitleCase(entry.remedy_name)} matched via symptom database.`,
+    history_matches:   entry.history_matches,
     matching_symptoms: [...new Set(entry.covered_rubrics.map((r: any) => r.label || r.rubric_text || "").filter(Boolean))].slice(0, 5),
     covered_rubrics:   entry.covered_rubrics,
     safety_flags:      buildSafetyFlags(entry.remedy_name, profile),
@@ -150,8 +216,9 @@ export async function search(input: {
   symptoms: string[];
   filters: SearchFilters;
   healthProfile?: HealthProfile;
+  healthHistory?: string;
 }): Promise<SearchResult> {
-  const { symptoms, filters, healthProfile } = input;
+  const { symptoms, filters, healthProfile, healthHistory } = input;
   const clean = cleanSymptoms(symptoms);
   if (!clean.length) return emptyResult("scraper");
 
@@ -183,13 +250,22 @@ export async function search(input: {
         );
 
         if (remedies.length >= 2) {
-          const top3 = remedies.slice(0, 3).map((r) => formatResult(r, healthProfile));
-          const alts = remedies.slice(3, 5).map((r) => formatResult(r, healthProfile));
+          // Patient history: re-order the matches (never adds remedies). Optional - a failure here
+          // must not break the search.
+          const phrases = historyPhrases(healthHistory, healthProfile);
+          let ordered: (RemedyScore & { history_matches?: string[] })[] = remedies;
+          if (phrases.length) {
+            try { ordered = applyHistory(remedies, await remediesForHistory(phrases)); }
+            catch (e: any) { console.error("[Search] patient history lookup failed:", e?.message || e); }
+          }
+          const top3 = ordered.slice(0, 3).map((r) => formatResult(r, healthProfile));
+          const alts = ordered.slice(3, 5).map((r) => formatResult(r, healthProfile));
           console.log(`[Search] Scraper engine: ${remedies.length} results, top=${remedies[0]?.remedy_name}`);
           return {
             remedies: top3, alternatives: alts, contradictions,
             rubrics_used: rubrics.slice(0, 10).map((r) => r.rubric_text),
             rubric_count: rubrics.length, engine: "scraper",
+            history_considered: phrases,
           };
         }
       }

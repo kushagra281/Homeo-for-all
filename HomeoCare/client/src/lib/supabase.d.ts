@@ -6,7 +6,7 @@ export function signUp(email: string, password: string, name: string): Promise<a
 export function signIn(email: string, password: string): Promise<any>;
 export function signOut(): Promise<void>;
 export function getCurrentUser(): Promise<any>;
-export function saveSearchHistory(symptoms: string[], results: any[], healthHistory?: string): Promise<void>;
+export function saveSearchHistory(symptoms: string[], results: any[], healthHistory?: string): Promise<{ ok: boolean; reason?: string }>;
 export function getSearchHistory(): Promise<any[]>;
 export function deleteHistoryItem(id: string | number): Promise<void>;
 export function scoreRemediesFromSupabase(symptoms: string[], filters?: any, questionAnswers?: any, healthHistory?: string): Promise<any[]>;

@@ -116,6 +116,24 @@ if (scenario === "main") {
     assert.equal(res.remedies.length, 0);
   });
 
+  await t("patient history only re-orders: no new remedies, matches are named", async () => {
+    handler = okHandler;
+    const base = await search({ symptoms: ["anxiety worse at night"], filters: {} });
+    const withHist = await search({ symptoms: ["anxiety worse at night"], filters: {}, healthHistory: "fear of death" });
+    const names = (r: any) => [...r.remedies, ...r.alternatives].map((x: any) => x.name).sort();
+    assert.deepEqual(names(withHist), names(base), "history must not add or drop remedies");
+    assert.deepEqual(withHist.history_considered, ["fear of death"]);
+    const fits = [...withHist.remedies, ...withHist.alternatives].filter((x: any) => x.history_matches?.length);
+    assert.ok(fits.length > 0, "a remedy that also covers the history should say so");
+    assert.equal(base.history_considered?.length ?? 0, 0);
+  });
+
+  await t("patient history lookup failing does not break the search", async () => {
+    handler = (u) => (dec(u).includes("death") ? { status: 503, body: { message: "down" } } : okHandler(u));
+    const res = await search({ symptoms: ["anxiety worse at night"], filters: {}, healthHistory: "fear of death" });
+    assert.ok(res.remedies.length >= 2);
+  });
+
   await t("no Groq call is made by search()", async () => {
     assert.ok(true); // search() no longer imports rubricService.mapSymptoms (checked by grep below)
   });

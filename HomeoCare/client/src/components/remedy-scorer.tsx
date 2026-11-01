@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import AdvancedFilters, { FilterState } from "./advanced-filters";
 import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
+import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 
 // ── AI Questions per category ─────────────────────────────────────
 const CATEGORY_QUESTIONS: Record<string, Array<{ q: string; options: string[] }>> = {
@@ -114,12 +115,12 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
     confidence >= 35 ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
                        "bg-gray-100 text-gray-500 border-gray-300";
   const label =
-    confidence >= 60 ? "High confidence" :
-    confidence >= 35 ? "Moderate confidence" : "Low confidence";
+    confidence >= 60 ? "Broad match" :
+    confidence >= 35 ? "Partial match" : "Narrow match";
 
   return (
     <span className={`text-xs border rounded-full px-2 py-0.5 font-medium ${color}`}>
-      {confidence}% — {label}
+      {label}
     </span>
   );
 }
@@ -177,6 +178,28 @@ function CoveredRubrics({ rubrics }: { rubrics: Array<{ rubric_code: string; lab
   );
 }
 
+// Short text version of the saved health profile, shown (and editable) as "Patient history".
+const HISTORY_FIELDS: [string, string][] = [
+  ["diabetes", "diabetes"], ["blood_pressure", "blood pressure"], ["thyroid", "thyroid"],
+  ["asthma", "asthma"], ["arthritis", "arthritis"], ["heart_disease", "heart disease"],
+  ["kidney", "kidney disease"], ["gastritis", "gastritis"], ["migraine", "migraine"],
+  ["cholesterol", "cholesterol"], ["allergy", "allergy"], ["depression_anxiety", "anxiety / depression"],
+  ["skin_condition", "skin condition"], ["constipation", "constipation"], ["pcod", "PCOD"],
+];
+const NONE_VALUES = new Set(["", "none", "no", "nil", "normal", "n/a", "na", "-"]);
+function summariseHistory(p: Record<string, any>): string {
+  const parts: string[] = [];
+  for (const [key, label] of HISTORY_FIELDS) {
+    const v = typeof p[key] === "string" ? p[key].trim().toLowerCase() : "";
+    if (!NONE_VALUES.has(v)) parts.push(label);
+  }
+  for (const key of ["chronic_conditions", "other_conditions", "injury_history"]) {
+    const v = typeof p[key] === "string" ? p[key].trim() : "";
+    if (!NONE_VALUES.has(v.toLowerCase())) parts.push(v);
+  }
+  return parts.join(", ");
+}
+
 // ── Props ─────────────────────────────────────────────────────────
 interface RemedyScorerProps {
   initialQuery?: string;
@@ -200,6 +223,9 @@ export default function RemedyScorer({
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [analyzingFiles, setAnalyzingFiles] = useState<string[]>([]);
+  const [reportError, setReportError] = useState("");
+  const [historyText, setHistoryText] = useState("");
+  const [historySaveError, setHistorySaveError] = useState("");
   const [healthProfile, setHealthProfile] = useState<Record<string, any> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -210,7 +236,12 @@ export default function RemedyScorer({
 
   useEffect(() => {
     getHealthProfile()
-      .then((p) => { if (p) setHealthProfile(p); })
+      .then((p) => {
+        if (!p) return;
+        setHealthProfile(p);
+        const summary = summariseHistory(p);
+        if (summary) setHistoryText((prev) => (prev.trim() ? prev : summary));
+      })
       .catch(() => {});
   }, []);
 
@@ -228,6 +259,7 @@ export default function RemedyScorer({
       symptoms: string[];
       filters: any;
       healthProfile?: Record<string, any> | null;
+      healthHistory?: string;
     }) => {
       const response = await fetch("/api/remedies/score", {
         method: "POST",
@@ -236,6 +268,7 @@ export default function RemedyScorer({
           symptoms:      data.symptoms,
           filters:       data.filters,
           healthProfile: data.healthProfile,
+          healthHistory: data.healthHistory,
         }),
       });
       if (!response.ok) throw new Error("Failed to score remedies");
@@ -243,7 +276,15 @@ export default function RemedyScorer({
     },
     onSuccess: async (data, variables) => {
       setShowResults(true);
-      await saveSearchHistory(variables.symptoms, data);
+      setHistorySaveError("");
+      try {
+        const saved = await saveSearchHistory(variables.symptoms, data, variables.healthHistory);
+        if (!saved?.ok && saved?.reason !== "not signed in") {
+          setHistorySaveError("This consultation could not be saved to your history. Please try again later.");
+        }
+      } catch {
+        setHistorySaveError("This consultation could not be saved to your history. Please try again later.");
+      }
     },
   });
 
@@ -263,7 +304,7 @@ export default function RemedyScorer({
 
   const submitToAI = (syms: string[], answers: Record<string, string>) => {
     const allSymptoms = [
-      ...syms,
+      ...syms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
       ...Object.entries(answers).map(([q, a]) => answerToPhrase(q, a)),
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
     ].filter(Boolean);
@@ -273,7 +314,7 @@ export default function RemedyScorer({
     );
     if (activeCategory) cleanFilters.symptom_location = activeCategory;
 
-    scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters, healthProfile });
+    scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
   };
 
   const handleAnswerQuestion = (answer: string) => {
@@ -307,12 +348,14 @@ export default function RemedyScorer({
     if (e.key === "Enter") { e.preventDefault(); handleAddSymptom(); }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    setUploadedFiles((prev) => [...prev, ...files]);
-
+  // Reads report photos, extracts symptoms with the AI and adds them to the search.
+  // Diagnoses/medicines found in the report go to the patient history instead of the symptom list.
+  const analyzeFiles = async (files: File[]) => {
     for (const file of files) {
+      const problem = checkReportFile(file);
+      if (problem) { setReportError(`${file.name}: ${problem}.`); continue; }
+      setReportError("");
+      setUploadedFiles((prev) => [...prev, file]);
       const placeholder = `🔍 Analyzing: ${file.name}...`;
       setAnalyzingFiles((prev) => [...prev, file.name]);
       setSymptoms((prev) => [...prev, placeholder]);
@@ -328,7 +371,7 @@ export default function RemedyScorer({
         const response = await fetch("/api/remedies/analyze-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64, mimeType: file.type || "image/jpeg" }),
+          body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
         });
 
         setSymptoms((prev) => prev.filter((s) => s !== placeholder));
@@ -336,20 +379,41 @@ export default function RemedyScorer({
 
         if (response.ok) {
           const result = await response.json();
-          const extracted = [...(result.symptoms || []), ...(result.conditions || [])].filter(Boolean);
-          setSymptoms((prev) => [...prev, ...(extracted.length ? extracted : [`Report: ${file.name}`])]);
+          const found: string[]  = (result.symptoms   || []).filter(Boolean);
+          const conds: string[]  = (result.conditions || []).filter(Boolean);
+          if (found.length) setSymptoms((prev) => [...prev, ...found.filter((x) => !prev.includes(x))]);
+          if (conds.length) {
+            setHistoryText((prev) => {
+              const have = prev.toLowerCase();
+              const add = conds.filter((c) => !have.includes(c.toLowerCase()));
+              return add.length ? [prev.trim(), ...add].filter(Boolean).join(", ") : prev;
+            });
+          }
+          if (!found.length && !conds.length) {
+            setReportError(`No symptoms could be read from ${file.name}. Please type them instead.`);
+          }
         } else {
-          setSymptoms((prev) => [...prev, `Report: ${file.name}`]);
+          setReportError(`Could not read ${file.name}. Please type the symptoms instead.`);
         }
       } catch {
-        setSymptoms((prev) =>
-          prev.filter((s) => s !== placeholder).concat(`Report: ${file.name}`)
-        );
+        setSymptoms((prev) => prev.filter((s) => s !== placeholder));
         setAnalyzingFiles((prev) => prev.filter((n) => n !== file.name));
+        setReportError(`Could not read ${file.name}. Please type the symptoms instead.`);
       }
     }
-    e.target.value = "";
   };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length) await analyzeFiles(files);
+  };
+
+  // Files picked with the paperclip on the home page arrive here.
+  useEffect(() => {
+    const pending = takePendingReports();
+    if (pending.length) analyzeFiles(pending);
+  }, []);
 
   const handleSubmit = () => {
     if (symptoms.length === 0) return;
@@ -361,7 +425,7 @@ export default function RemedyScorer({
     setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
     setShowResults(false); setShowQuestionnaire(false);
     setQuestionAnswers({}); setCurrentQuestionIdx(0);
-    setAnalyzingFiles([]);
+    setAnalyzingFiles([]); setReportError(""); setHistorySaveError("");
     scoreMutation.reset();
   };
 
@@ -471,7 +535,7 @@ export default function RemedyScorer({
                 <h2 className="text-2xl font-bold">Top Remedy Recommendations</h2>
                 <p className="text-neutral-500 text-sm">
                   Best {topResults.length} matches{activeCategory ? ` for ${activeCategory}` : ""}
-                  {" "}— Scored by Repertory Engine
+                  {" "}— matched against materia medica text
                 </p>
                 {healthProfile && (healthProfile.age || healthProfile.gender || healthProfile.chronic_conditions) && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -490,6 +554,18 @@ export default function RemedyScorer({
                 <ArrowLeft className="w-4 h-4" /> New Search
               </Button>
             </div>
+
+            {historySaveError && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+                {historySaveError}
+              </div>
+            )}
+            {scoreMutation.data?.[0]?.history_considered?.length > 0 && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
+                <span className="font-medium">Patient history considered:</span>{" "}
+                {scoreMutation.data[0].history_considered.join(", ")}
+              </div>
+            )}
 
             {/* Answers used */}
             {Object.keys(questionAnswers).length > 0 && (
@@ -525,7 +601,7 @@ export default function RemedyScorer({
                     </div>
                     <div className="text-right shrink-0 ml-3">
                       <div className="text-2xl font-bold text-green-600">{result.score}%</div>
-                      <div className="text-xs text-gray-400">match score</div>
+                      <div className="text-xs text-gray-400">relative match</div>
                     </div>
                   </div>
 
@@ -551,6 +627,15 @@ export default function RemedyScorer({
                       <p className="text-xs text-indigo-800">
                         <span className="font-semibold">📊 Why this remedy:</span>{" "}
                         {result.why_explanation}
+                      </p>
+                    </div>
+                  )}
+
+                  {result.history_matches?.length > 0 && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-2 mb-3">
+                      <p className="text-xs text-blue-800">
+                        <span className="font-semibold">🩺 Also fits the patient history:</span>{" "}
+                        {result.history_matches.join(", ")}
                       </p>
                     </div>
                   )}
@@ -724,18 +809,35 @@ export default function RemedyScorer({
                   </div>
                 )}
 
+                {/* Patient history */}
+                <div>
+                  <Label>Patient history (optional)</Label>
+                  <p className="text-xs text-gray-400 mb-2 mt-0.5">
+                    Existing conditions, past illnesses or injuries. It is used to refine the ranking
+                    of remedies that already match the symptoms, and is saved with this consultation.
+                  </p>
+                  <textarea
+                    value={historyText}
+                    onChange={(e) => setHistoryText(e.target.value)}
+                    maxLength={600}
+                    rows={2}
+                    placeholder="e.g. diabetes, hypothyroid, knee injury in 2022"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+
                 {/* File upload */}
                 <div>
                   <Label>Clinical Reports (Optional)</Label>
                   <p className="text-xs text-gray-400 mb-2 mt-0.5">
-                    Upload a photo or PDF — AI will extract symptoms automatically
+                    Upload a photo or screenshot of the report (JPG, PNG, WebP) — AI will read the symptoms and add them to the search
                   </p>
                   <div className="flex gap-2 mt-1">
                     <div className="relative flex-1">
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        accept=".jpg,.jpeg,.png,.webp,.gif,image/*"
                         multiple
                         onChange={handleFileSelect}
                         className="absolute inset-0 opacity-0 cursor-pointer"
@@ -743,7 +845,7 @@ export default function RemedyScorer({
                       <Button type="button" variant="outline"
                         className="w-full border-dashed border-2 border-gray-300 hover:border-green-400">
                         <Paperclip size={16} className="mr-2 text-green-600" />
-                        Upload PDF / Photos
+                        Upload Photos
                       </Button>
                     </div>
                     <div className="relative">
@@ -823,6 +925,12 @@ export default function RemedyScorer({
                 <div className="mt-3 flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500" />
                   AI is reading your report... please wait before searching.
+                </div>
+              )}
+
+              {reportError && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+                  {reportError}
                 </div>
               )}
 

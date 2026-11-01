@@ -264,10 +264,10 @@ export function buildSafetyFlags(
   if (!profile) return flags;
 
   if (profile.age && profile.age < 12) {
-    flags.push({ level: "warning", message: "Child patient: use 6C potency only. Do not repeat without guidance." });
+    flags.push({ level: "warning", message: "Child patient: a qualified homeopath should choose the potency and how often to repeat it." });
   }
   if (profile.age && profile.age > 70) {
-    flags.push({ level: "info", message: "Senior patient: start with 6C or 30C. Avoid frequent repetition." });
+    flags.push({ level: "info", message: "Senior patient: a qualified homeopath should choose the potency and how often to repeat it." });
   }
   if (profile.heart_disease && profile.heart_disease !== "None") {
     flags.push({ level: "warning", message: "Cardiac history present. Consult a qualified homeopath before any treatment." });

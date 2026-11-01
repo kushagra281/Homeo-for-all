@@ -23,12 +23,15 @@ class ChatServer {
   private users: Map<string, ConnectedUser> = new Map();
   private messageHistory: ChatMessage[] = [];
   private readonly MAX_HISTORY = 100;
+  private readonly MAX_USERS = 200;
+  private lastSent: Map<string, number> = new Map();
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ 
       server,
       path: '/ws/chat',
-      perMessageDeflate: false
+      perMessageDeflate: false,
+      maxPayload: 4 * 1024,          // the default is 100 MB
     });
     this.setupWebSocket();
   }
@@ -73,6 +76,9 @@ class ChatServer {
     if (typeof username !== 'string') return;
     const cleanUsername = username.trim().substring(0, 20);
     if (!cleanUsername) return;
+    // Nobody may pose as the server's own announcements.
+    if (/^(system|admin|moderator)$/i.test(cleanUsername)) return;
+    if (!this.users.has(userId) && this.users.size >= this.MAX_USERS) return;
 
     // Store user
     this.users.set(userId, {
@@ -107,13 +113,23 @@ class ChatServer {
     const user = this.users.get(userId);
     if (!user) return;
 
+    if (typeof messageData.message !== 'string') return;
+    const text = messageData.message.trim().substring(0, 500);
+    if (!text) return;
+
+    // At most one message per second per person.
+    const now = Date.now();
+    if (now - (this.lastSent.get(userId) || 0) < 1000) return;
+    this.lastSent.set(userId, now);
+
     const message: ChatMessage = {
       id: randomUUID(),
       username: user.username,
-      message: messageData.message.trim().substring(0, 500), // Limit message length
+      message: text,
       timestamp: new Date(),
-      type: messageData.messageType || 'message',
-      remedyName: messageData.remedyName
+      // Clients may only post normal or remedy messages, never 'system'.
+      type: messageData.messageType === 'remedy' ? 'remedy' : 'message',
+      remedyName: typeof messageData.remedyName === 'string' ? messageData.remedyName.substring(0, 60) : undefined
     };
 
     this.addToHistory(message);
@@ -124,6 +140,7 @@ class ChatServer {
     const user = this.users.get(userId);
     if (user) {
       this.users.delete(userId);
+      this.lastSent.delete(userId);
       
       const leaveMessage: ChatMessage = {
         id: randomUUID(),
@@ -147,9 +164,11 @@ class ChatServer {
   }
 
   private broadcastMessage(message: ChatMessage) {
+    // The client reads `messageType` to style remedy shares and system notices.
     const messageStr = JSON.stringify({
       ...message,
-      type: 'message'
+      type: 'message',
+      messageType: message.type
     });
 
     this.users.forEach(user => {

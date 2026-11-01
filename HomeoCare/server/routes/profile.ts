@@ -32,7 +32,7 @@ router.post("/save", async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     console.error("[Route] profile save:", error);
-    res.status(500).json({ message: error.message || "Failed to save profile" });
+    res.status(500).json({ message: "Failed to save profile" });
   }
 });
 

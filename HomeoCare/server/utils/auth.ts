@@ -5,7 +5,7 @@
 // and the id is taken from the verified token, never from the request body or URL.
 
 import type { Request, Response, NextFunction } from "express";
-import { mainDB } from "./supabase";
+import { authDB } from "./supabase";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -21,8 +21,11 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
   if (!token) return res.status(401).json({ message: "Sign in required" });
 
   try {
-    const { data, error } = await mainDB().auth.getUser(token);
-    if (error || !data?.user) return res.status(401).json({ message: "Invalid or expired session" });
+    const { data, error } = await authDB().auth.getUser(token);
+    if (error || !data?.user) {
+      console.error("[Auth] token rejected:", error?.message || "no user");
+      return res.status(401).json({ message: `Invalid or expired session${error?.message ? ` (${error.message})` : ""}` });
+    }
     req.userId = data.user.id;
     req.userEmail = data.user.email || "";
     req.accessToken = token;

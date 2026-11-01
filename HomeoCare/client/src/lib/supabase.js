@@ -156,7 +156,7 @@ export async function saveHealthProfile(profileData) {
     const err = await res.json().catch(() => ({}))
     console.error('[API] saveHealthProfile failed:', res.status, err.message)
     throw new Error(res.status === 401
-      ? 'Your session has expired. Please sign in again.'
+      ? `Your session has expired. Please sign in again.${err.message ? ' [' + err.message + ']' : ''}`
       : 'Your profile could not be saved. Please try again.')
   }
 }

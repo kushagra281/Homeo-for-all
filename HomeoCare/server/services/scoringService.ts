@@ -63,6 +63,23 @@ const WEIGHT: Record<string, number> = {
   particular: 1,
 };
 
+// ── Mental vs physical matches ────────────────────────────────────
+// The pipeline asks for the mental and the physical picture to be shown separately, and for a
+// remedy that matches the patient's mental symptoms not to be hidden by a lower total score.
+export interface MatchSplit { mental: string[]; physical: string[]; keynote: boolean }
+
+export function splitMatches(covered: Array<{ label?: string; rubric_text?: string; weight: number }>): MatchSplit {
+  const mental: string[] = [];
+  const physical: string[] = [];
+  for (const c of covered) {
+    const label = c.label || c.rubric_text || "";
+    if (!label) continue;
+    const list = c.weight >= WEIGHT.mental ? mental : physical;
+    if (!list.includes(label)) list.push(label);
+  }
+  return { mental: mental.slice(0, 6), physical: physical.slice(0, 6), keynote: mental.length > 0 };
+}
+
 // ── Contradiction detection ───────────────────────────────────────
 // Pairs of rubric codes that cannot both be true simultaneously
 const CONTRADICTION_PAIRS: Array<[string, string, string]> = [

@@ -6,6 +6,8 @@ import { Router } from "express";
 import { search } from "../services/searchService";
 import { groq, hasGroqKey } from "../utils/groq";
 import { rateLimit } from "../utils/rateLimit";
+import { detectRedFlags } from "../../shared/redFlags";
+import { splitMatches } from "../services/scoringService";
 
 const router = Router();
 
@@ -43,41 +45,55 @@ router.post("/score", searchLimit, async (req, res) => {
 
     const healthHistory = typeof req.body?.healthHistory === "string" ? req.body.healthHistory.slice(0, 600) : undefined;
     const result = await search({ symptoms, filters, healthProfile, healthHistory });
+    // Warning signs go with every result; the remedy ranking itself is not changed by them.
+    const redFlags = detectRedFlags([...symptoms, healthHistory], healthProfile);
 
     // Flatten to array for backward compatibility with existing frontend
     // Frontend expects: [{ remedy: {...}, score, confidence, ... }]
-    const flat = [...result.remedies, ...result.alternatives].map((r) => ({
-      remedy: {
-        id:            r.name.toLowerCase().replace(/\s+/g, "-"),
-        name:          r.name,
-        category:      r.category,
-        condition:     r.matching_symptoms.slice(0, 2).join("; "),
-        description:   r.why_explanation,
-        dosage:        r.dosage,
-        symptoms:      r.matching_symptoms,
-        // The scraped database has no potency / age / gender data, so these are
-        // left empty (= "not specified") instead of inventing values.
-        keywords:      [],
-        modalities:    { better: [], worse: [] },
-        potencies:     [],
-        age_groups:    [],
-        genders:       [],
-        synonym_names: [],
-      },
-      score:             r.score,
-      confidence:        r.confidence,
-      matching_symptoms: r.matching_symptoms,
-      covered_rubrics:   r.covered_rubrics,
-      why_explanation:   r.why_explanation,
-      explanation:       r.explanation,
-      safety_flags:      r.safety_flags,
-      ai_insight:        r.ai_insight,
-      history_matches:   r.history_matches || [],
-      history_considered: result.history_considered || [],
-      engine:            result.engine,
-      contradictions:    result.contradictions,
-      rubrics_used:      result.rubrics_used,
-    }));
+    const ranked = [
+      ...[...result.remedies, ...result.alternatives].map((r) => ({ r, keynoteOnly: false })),
+      ...(result.keynote_extra || []).map((r) => ({ r, keynoteOnly: true })),
+    ];
+    const flat = ranked.map(({ r, keynoteOnly }) => {
+      const split = splitMatches(r.covered_rubrics || []);
+      return {
+        remedy: {
+          id:            r.name.toLowerCase().replace(/\s+/g, "-"),
+          name:          r.name,
+          category:      r.category,
+          condition:     r.matching_symptoms.slice(0, 2).join("; "),
+          description:   r.why_explanation,
+          dosage:        r.dosage,
+          symptoms:      r.matching_symptoms,
+          // The scraped database has no potency / age / gender data, so these are
+          // left empty (= "not specified") instead of inventing values.
+          keywords:      [],
+          modalities:    { better: [], worse: [] },
+          potencies:     [],
+          age_groups:    [],
+          genders:       [],
+          synonym_names: [],
+        },
+        score:             r.score,
+        confidence:        r.confidence,
+        matching_symptoms: r.matching_symptoms,
+        covered_rubrics:   r.covered_rubrics,
+        why_explanation:   r.why_explanation,
+        explanation:       r.explanation,
+        safety_flags:      r.safety_flags,
+        ai_insight:        r.ai_insight,
+        history_matches:   r.history_matches || [],
+        history_considered: result.history_considered || [],
+        engine:            result.engine,
+        contradictions:    result.contradictions,
+        rubrics_used:      result.rubrics_used,
+        red_flags:         redFlags,
+        mental_matches:    split.mental,
+        physical_matches:  split.physical,
+        keynote_matched:   split.keynote,
+        keynote_only:      keynoteOnly,
+    };
+    });
 
     res.json(flat);
   } catch (error: any) {

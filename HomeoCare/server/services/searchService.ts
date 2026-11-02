@@ -11,7 +11,7 @@
 //   • if nothing was found AND a database call failed, the error is thrown so the UI
 //     shows "something went wrong" instead of a misleading "no remedies found"
 
-import { scoreRemedies, buildSafetyFlags, gradeToDosage } from "./scoringService";
+import { scoreRemedies, buildSafetyFlags, gradeToDosage, splitMatches } from "./scoringService";
 import type { RemedyScore, SafetyFlag, Contradiction } from "./scoringService";
 import {
   searchScraperRubrics,
@@ -66,6 +66,8 @@ export interface RemedyResult {
 export interface SearchResult {
   remedies:       RemedyResult[];
   alternatives:   RemedyResult[];
+  /** Remedies below the top five that still match the patient's mental symptoms (never hidden by a low total). */
+  keynote_extra?: RemedyResult[];
   contradictions: Contradiction[];
   rubrics_used:   string[];
   rubric_count:   number;
@@ -260,9 +262,13 @@ export async function search(input: {
           }
           const top3 = ordered.slice(0, 3).map((r) => formatResult(r, healthProfile));
           const alts = ordered.slice(3, 5).map((r) => formatResult(r, healthProfile));
+          const keynoteExtra = ordered.slice(5)
+            .filter((r) => splitMatches(r.covered_rubrics).keynote)
+            .slice(0, 3)
+            .map((r) => formatResult(r, healthProfile));
           console.log(`[Search] Scraper engine: ${remedies.length} results, top=${remedies[0]?.remedy_name}`);
           return {
-            remedies: top3, alternatives: alts, contradictions,
+            remedies: top3, alternatives: alts, keynote_extra: keynoteExtra, contradictions,
             rubrics_used: rubrics.slice(0, 10).map((r) => r.rubric_text),
             rubric_count: rubrics.length, engine: "scraper",
             history_considered: phrases,

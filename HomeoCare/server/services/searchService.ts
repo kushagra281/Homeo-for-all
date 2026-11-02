@@ -189,7 +189,7 @@ function toScoringRows(rows: ScraperRemedyRow[], relevanceById: Map<number, numb
       rubric_label: r.rubric_text,
       body_system:  r.section,
       symptom_type: r.symptom_type || "particular",
-      weight:       r.symptom_type === "mental" ? 3 : r.symptom_type === "general" ? 2 : 1,
+      weight:       r.symptom_type === "mental" || r.symptom_type === "mind" ? 3 : r.symptom_type === "general" ? 2 : 1,
       is_negative:  false,
       remedy_name:  name,
       grade:        r.grade,

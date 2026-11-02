@@ -58,6 +58,7 @@ export interface Contradiction {
 // ── Weight constants ──────────────────────────────────────────────
 const WEIGHT: Record<string, number> = {
   mental:     3,
+  mind:       3,   // the scraped database labels mental rubrics "mind"
   general:    2,
   particular: 1,
 };

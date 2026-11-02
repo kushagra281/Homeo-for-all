@@ -260,6 +260,7 @@ export interface CaseState {
   symptoms: string[];                       // what the patient wrote or the AI extracted
   category?: string;
   answers: Record<string, string[]>;        // question id -> chosen labels (empty array = skipped)
+  custom?: Record<string, CaseQuestion>;    // questions written by the AI during this interview
 }
 export const MAX_QUESTIONS = 16;
 
@@ -330,8 +331,8 @@ export const ALL_QUESTIONS: CaseQuestion[] = [
   ...GENERAL,
 ];
 const BY_ID = new Map(ALL_QUESTIONS.map((q) => [q.id, q]));
-function findQuestion(_state: CaseState, id: string): CaseQuestion | undefined {
-  return BY_ID.get(id);
+function findQuestion(state: CaseState, id: string): CaseQuestion | undefined {
+  return state.custom?.[id] || BY_ID.get(id);
 }
 
 /** Search phrases for all answers (no duplicates). A skipped or "no" answer adds nothing. */
@@ -360,12 +361,12 @@ export function psyAnswersOf(state: CaseState): PsyAnswers {
 }
 
 /** "Question: answer" lines for display and the red-flag scan. */
-export function answerLines(state: CaseState): Array<{ question: string; answer: string }> {
+export function answerLines(state: CaseState, includeSkipped = false): Array<{ question: string; answer: string }> {
   const out: Array<{ question: string; answer: string }> = [];
   for (const [id, labels] of Object.entries(state.answers)) {
-    if (!labels.length) continue;
+    if (!labels.length && !includeSkipped) continue;
     const q = findQuestion(state, id);
-    if (q) out.push({ question: q.text, answer: labels.join(", ") });
+    if (q) out.push({ question: q.text, answer: labels.length ? labels.join(", ") : "(skipped)" });
   }
   return out;
 }

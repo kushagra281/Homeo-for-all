@@ -8,12 +8,60 @@ import { groq, hasGroqKey } from "../utils/groq";
 import { rateLimit } from "../utils/rateLimit";
 import { detectRedFlags } from "../../shared/redFlags";
 import { splitMatches } from "../services/scoringService";
+import {
+  buildExplainMessages, buildQuestionMessages, parseExplanation, parseNextQuestion,
+  sanitizeExplainInput, sanitizeInput,
+} from "../services/aiCase";
 
 const router = Router();
 
 // Searching hits the database; report analysis calls a paid AI model.
 const searchLimit  = rateLimit({ name: "search",  windowMs: 60_000, max: 30 });
 const analyzeLimit = rateLimit({ name: "analyze", windowMs: 60_000, max: 6 });
+const aiLimit      = rateLimit({ name: "ai-case", windowMs: 60_000, max: 25 });
+
+const TEXT_MODEL = process.env.GROQ_TEXT_MODEL || "llama-3.3-70b-versatile";
+
+/** One JSON reply from the model. Throws on network or API errors; the routes turn that into a fallback. */
+async function askModel(messages: Array<{ role: "system" | "user"; content: string }>, maxTokens: number): Promise<string> {
+  const r = await groq().chat.completions.create(
+    { model: TEXT_MODEL, messages, max_tokens: maxTokens, temperature: 0.3, response_format: { type: "json_object" } },
+    { timeout: 20_000 },
+  );
+  return r.choices[0]?.message?.content || "";
+}
+
+// ── POST /api/remedies/next-question ─────────────────────────────
+// AI picks the next case-taking question from the symptoms and the answers so far.
+// Any problem answers { fallback: true } and the app uses its built-in questions instead.
+router.post("/next-question", aiLimit, async (req, res) => {
+  const input = sanitizeInput(req.body);
+  if (!input) return res.status(400).json({ message: "symptoms array is required" });
+  if (!hasGroqKey()) return res.json({ fallback: true });
+  try {
+    const reply = parseNextQuestion(await askModel(buildQuestionMessages(input), 600), input);
+    if (!reply) return res.json({ fallback: true });
+    res.json(reply);
+  } catch (error) {
+    console.error("[Route] next-question error:", (error as Error)?.message);
+    res.json({ fallback: true });
+  }
+});
+
+// ── POST /api/remedies/explain ───────────────────────────────────
+// AI explains the ranking the search engine already made. It cannot change the ranking.
+router.post("/explain", aiLimit, async (req, res) => {
+  const input = sanitizeExplainInput(req.body);
+  if (!input) return res.status(400).json({ message: "symptoms and ranked remedies are required" });
+  if (!hasGroqKey()) return res.json({ unavailable: true });
+  try {
+    const reply = parseExplanation(await askModel(buildExplainMessages(input), 1100), input);
+    res.json(reply || { unavailable: true });
+  } catch (error) {
+    console.error("[Route] explain error:", (error as Error)?.message);
+    res.json({ unavailable: true });
+  }
+});
 
 // ── POST /api/remedies/score ──────────────────────────────────────
 // Body: { symptoms: string[], filters: {}, healthProfile: {} }

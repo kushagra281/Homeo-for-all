@@ -1,3 +1,4 @@
+import { canonicalRemedyName } from "./remedyAliases";
 // server/utils/keywords.ts
 // KEYWORD EXTRACTION — turns patient symptom text into searchable keyword groups.
 //
@@ -181,7 +182,13 @@ function buildGroup(raw: string, key: string): KeywordGroup {
 
 /** Canonical form of a remedy name so "ARSENICUM ALBUM", "Arsenicum album." and "arsenicum  album" group together. */
 export function normalizeRemedyName(name: string): string {
-  return (name || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const plain = (name || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")          // "(RATTLESNAKE)", "(BONESET)": a common name, not part of the remedy name
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return canonicalRemedyName(plain);
 }
 
 // ── Main extraction ───────────────────────────────────────────────

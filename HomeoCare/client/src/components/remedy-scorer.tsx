@@ -18,53 +18,7 @@ import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 import { detectRedFlags, type RedFlag } from "@shared/redFlags";
 import PsychologyQuestionnaire from "./psychology-questionnaire";
 import { psychologyPhrases, psychologySummary, type PsyAnswers } from "@/lib/psychology";
-
-// ── AI Questions per category ─────────────────────────────────────
-const CATEGORY_QUESTIONS: Record<string, Array<{ q: string; options: string[] }>> = {
-  "Mind": [
-    { q: "Primary emotional state?", options: ["Anxiety", "Depression", "Anger", "Fear", "Grief", "Restlessness", "Irritability"] },
-    { q: "When is it worse?", options: ["Night", "Morning", "Alone", "In company", "After eating", "Before menses", "No pattern"] },
-    { q: "Associated symptoms?", options: ["Sleeplessness", "Palpitations", "Weeping", "Forgetfulness", "Mood swings", "None"] },
-  ],
-  "Head": [
-    { q: "Type of headache?", options: ["Throbbing", "Pressing", "Burning", "Shooting", "Dull ache", "Band-like"] },
-    { q: "Location of pain?", options: ["Forehead", "Temples", "Back of head", "Top of head", "One side", "Whole head"] },
-    { q: "What makes it worse?", options: ["Light", "Noise", "Movement", "Heat", "Cold", "Morning", "Evening"] },
-    { q: "What makes it better?", options: ["Rest", "Pressure", "Cold compress", "Lying down", "Open air", "Nothing"] },
-  ],
-  "Fever": [
-    { q: "Stage of fever?", options: ["Chill stage", "Heat stage", "Sweating stage", "All stages"] },
-    { q: "Time pattern?", options: ["Morning", "Afternoon", "Evening", "Night", "Irregular"] },
-    { q: "Associated symptoms?", options: ["Thirst", "No thirst", "Body ache", "Rash", "Vomiting", "Headache"] },
-  ],
-  "Stomach": [
-    { q: "Main complaint?", options: ["Nausea", "Vomiting", "Acidity/Heartburn", "Bloating", "Pain", "Loss of appetite"] },
-    { q: "After eating?", options: ["Better after eating", "Worse after eating", "Worse immediately", "No change"] },
-    { q: "Type of pain?", options: ["Burning", "Cramping", "Cutting", "Pressing", "No pain"] },
-  ],
-  "Respiration": [
-    { q: "Type of cough?", options: ["Dry", "Wet/Productive", "Barking", "Spasmodic", "Night cough", "Morning cough"] },
-    { q: "Breathing difficulty?", options: ["Worse lying down", "Worse on exertion", "At night", "During attack", "No difficulty"] },
-    { q: "Sputum?", options: ["None", "Clear", "Yellow/Green", "Blood-tinged", "Thick/sticky"] },
-  ],
-  "Skin": [
-    { q: "Type of eruption?", options: ["Rash", "Blisters", "Dry/Scaly", "Weeping/Moist", "Itching only", "Discoloration"] },
-    { q: "Sensation?", options: ["Itching", "Burning", "Stinging", "No sensation", "Bleeding on scratch"] },
-    { q: "What makes it worse?", options: ["Heat", "Cold", "Night", "Scratching", "Washing", "Nothing specific"] },
-  ],
-  "Hands, Legs & Back": [
-    { q: "Type of complaint?", options: ["Joint pain", "Muscle pain", "Stiffness", "Swelling", "Weakness", "Numbness"] },
-    { q: "When is it worse?", options: ["Morning stiffness", "After rest", "On movement", "At night", "In cold", "In damp"] },
-    { q: "Better by?", options: ["Continued movement", "Rest", "Warmth", "Cold application", "Pressure", "Elevation"] },
-  ],
-};
-
-const DEFAULT_QUESTIONS = [
-  { q: "How severe is the complaint?", options: ["Mild", "Moderate", "Severe", "Unbearable"] },
-  { q: "Pattern of complaints?", options: ["Sudden onset", "Gradual", "After cold exposure", "After emotional stress", "After eating", "Recurring"] },
-  { q: "What makes it better?", options: ["Rest", "Movement", "Heat", "Cold", "Pressure", "Open air", "Nothing"] },
-  { q: "What makes it worse?", options: ["Morning", "Night", "Cold", "Heat", "Exertion", "Eating", "Stress"] },
-];
+import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState } from "@/lib/caseTaking";
 
 const AVOID_RECOMMENDATIONS: Record<string, string[]> = {
   "Mind": ["Coffee and stimulants", "Alcohol", "Overthinking before bed", "Social media overuse", "Skipping meals", "Isolation"],
@@ -272,8 +226,9 @@ export default function RemedyScorer({
   const [filters, setFilters] = useState<FilterState>({ age_group: "", gender: "", condition_type: "", potency: "" });
   const [showResults, setShowResults] = useState(false);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
-  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+  const [caseAnswers, setCaseAnswers] = useState<Record<string, string[]>>({});   // question id -> chosen answers
+  const [answerOrder, setAnswerOrder] = useState<string[]>([]);                   // order answered, for Back
+  const [picked, setPicked] = useState<string[]>([]);                             // selection on the open question
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [analyzingFiles, setAnalyzingFiles] = useState<string[]>([]);
   const [reportError, setReportError] = useState("");
@@ -283,6 +238,16 @@ export default function RemedyScorer({
   const [showMind, setShowMind] = useState(false);
   const [mindAnswers, setMindAnswers] = useState<PsyAnswers>({});
   const [mindNote, setMindNote] = useState("");
+  const activeCategory0 = initialCategory || category || "";
+  const caseState: CaseState = useMemo(
+    () => ({ symptoms, category: activeCategory0, answers: caseAnswers }),
+    [symptoms, activeCategory0, caseAnswers],
+  );
+  // "Question: answer" text from the interview, used for the red-flag scan and the result screen.
+  const questionAnswers: Record<string, string> = useMemo(
+    () => Object.fromEntries(answerLines(caseState).map((l) => [l.question, l.answer])),
+    [caseState],
+  );
   const redFlags = useMemo(
     () => detectRedFlags(
       [...symptoms.filter((x) => !x.startsWith("🔍")), ...Object.values(questionAnswers), mindNote, historyText],
@@ -294,7 +259,6 @@ export default function RemedyScorer({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const activeCategory = initialCategory || category || "";
-  const questions = CATEGORY_QUESTIONS[activeCategory] || DEFAULT_QUESTIONS;
   const avoidList = AVOID_RECOMMENDATIONS[activeCategory] || DEFAULT_AVOID;
 
   useEffect(() => {
@@ -351,24 +315,10 @@ export default function RemedyScorer({
     },
   });
 
-  // Turn a questionnaire answer into a searchable phrase. The old code sent the bare
-  // answer ("Cold", "None", "No thirst"), which lost whether it was a "worse" or a
-  // "better" answer and searched for the opposite of negative answers.
-  const answerToPhrase = (question: string, answer: string): string => {
-    const a = answer.trim();
-    const lower = a.toLowerCase();
-    const NEGATIVE = ["none", "nothing", "nothing specific", "no pattern", "no change", "no difficulty", "no pain", "no sensation", "no thirst"];
-    if (!a || NEGATIVE.includes(lower)) return "";                     // not a symptom to search for
-    if (/severe/i.test(question)) return "";                           // Mild / Moderate / Severe / Unbearable
-    if (/worse/i.test(question) && !/^(worse|better)\b/i.test(a)) return `worse ${a}`;
-    if (/better/i.test(question) && !/^(worse|better)\b/i.test(a)) return `better ${a}`;
-    return a;
-  };
-
-  const submitToAI = (syms: string[], answers: Record<string, string>) => {
+  const submitToAI = (syms: string[], answers: Record<string, string[]>) => {
     const allSymptoms = [
       ...syms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
-      ...Object.entries(answers).map(([q, a]) => answerToPhrase(q, a)),
+      ...answerPhrases({ symptoms: syms, category: activeCategory, answers }),   // every interview answer
       ...psychologyPhrases(mindAnswers),                 // chosen mind / emotion answers
       ...(mindNote ? [mindNote] : []),
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
@@ -382,22 +332,42 @@ export default function RemedyScorer({
     scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
   };
 
-  const handleAnswerQuestion = (answer: string) => {
-    const currentQ = questions[currentQuestionIdx];
-    const newAnswers = { ...questionAnswers, [currentQ.q]: answer };
-    setQuestionAnswers(newAnswers);
-    if (currentQuestionIdx < questions.length - 1) {
-      setCurrentQuestionIdx((prev) => prev + 1);
-    } else {
-      setShowQuestionnaire(false);
-      submitToAI(symptoms, newAnswers);
-    }
+  const currentQ = nextQuestion(caseState);
+
+  const finishInterview = (answers: Record<string, string[]>) => {
+    setShowQuestionnaire(false);
+    setPicked([]);
+    if (symptoms.length > 0 || Object.keys(answers).length > 0) submitToAI(symptoms, answers);
   };
 
-  const handleSkipQuestionnaire = () => {
-    setShowQuestionnaire(false);
-    if (symptoms.length > 0) submitToAI(symptoms, questionAnswers);
+  // Records the open question (empty list = skipped) and moves on, or searches when the case is complete.
+  const commitAnswer = (labels: string[]) => {
+    if (!currentQ) return;
+    const answers = { ...caseAnswers, [currentQ.id]: labels };
+    setCaseAnswers(answers);
+    setAnswerOrder((prev) => [...prev, currentQ.id]);
+    setPicked([]);
+    if (!nextQuestion({ symptoms, category: activeCategory, answers })) finishInterview(answers);
   };
+
+  const togglePick = (label: string) => {
+    if (!currentQ) return;
+    if (!currentQ.multi) { commitAnswer([label]); return; }
+    const NONE = "None of these";
+    setPicked((prev) => label === NONE ? (prev.includes(NONE) ? [] : [NONE]) :
+      prev.includes(label) ? prev.filter((x) => x !== label) : [...prev.filter((x) => x !== NONE), label]);
+  };
+
+  const goBack = () => {
+    const last = answerOrder[answerOrder.length - 1];
+    if (!last) return;
+    const { [last]: previous, ...rest } = caseAnswers;
+    setCaseAnswers(rest);
+    setAnswerOrder((prev) => prev.slice(0, -1));
+    setPicked(previous || []);
+  };
+
+  const handleSkipQuestionnaire = () => finishInterview(caseAnswers);
 
   const handleAddSymptom = () => {
     if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
@@ -482,14 +452,14 @@ export default function RemedyScorer({
 
   const handleSubmit = () => {
     if (symptoms.length === 0) return;
-    submitToAI(symptoms, questionAnswers);
+    submitToAI(symptoms, caseAnswers);
   };
 
   const resetForm = () => {
     setSymptoms([]); setCurrentSymptom(""); setUploadedFiles([]);
     setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
     setShowResults(false); setShowQuestionnaire(false);
-    setQuestionAnswers({}); setCurrentQuestionIdx(0);
+    setCaseAnswers({}); setAnswerOrder([]); setPicked([]);
     setShowMind(false); setMindAnswers({}); setMindNote("");
     setAnalyzingFiles([]); setReportError(""); setHistorySaveError("");
     scoreMutation.reset();
@@ -530,8 +500,33 @@ export default function RemedyScorer({
   }
 
   if (showQuestionnaire) {
-    const currentQ = questions[currentQuestionIdx];
-    const progress = (currentQuestionIdx / questions.length) * 100;
+    if (!currentQ) {
+      // every relevant question is already answered: nothing more to ask
+      return (
+        <div>
+          <PageHeader />
+          <div className="max-w-2xl mx-auto px-4">
+            <Card className="p-6 text-center space-y-4">
+              <p className="text-gray-700">
+                {Object.keys(caseAnswers).length > 0
+                  ? "All the questions for these symptoms are answered."
+                  : "Add a symptom first so the questions can match it."}
+              </p>
+              <div className="flex justify-center gap-3">
+                <Button variant="outline" onClick={() => setShowQuestionnaire(false)}>← Back to symptoms</Button>
+                {Object.keys(caseAnswers).length > 0 && (
+                  <Button className="bg-green-600 hover:bg-green-700" onClick={() => finishInterview(caseAnswers)}>Find remedies</Button>
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+    const answeredCount = answerOrder.length;
+    const total = Math.max(plannedCount(caseState), answeredCount + 1);
+    const progress = (answeredCount / total) * 100;
+    const topics = detectTopics(symptoms.filter((x) => !x.startsWith("🔍")), activeCategory);
     return (
       <div>
         <PageHeader />
@@ -541,28 +536,41 @@ export default function RemedyScorer({
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-green-700">
                   <HelpCircle size={20} />
-                  <span className="font-semibold">Narrowing down remedies...</span>
+                  <span className="font-semibold">Understanding your case</span>
                 </div>
-                <span className="text-sm text-gray-400">{currentQuestionIdx + 1} / {questions.length}</span>
+                <span className="text-sm text-gray-400">Question {answeredCount + 1}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2">
                 <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
-              {activeCategory && <p className="text-xs text-gray-400 mt-2">Category: {activeCategory}</p>}
+              <div className="flex flex-wrap gap-1 mt-2">
+                {topics.slice(0, 3).map((t) => (
+                  <Badge key={t} variant="secondary" className="text-xs">{TOPIC_LABELS[t] || t}</Badge>
+                ))}
+              </div>
             </div>
 
-            <h3 className="text-lg font-semibold text-gray-800 mb-5">{currentQ.q}</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">{currentQ.text}</h3>
+            <p className="text-xs text-gray-400 mb-5" data-testid="question-why">{currentQ.why}</p>
+            {currentQ.multi && <p className="text-xs text-gray-500 mb-2">Choose all that apply, then press Next.</p>}
             <div className="grid grid-cols-2 gap-3 mb-6">
-              {currentQ.options.map((option) => (
-                <button key={option} onClick={() => handleAnswerQuestion(option)}
-                  className="p-3 rounded-xl border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 text-left text-sm font-medium text-gray-700 transition-all">
-                  {option}
-                </button>
-              ))}
+              {currentQ.options.map((opt) => {
+                const on = picked.includes(opt.label);
+                return (
+                  <button key={opt.label} onClick={() => togglePick(opt.label)} aria-pressed={on}
+                    className={`p-3 rounded-xl border-2 text-left text-sm font-medium text-gray-700 transition-all ${on ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-green-500 hover:bg-green-50"}`}>
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
+            {currentQ.multi && (
+              <Button className="w-full mb-4 bg-green-600 hover:bg-green-700" disabled={picked.length === 0}
+                onClick={() => commitAnswer(picked)}>Next →</Button>
+            )}
 
             <div className="border-t pt-4 mt-2">
-              <p className="text-xs text-gray-400 mb-2">Or add a custom symptom:</p>
+              <p className="text-xs text-gray-400 mb-2">Or add another symptom (the next questions will follow it):</p>
               <div className="flex gap-2">
                 <Input
                   value={currentSymptom}
@@ -585,14 +593,15 @@ export default function RemedyScorer({
               )}
             </div>
 
-            <div className="flex justify-between mt-4">
-              {currentQuestionIdx > 0 && (
-                <Button variant="outline" size="sm"
-                  onClick={() => setCurrentQuestionIdx((prev) => prev - 1)}>← Back</Button>
+            <div className="flex items-center justify-between mt-4 gap-2">
+              {answeredCount > 0 && (
+                <Button variant="outline" size="sm" onClick={goBack}>← Back</Button>
               )}
-              <Button variant="ghost" size="sm" onClick={handleSkipQuestionnaire}
-                className="ml-auto text-gray-400">
-                Skip & Search →
+              <Button variant="ghost" size="sm" onClick={() => commitAnswer([])} className="text-gray-400">
+                Skip this question
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleSkipQuestionnaire} className="text-gray-500">
+                Show results now →
               </Button>
             </div>
           </Card>
@@ -653,10 +662,10 @@ export default function RemedyScorer({
               </div>
             )}
 
-            {psychologySummary(mindAnswers).length > 0 && (
+            {psychologySummary({ ...psyAnswersOf(caseState), ...mindAnswers }).length > 0 && (
               <div className="mb-4 p-3 bg-purple-50 rounded-lg text-xs text-purple-900">
                 <span className="font-medium">Mind and emotions considered:</span>{" "}
-                {psychologySummary(mindAnswers).map((x) => `${x.question} ${x.answer}`).join(" · ")}
+                {psychologySummary({ ...psyAnswersOf(caseState), ...mindAnswers }).map((x) => `${x.question} ${x.answer}`).join(" · ")}
               </div>
             )}
 
@@ -1010,7 +1019,7 @@ export default function RemedyScorer({
               <div className="flex justify-between mt-6">
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline"
-                    onClick={() => { setShowQuestionnaire(true); setCurrentQuestionIdx(0); }}>
+                    onClick={() => { setShowQuestionnaire(true); setPicked([]); }}>
                     <HelpCircle className="w-4 h-4 mr-2" /> AI Questions
                   </Button>
                   <Button variant="outline" onClick={() => setShowMind(true)}>

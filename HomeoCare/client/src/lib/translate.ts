@@ -110,10 +110,13 @@ function combo(): HTMLSelectElement | null {
   return document.querySelector<HTMLSelectElement>("select.goog-te-combo");
 }
 
+let restoreTimer: number | undefined;
+
 /** Switch language without reloading. Returns false when it had to reload the page instead. */
 export function setLanguage(code: string): boolean {
   if (!(CODES as readonly string[]).includes(code)) return true;
   writeCookie(code);
+  window.clearTimeout(restoreTimer);   // a newer choice cancels a pending "back to English" check
   const select = combo();
   if (select) {
     // Google's empty "Select language" option does not undo a translation; the page language
@@ -124,10 +127,10 @@ export function setLanguage(code: string): boolean {
     if (code === "en") {
       // Google does not always restore the original text. If the page is still marked as translated
       // a moment later, reload once: the googtrans cookie is already cleared, so it comes back in English.
-      window.setTimeout(() => {
+      restoreTimer = window.setTimeout(() => {
         const root = document.documentElement.classList;
         const stillTranslated = root.contains("translated-ltr") || root.contains("translated-rtl");
-        if (stillTranslated) window.location.reload();
+        if (stillTranslated && currentLanguage() === "en") window.location.reload();
       }, 800);
     }
     return true;

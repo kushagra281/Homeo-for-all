@@ -116,10 +116,20 @@ export function setLanguage(code: string): boolean {
   writeCookie(code);
   const select = combo();
   if (select) {
-    // "" is Google's own value for "show the original"
-    select.value = code === "en" ? "" : code;
+    // Google's empty "Select language" option does not undo a translation; the page language
+    // ("en") is tried first.
+    select.value = code;
     select.dispatchEvent(new Event("change"));
     window.dispatchEvent(new CustomEvent(EVENT, { detail: code }));
+    if (code === "en") {
+      // Google does not always restore the original text. If the page is still marked as translated
+      // a moment later, reload once: the googtrans cookie is already cleared, so it comes back in English.
+      window.setTimeout(() => {
+        const root = document.documentElement.classList;
+        const stillTranslated = root.contains("translated-ltr") || root.contains("translated-rtl");
+        if (stillTranslated) window.location.reload();
+      }, 800);
+    }
     return true;
   }
   window.location.reload();

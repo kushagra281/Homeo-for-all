@@ -166,58 +166,6 @@ export class MemStorage implements IStorage {
         });
       }
 
-      // ── Load 5000 Symptoms Database ──────────────────────────────
-      const symptomsPath = this.findFile([
-  'homeopathy_symptoms_2000.json',
-  'homeopathy_5000_symptoms.json',
-  'homeopathy_2000_symptoms.json',
-  'symptoms.json'
-]);
-
-      if (symptomsPath) {
-        console.log(`Loading symptoms database from: ${symptomsPath}`);
-        const symptomsData = JSON.parse(readFileSync(symptomsPath, 'utf-8'));
-        const symptomsList = symptomsData.symptoms || symptomsData;
-
-        symptomsList.forEach((sym: any) => {
-          const remediesArr = sym.remedies || sym.remedy_list || [];
-          remediesArr.forEach((r: any) => {
-            const remedyName = r.name || r.remedy || r;
-            const grade = r.grade || 1;
-            const remedy: Remedy = {
-              id: randomUUID(),
-              name: remedyName,
-              category: (sym.category || sym.section || "GENERALS").toUpperCase(),
-              condition: sym.rubric || sym.symptom || sym.name || "",
-              description: `${remedyName} is indicated for: ${sym.rubric || sym.symptom || ""}. Location: ${sym.location || "general"}.`,
-              dosage: "Potency and dose are not part of this data - consult a qualified homeopath",
-              symptoms: [sym.rubric || sym.symptom || "", sym.location || ""].filter(Boolean),
-              keywords: [
-                remedyName.toLowerCase(),
-                (sym.category || "").toLowerCase(),
-                (sym.location || "").toLowerCase(),
-                ...(sym.rubric || sym.symptom || "").toLowerCase().split(/[\s\-]+/).filter((w: string) => w.length > 2),
-                ...(sym.modalities?.worse || []).map((w: string) => w.toLowerCase()),
-                ...(sym.modalities?.better || []).map((b: string) => b.toLowerCase()),
-              ].filter(Boolean),
-              symptom_mappings: this.createSymptomMappings([sym.rubric || sym.symptom || "", sym.location || ""]),
-              modalities: {
-                better: sym.modalities?.better || [],
-                worse: sym.modalities?.worse || [],
-              },
-              potencies: [],
-              age_groups: [],
-              genders: [],
-              synonym_names: [remedyName.toLowerCase()],
-            };
-            this.remedies.set(remedy.id, remedy);
-          });
-        });
-        console.log(`Loaded symptoms database: ${symptomsList.length} symptoms processed`);
-      } else {
-        console.warn('⚠️ Symptoms database not found — using fallback only');
-      }
-
       console.log(`✅ Total remedies loaded: ${this.remedies.size}`);
 
     } catch (error) {

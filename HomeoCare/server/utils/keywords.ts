@@ -180,11 +180,15 @@ function buildGroup(raw: string, key: string): KeywordGroup {
   return { key, variants: variants.slice(0, 7) };
 }
 
+// Parenthesised common names the sources add after a remedy name. Any other bracket text is kept,
+// because it can be part of the name ("Aurum muriaticum (natronatum)").
+const COMMON_NAME_TAGS = new Set(["rattlesnake", "boneset", "black cohosh"]);
+
 /** Canonical form of a remedy name so "ARSENICUM ALBUM", "Arsenicum album." and "arsenicum  album" group together. */
 export function normalizeRemedyName(name: string): string {
   const plain = (name || "")
     .toLowerCase()
-    .replace(/\([^)]*\)/g, " ")          // "(RATTLESNAKE)", "(BONESET)": a common name, not part of the remedy name
+    .replace(/\(([^)]*)\)/g, (_m, inner: string) => (COMMON_NAME_TAGS.has(inner.trim().toLowerCase()) ? " " : ` ${inner} `))
     .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

@@ -77,6 +77,9 @@ t("same remedy under two spellings is merged by full name", () => {
   for (const [a, b] of same) assert.equal(normalizeRemedyName(a), normalizeRemedyName(b), `${a} / ${b}`);
 });
 t("different remedies with a similar name stay separate", () => {
+  assert.notEqual(normalizeRemedyName("AURUM MURIATICUM (NATRONATUM)"), normalizeRemedyName("AURUM MURIATICUM"));
+  assert.equal(normalizeRemedyName("AURUM MURIATICUM (NATRONATUM)"), normalizeRemedyName("AURUM MURIATICUM NATRONATUM"));
+  assert.equal(normalizeRemedyName("ACTAEA RACEMOSA (BLACK COHOSH)"), "actaea racemosa");
   const different: Array<[string, string]> = [
     ["ALUMINA", "ALUMINA SILICATA"], ["SULPHUR", "SULPHUR IODATUM"], ["CAMPHORA", "CAMPHORA BROMATA"],
     ["BERBERIS VULGARIS", "BERBERIS AQUIFOLIUM"], ["AURUM MURIATICUM", "AURUM MURIATICUM NATRONATUM"],

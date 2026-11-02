@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   Search, TrendingUp, ArrowLeft, HelpCircle, Camera,
@@ -15,6 +15,9 @@ import { Separator } from "@/components/ui/separator";
 import AdvancedFilters, { FilterState } from "./advanced-filters";
 import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
 import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
+import { detectRedFlags, type RedFlag } from "@shared/redFlags";
+import PsychologyQuestionnaire from "./psychology-questionnaire";
+import { psychologyPhrases, psychologySummary, type PsyAnswers } from "@/lib/psychology";
 
 // ── AI Questions per category ─────────────────────────────────────
 const CATEGORY_QUESTIONS: Record<string, Array<{ q: string; options: string[] }>> = {
@@ -104,6 +107,56 @@ function SafetyFlags({ flags }: { flags: Array<{ level: string; message: string 
           {flag.message}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Red-flag banner: warning signs come before any remedy ─────────
+function RedFlagBanner({ flags }: { flags: RedFlag[] }) {
+  if (!flags.length) return null;
+  const danger = flags.some((f) => f.level === "danger");
+  return (
+    <div
+      role="alert"
+      className={`rounded-lg border p-4 mb-4 ${danger ? "bg-red-50 border-red-300 text-red-800" : "bg-yellow-50 border-yellow-300 text-yellow-900"}`}
+    >
+      <p className="font-semibold flex items-center gap-2 mb-2">
+        {danger ? <ShieldAlert size={18} /> : <AlertTriangle size={18} />}
+        {danger ? "Please see a doctor first" : "Please get this checked by a doctor"}
+      </p>
+      <ul className="space-y-1 text-sm list-disc pl-5">
+        {flags.map((f) => <li key={f.code}>{f.message}</li>)}
+      </ul>
+      <p className="text-xs mt-2 opacity-80">
+        This app only compares symptoms with materia medica text. It does not diagnose, and homeopathic analysis is not a substitute for medical evaluation.
+      </p>
+    </div>
+  );
+}
+
+// ── Mental and physical matches side by side ──────────────────────
+function MatchSplit({ result }: { result: any }) {
+  const mental: string[] = result.mental_matches || [];
+  const physical: string[] = result.physical_matches || (result.mental_matches ? [] : result.matching_symptoms || []);
+  if (!mental.length && !physical.length) return null;
+  return (
+    <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="rounded-lg bg-purple-50 border border-purple-100 p-2">
+        <p className="text-xs font-medium text-purple-800 mb-1">🧠 Mental symptoms matched</p>
+        {mental.length ? (
+          <div className="flex flex-wrap gap-1">
+            {mental.map((m, i) => <Badge key={i} variant="outline" className="text-xs bg-white">{m}</Badge>)}
+          </div>
+        ) : <p className="text-xs text-purple-700/70">None of your mental symptoms matched this remedy.</p>}
+      </div>
+      <div className="rounded-lg bg-gray-50 border border-gray-100 p-2">
+        <p className="text-xs font-medium text-gray-700 mb-1">🩺 Physical symptoms matched</p>
+        {physical.length ? (
+          <div className="flex flex-wrap gap-1">
+            {physical.map((m, i) => <Badge key={i} variant="outline" className="text-xs bg-white">{m}</Badge>)}
+          </div>
+        ) : <p className="text-xs text-gray-500">None of your physical symptoms matched this remedy.</p>}
+      </div>
     </div>
   );
 }
@@ -227,6 +280,16 @@ export default function RemedyScorer({
   const [historyText, setHistoryText] = useState("");
   const [historySaveError, setHistorySaveError] = useState("");
   const [healthProfile, setHealthProfile] = useState<Record<string, any> | null>(null);
+  const [showMind, setShowMind] = useState(false);
+  const [mindAnswers, setMindAnswers] = useState<PsyAnswers>({});
+  const [mindNote, setMindNote] = useState("");
+  const redFlags = useMemo(
+    () => detectRedFlags(
+      [...symptoms.filter((x) => !x.startsWith("🔍")), ...Object.values(questionAnswers), historyText],
+      healthProfile as any,
+    ),
+    [symptoms, questionAnswers, historyText, healthProfile],
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -306,6 +369,8 @@ export default function RemedyScorer({
     const allSymptoms = [
       ...syms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
       ...Object.entries(answers).map(([q, a]) => answerToPhrase(q, a)),
+      ...psychologyPhrases(mindAnswers),                 // chosen mind / emotion answers
+      ...(mindNote ? [mindNote] : []),
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
     ].filter(Boolean);
 
@@ -425,6 +490,7 @@ export default function RemedyScorer({
     setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
     setShowResults(false); setShowQuestionnaire(false);
     setQuestionAnswers({}); setCurrentQuestionIdx(0);
+    setShowMind(false); setMindAnswers({}); setMindNote("");
     setAnalyzingFiles([]); setReportError(""); setHistorySaveError("");
     scoreMutation.reset();
   };
@@ -447,6 +513,22 @@ export default function RemedyScorer({
   );
 
   // ── QUESTIONNAIRE ─────────────────────────────────────────────
+  if (showMind) {
+    return (
+      <div>
+        <PageHeader />
+        <div className="max-w-4xl mx-auto px-4">
+          <PsychologyQuestionnaire
+            initialAnswers={mindAnswers}
+            initialNote={mindNote}
+            onCancel={() => setShowMind(false)}
+            onDone={(a, note) => { setMindAnswers(a); setMindNote(note); setShowMind(false); }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (showQuestionnaire) {
     const currentQ = questions[currentQuestionIdx];
     const progress = (currentQuestionIdx / questions.length) * 100;
@@ -522,6 +604,8 @@ export default function RemedyScorer({
   // ── RESULTS ───────────────────────────────────────────────────
   if (showResults && scoreMutation.data) {
     const topResults = scoreMutation.data.slice(0, 3);
+    // Beyond the top three: keep any remedy that matches a mental symptom (second-place, fourth, fifth ...).
+    const keynoteResults = scoreMutation.data.slice(3).filter((r: any) => r.keynote_matched);
 
     return (
       <div>
@@ -555,6 +639,8 @@ export default function RemedyScorer({
               </Button>
             </div>
 
+            <RedFlagBanner flags={redFlags} />
+
             {historySaveError && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
                 {historySaveError}
@@ -564,6 +650,13 @@ export default function RemedyScorer({
               <div className="mb-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
                 <span className="font-medium">Patient history considered:</span>{" "}
                 {scoreMutation.data[0].history_considered.join(", ")}
+              </div>
+            )}
+
+            {psychologySummary(mindAnswers).length > 0 && (
+              <div className="mb-4 p-3 bg-purple-50 rounded-lg text-xs text-purple-900">
+                <span className="font-medium">Mind and emotions considered:</span>{" "}
+                {psychologySummary(mindAnswers).map((x) => `${x.question} ${x.answer}`).join(" · ")}
               </div>
             )}
 
@@ -659,17 +752,8 @@ export default function RemedyScorer({
                   {/* Covered rubrics — NEW */}
                   <CoveredRubrics rubrics={result.covered_rubrics || []} />
 
-                  {/* Matching symptoms */}
-                  {result.matching_symptoms?.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-400 mb-1">Matched symptoms / rubrics:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {result.matching_symptoms.slice(0, 6).map((s: string, i: number) => (
-                          <Badge key={i} variant="outline" className="text-xs">{s}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {/* Mental and physical matches, shown separately */}
+                  <MatchSplit result={result} />
 
                   {/* Modalities */}
                   {(result.remedy?.modalities?.better?.length > 0 ||
@@ -696,6 +780,27 @@ export default function RemedyScorer({
                 </div>
               ))}
             </div>
+
+            {/* Remedies below the top three that still match the mental symptoms */}
+            {keynoteResults.length > 0 && (
+              <div className="mt-6 rounded-xl border border-purple-200 bg-purple-50/50 p-4">
+                <h3 className="font-bold text-purple-900 mb-1">Also matches your mental symptoms</h3>
+                <p className="text-xs text-purple-800/80 mb-3">
+                  These scored lower overall, but they cover your mind and emotion symptoms, so they are not hidden.
+                </p>
+                <div className="space-y-3">
+                  {keynoteResults.map((r: any, i: number) => (
+                    <div key={i} className="bg-white border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-gray-900">{r.remedy?.name}</span>
+                        <span className="text-sm text-gray-500">{r.score}% relative match</span>
+                      </div>
+                      <MatchSplit result={r} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {topResults.length === 0 && (
               <div className="text-center py-8">
@@ -892,6 +997,8 @@ export default function RemedyScorer({
                 </div>
               </div>
 
+              <RedFlagBanner flags={redFlags} />
+
               <Separator className="my-6" />
 
               <AdvancedFilters
@@ -901,10 +1008,15 @@ export default function RemedyScorer({
               />
 
               <div className="flex justify-between mt-6">
-                <Button variant="outline"
-                  onClick={() => { setShowQuestionnaire(true); setCurrentQuestionIdx(0); }}>
-                  <HelpCircle className="w-4 h-4 mr-2" /> AI Questions
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline"
+                    onClick={() => { setShowQuestionnaire(true); setCurrentQuestionIdx(0); }}>
+                    <HelpCircle className="w-4 h-4 mr-2" /> AI Questions
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowMind(true)}>
+                    🧠 Mind / Psychology{psychologyPhrases(mindAnswers).length > 0 || mindNote ? " ✓" : ""}
+                  </Button>
+                </div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={resetForm}>Clear</Button>
                   <Button

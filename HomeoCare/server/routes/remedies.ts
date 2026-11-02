@@ -199,25 +199,24 @@ Return ONLY JSON (no markdown):
         ],
       },
     ];
-    let response: any;
-    let lastError: unknown;
+    // A model counts only if it returned JSON we can read; an empty or non-JSON reply moves on to the next.
+    let parsed: any = null;
+    let lastError: unknown = new Error("no vision model returned a readable reply");
     for (const model of VISION_MODELS) {
       try {
-        response = await groq().chat.completions.create({ model, messages: reportMessages, max_tokens: 800, temperature: 0.1 } as any, { timeout: 40_000 });
-        break;
+        const response: any = await groq().chat.completions.create(
+          { model, messages: reportMessages, max_tokens: 800, temperature: 0.1 } as any, { timeout: 40_000 });
+        const content: string = response.choices?.[0]?.message?.content || "";
+        const m = content.match(/\{[\s\S]*\}/);
+        const j = m ? JSON.parse(m[0]) : null;
+        if (j && typeof j === "object") { parsed = j; break; }
+        console.warn(`[Groq] ${model} gave an unreadable reply for a report:`, content.slice(0, 200));
       } catch (e) {
         lastError = e;
         console.warn(`[Groq] ${model} failed on a report:`, (e as Error)?.message);
       }
     }
-    if (!response) throw lastError;
-
-    const content = response.choices[0]?.message?.content || "";
-    let parsed: any = {};
-    try {
-      const m = content.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-    } catch { /* ignore parse errors */ }
+    if (!parsed) throw lastError;
 
     res.json({
       symptoms:   parsed.symptoms   || [],

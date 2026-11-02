@@ -143,3 +143,20 @@ t("the interview ends: no endless questions, no empty interview for known sympto
     assert.ok(asked.length >= 3, `${sy} asks at least 3 questions, got ${asked.length}`);
   }
 });
+
+t("a skipped question does not settle its modalities", () => {
+  const state: CaseState = { symptoms: ["throbbing headache"], answers: { "head-worse": [], "head-better": [] } };
+  const ids = queueFor(state).map((q) => q.id);
+  assert.ok(ids.includes("gen-time") && ids.includes("gen-motion"), "time and motion are still asked");
+  state.answers["head-worse"] = ["Light"];
+  assert.ok(!queueFor(state).some((q) => q.id === "gen-time"), "an answered one still settles time");
+});
+
+t("a mixed complaint asks which emotion leads and covers every emotion named", () => {
+  const state: CaseState = { symptoms: ["anxiety and anger"], answers: {} };
+  assert.ok(queueFor(state).some((q) => q.id === "mind-main"), "the clarifier is kept");
+  const ids = queueFor(state).map((q) => q.id);
+  assert.ok(ids.includes("psy-5") && ids.includes("psy-10"), "anxiety and anger sections both present");
+  state.answers["mind-main"] = ["Anger or irritability"];
+  assert.ok(queueFor(state).some((q) => q.id === "psy-10"));
+});

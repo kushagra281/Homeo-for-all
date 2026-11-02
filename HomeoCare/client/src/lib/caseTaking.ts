@@ -75,9 +75,9 @@ const EMOTION_FROM_TEXT: Array<[string, RegExp]> = [
 const EMOTION_SECTION: Record<string, string> = {
   anxiety: "Anxiety and fear", anger: "Anger and irritability", sadness: "Sadness, grief and sensitivity",
 };
-export function emotionFromText(text: string): string | null {
-  for (const [e, re] of EMOTION_FROM_TEXT) if (re.test(text)) return e;
-  return null;
+/** Every emotion named in the text, in a fixed order (a mixed complaint has more than one). */
+export function emotionsFromText(text: string): string[] {
+  return EMOTION_FROM_TEXT.filter(([, re]) => re.test(text)).map(([e]) => e);
 }
 
 const psyQuestion = (n: number): CaseQuestion => {
@@ -119,13 +119,13 @@ const MIND_BODY: CaseQuestion = {
   ],
 };
 
-function mindQuestions(emotion: string | null): CaseQuestion[] {
+function mindQuestions(emotions: string[]): CaseQuestion[] {
   const out: CaseQuestion[] = [MIND_OPENER, MIND_TRIGGER];
   const bySection = (name: string) => PSY_QUESTIONS.filter((x) => x.section === name).map((x) => psyQuestion(x.id));
-  if (emotion && EMOTION_SECTION[emotion]) out.push(...bySection(EMOTION_SECTION[emotion]));
+  for (const e of emotions) if (EMOTION_SECTION[e]) out.push(...bySection(EMOTION_SECTION[e]));
   // Company, support and thinking apply to every emotional complaint.
   out.push(psyQuestion(19), psyQuestion(26), psyQuestion(20), psyQuestion(21), psyQuestion(33), psyQuestion(34));
-  if (emotion !== "anxiety") out.push(psyQuestion(7));
+  if (!emotions.includes("anxiety")) out.push(psyQuestion(7));
   out.push(MIND_BODY);
   return out;
 }
@@ -277,13 +277,11 @@ export function queueFor(state: CaseState): CaseQuestion[] {
   const texts = state.symptoms.filter((s) => !s.startsWith("🔍"));
   const topics = detectTopics(texts, state.category || "");
   const queue: CaseQuestion[] = [];
-  const emotion = emotionFromText(ctx.text) ||
-    (state.answers["mind-main"]?.some((l) => /anxiety|fear/i.test(l)) ? "anxiety" :
-     state.answers["mind-main"]?.some((l) => /anger|irritab/i.test(l)) ? "anger" :
-     state.answers["mind-main"]?.some((l) => /sad|grief/i.test(l)) ? "sadness" : null);
+  const chosen = (state.answers["mind-main"] || []).join(" ");
+  const emotions = [...new Set([...emotionsFromText(ctx.text), ...emotionsFromText(chosen)])];
 
   const take = (topic: string) => {
-    const bank = topic === "mind" ? mindQuestions(emotion) : TOPIC_BANKS[topic] || [];
+    const bank = topic === "mind" ? mindQuestions(emotions) : TOPIC_BANKS[topic] || [];
     // a mind-led case gets its full section; a secondary topic only its first 3 questions
     const limited = topic === "mind" || topics[0] === topic ? bank : bank.slice(0, 3);
     queue.push(...limited);
@@ -292,7 +290,7 @@ export function queueFor(state: CaseState): CaseQuestion[] {
 
   // answered or skipped questions stay in the list so the progress count is stable
   const covered = new Set<string>();
-  for (const q of queue) if (ctx.answered(q.id)) for (const c of q.covers || []) covered.add(c);
+  for (const q of queue) if ((state.answers[q.id] || []).length > 0) for (const c of q.covers || []) covered.add(c);   // a skipped question settles nothing
   const general = GENERAL.filter((g) => !g.covers!.some((c) => covered.has(c)));
 
   const out: CaseQuestion[] = [];
@@ -302,6 +300,8 @@ export function queueFor(state: CaseState): CaseQuestion[] {
     seen.add(q.id);
     if (q.id.startsWith("gen-") && (q.covers || []).some((c) => covered.has(c))) continue;
     if (!ctx.answered(q.id)) {
+      // several emotions named: ask which one leads instead of assuming
+      if (q.id === "mind-main" && emotionsFromText(ctx.text).length > 1) { out.push(q); continue; }
       if (q.skipIf && q.skipIf.test(ctx.text)) continue;
       if (q.when && !q.when(ctx)) continue;
     }

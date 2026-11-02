@@ -285,10 +285,10 @@ export default function RemedyScorer({
   const [mindNote, setMindNote] = useState("");
   const redFlags = useMemo(
     () => detectRedFlags(
-      [...symptoms.filter((x) => !x.startsWith("🔍")), ...Object.values(questionAnswers), historyText],
+      [...symptoms.filter((x) => !x.startsWith("🔍")), ...Object.values(questionAnswers), mindNote, historyText],
       healthProfile as any,
     ),
-    [symptoms, questionAnswers, historyText, healthProfile],
+    [symptoms, questionAnswers, mindNote, historyText, healthProfile],
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);

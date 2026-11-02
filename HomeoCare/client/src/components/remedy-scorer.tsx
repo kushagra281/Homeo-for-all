@@ -16,6 +16,7 @@ import AdvancedFilters, { FilterState } from "./advanced-filters";
 import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
 import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 import { detectRedFlags, type RedFlag } from "@shared/redFlags";
+import LanguageMenu from "./language-menu";
 import PsychologyQuestionnaire from "./psychology-questionnaire";
 import { psychologyPhrases, psychologySummary, type PsyAnswers } from "@/lib/psychology";
 import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState } from "@/lib/caseTaking";
@@ -475,9 +476,12 @@ export default function RemedyScorer({
           </div>
           <span className="font-bold text-green-700 text-lg">HomeoWell</span>
         </button>
-        {activeCategory && (
-          <Badge className="bg-green-100 text-green-700 border-green-300">{activeCategory}</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {activeCategory && (
+            <Badge className="bg-green-100 text-green-700 border-green-300">{activeCategory}</Badge>
+          )}
+          <LanguageMenu />
+        </div>
       </div>
     </header>
   );
@@ -694,7 +698,7 @@ export default function RemedyScorer({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-lg font-bold text-green-800">#{idx + 1}</span>
-                        <h3 className="text-lg font-bold text-gray-900">{result.remedy?.name}</h3>
+                        <h3 className="text-lg font-bold text-gray-900 notranslate" translate="no">{result.remedy?.name}</h3>
                         {result.remedy?.abbreviation && (
                           <span className="text-xs text-gray-400">({result.remedy.abbreviation})</span>
                         )}
@@ -801,7 +805,7 @@ export default function RemedyScorer({
                   {keynoteResults.map((r: any, i: number) => (
                     <div key={i} className="bg-white border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-gray-900">{r.remedy?.name}</span>
+                        <span className="font-semibold text-gray-900 notranslate" translate="no">{r.remedy?.name}</span>
                         <span className="text-sm text-gray-500">{r.score}% relative match</span>
                       </div>
                       <MatchSplit result={r} />

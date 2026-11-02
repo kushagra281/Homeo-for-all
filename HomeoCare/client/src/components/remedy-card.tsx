@@ -10,7 +10,7 @@ export default function RemedyCard({ remedy }: RemedyCardProps) {
   return (
     <Card className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
       <div className="flex items-start justify-between mb-4">
-        <h4 className="text-xl font-semibold text-neutral-900">{remedy.name}</h4>
+        <h4 className="text-xl font-semibold text-neutral-900 notranslate" translate="no">{remedy.name}</h4>
         <Badge variant="secondary" className="bg-accent/10 text-accent">
           {remedy.condition}
         </Badge>

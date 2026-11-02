@@ -37,13 +37,18 @@ async function askModel(messages: Array<{ role: "system" | "user"; content: stri
 router.post("/next-question", aiLimit, async (req, res) => {
   const input = sanitizeInput(req.body);
   if (!input) return res.status(400).json({ message: "symptoms array is required" });
-  if (!hasGroqKey()) return res.json({ fallback: true });
+  if (!hasGroqKey()) { console.warn("[Route] next-question: no Groq key set, using built-in questions"); return res.json({ fallback: true }); }
   try {
-    const reply = parseNextQuestion(await askModel(buildQuestionMessages(input), 600), input);
-    if (!reply) return res.json({ fallback: true });
+    const raw = await askModel(buildQuestionMessages(input), 600);
+    const reply = parseNextQuestion(raw, input);
+    if (!reply) {
+      // The reason the app silently used its built-in questions: visible in the server log.
+      console.warn("[Route] next-question: reply rejected, using built-in questions. Model said:", raw.slice(0, 300));
+      return res.json({ fallback: true });
+    }
     res.json(reply);
   } catch (error) {
-    console.error("[Route] next-question error:", (error as Error)?.message);
+    console.error("[Route] next-question: Groq call failed, using built-in questions:", (error as Error)?.message);
     res.json({ fallback: true });
   }
 });
@@ -55,10 +60,12 @@ router.post("/explain", aiLimit, async (req, res) => {
   if (!input) return res.status(400).json({ message: "symptoms and ranked remedies are required" });
   if (!hasGroqKey()) return res.json({ unavailable: true });
   try {
-    const reply = parseExplanation(await askModel(buildExplainMessages(input), 1100), input);
+    const raw = await askModel(buildExplainMessages(input), 1100);
+    const reply = parseExplanation(raw, input);
+    if (!reply) console.warn("[Route] explain: reply rejected. Model said:", raw.slice(0, 300));
     res.json(reply || { unavailable: true });
   } catch (error) {
-    console.error("[Route] explain error:", (error as Error)?.message);
+    console.error("[Route] explain: Groq call failed:", (error as Error)?.message);
     res.json({ unavailable: true });
   }
 });

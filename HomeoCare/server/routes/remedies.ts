@@ -20,15 +20,30 @@ const searchLimit  = rateLimit({ name: "search",  windowMs: 60_000, max: 30 });
 const analyzeLimit = rateLimit({ name: "analyze", windowMs: 60_000, max: 6 });
 const aiLimit      = rateLimit({ name: "ai-case", windowMs: 60_000, max: 25 });
 
-const TEXT_MODEL = process.env.GROQ_TEXT_MODEL || "llama-3.3-70b-versatile";
+// Groq retires models regularly (llama-3.3-70b-versatile and llama-4-scout were shut down in 2026),
+// and a retired model makes every call fail. The models are tried in order, and each can be changed
+// in the environment without a new deploy of the code.
+const TEXT_MODELS = [process.env.GROQ_TEXT_MODEL, "openai/gpt-oss-120b", "qwen/qwen3.8-27b"].filter(Boolean) as string[];
+const VISION_MODELS = [process.env.GROQ_VISION_MODEL, "qwen/qwen3.8-27b"].filter(Boolean) as string[];
 
-/** One JSON reply from the model. Throws on network or API errors; the routes turn that into a fallback. */
+/** One JSON reply from the first model that works. Throws only when every model failed. */
 async function askModel(messages: Array<{ role: "system" | "user"; content: string }>, maxTokens: number): Promise<string> {
-  const r = await groq().chat.completions.create(
-    { model: TEXT_MODEL, messages, max_tokens: maxTokens, temperature: 0.3, response_format: { type: "json_object" } },
-    { timeout: 20_000 },
-  );
-  return r.choices[0]?.message?.content || "";
+  let lastError: unknown;
+  for (const model of TEXT_MODELS) {
+    try {
+      const body: any = { model, messages, max_tokens: maxTokens, temperature: 0.3, response_format: { type: "json_object" } };
+      // gpt-oss is a reasoning model: keep its thinking short so the answer fits in max_tokens
+      if (model.startsWith("openai/gpt-oss")) body.reasoning_effort = "low";
+      const r = await groq().chat.completions.create(body, { timeout: 25_000 });
+      const text = r.choices[0]?.message?.content || "";
+      if (text.trim()) return text;
+      lastError = new Error(`${model} returned an empty reply`);
+    } catch (e) {
+      lastError = e;
+      console.warn(`[Groq] ${model} failed:`, (e as Error)?.message);
+    }
+  }
+  throw lastError;
 }
 
 // ── POST /api/remedies/next-question ─────────────────────────────
@@ -39,7 +54,7 @@ router.post("/next-question", aiLimit, async (req, res) => {
   if (!input) return res.status(400).json({ message: "symptoms array is required" });
   if (!hasGroqKey()) { console.warn("[Route] next-question: no Groq key set, using built-in questions"); return res.json({ fallback: true }); }
   try {
-    const raw = await askModel(buildQuestionMessages(input), 600);
+    const raw = await askModel(buildQuestionMessages(input), 1500);
     const reply = parseNextQuestion(raw, input);
     if (!reply) {
       // The reason the app silently used its built-in questions: visible in the server log.
@@ -60,7 +75,7 @@ router.post("/explain", aiLimit, async (req, res) => {
   if (!input) return res.status(400).json({ message: "symptoms and ranked remedies are required" });
   if (!hasGroqKey()) return res.json({ unavailable: true });
   try {
-    const raw = await askModel(buildExplainMessages(input), 1100);
+    const raw = await askModel(buildExplainMessages(input), 2500);
     const reply = parseExplanation(raw, input);
     if (!reply) console.warn("[Route] explain: reply rejected. Model said:", raw.slice(0, 300));
     res.json(reply || { unavailable: true });
@@ -169,36 +184,39 @@ router.post("/analyze-report", analyzeLimit, async (req, res) => {
     }
     if (!hasGroqKey()) return res.status(500).json({ message: "GROQ_OPENAI_API not configured" });
 
-    const response = await groq().chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` },
-            },
-            {
-              type: "text",
-              text: `You are a homeopathic medical assistant. Analyze this medical report.
+    const reportMessages = [
+      {
+        role: "user" as const,
+        content: [
+          { type: "image_url" as const, image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` } },
+          {
+            type: "text" as const,
+            text: `You are a homeopathic medical assistant. Analyze this medical report.
 Extract: diagnosed conditions, symptoms, abnormal lab values, medications, complaints.
 Return ONLY JSON (no markdown):
 {"symptoms":["..."],"conditions":["..."],"summary":"one sentence"}`,
-            },
-          ],
-        },
-      ],
-      max_tokens: 500,
-      temperature: 0.1,
-    });
-
-    const content = response.choices[0]?.message?.content || "";
-    let parsed: any = {};
-    try {
-      const m = content.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-    } catch { /* ignore parse errors */ }
+          },
+        ],
+      },
+    ];
+    // A model counts only if it returned JSON we can read; an empty or non-JSON reply moves on to the next.
+    let parsed: any = null;
+    let lastError: unknown = new Error("no vision model returned a readable reply");
+    for (const model of VISION_MODELS) {
+      try {
+        const response: any = await groq().chat.completions.create(
+          { model, messages: reportMessages, max_tokens: 800, temperature: 0.1 } as any, { timeout: 40_000 });
+        const content: string = response.choices?.[0]?.message?.content || "";
+        const m = content.match(/\{[\s\S]*\}/);
+        const j = m ? JSON.parse(m[0]) : null;
+        if (j && typeof j === "object") { parsed = j; break; }
+        console.warn(`[Groq] ${model} gave an unreadable reply for a report:`, content.slice(0, 200));
+      } catch (e) {
+        lastError = e;
+        console.warn(`[Groq] ${model} failed on a report:`, (e as Error)?.message);
+      }
+    }
+    if (!parsed) throw lastError;
 
     res.json({
       symptoms:   parsed.symptoms   || [],

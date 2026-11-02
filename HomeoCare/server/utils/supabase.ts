@@ -498,23 +498,30 @@ export async function upsertProfileRow(userId: string, email: string, profile: R
     }
   }
 
+  // Number columns reject "" (an untouched form field) and text such as "35 yrs": send a number or null.
+  for (const col of ["age", "height_cm", "weight_kg"]) {
+    if (col in safeProfile) {
+      const n = Number(String(safeProfile[col]).trim());
+      safeProfile[col] = String(safeProfile[col]).trim() !== "" && Number.isFinite(n) ? n : null;
+    }
+  }
+  if (typeof safeProfile.age === "number") safeProfile.age = Math.round(safeProfile.age);
+
   console.log("[DB] Upserting profile for userId:", userId, "columns:", Object.keys(safeProfile).length);
 
-  const { error } = await userDB(accessToken).from("patients").upsert(safeProfile, { onConflict: "id" });
-  if (error) {
-    // If error is about missing column, retry without that column
-    if (error.message.includes("column") && error.message.includes("does not exist")) {
-      const col = error.message.match(/"([^"]+)"/)?.[1];
-      if (col) {
-        console.warn(`[DB] Column ${col} missing — retrying without it`);
-        delete safeProfile[col];
-        const { error: error2 } = await userDB(accessToken).from("patients").upsert(safeProfile, { onConflict: "id" });
-        if (error2) throw new Error(error2.message);
-        return;
-      }
-    }
-    throw new Error(error.message);
+  // If the table is missing a column, drop just that column and try again (up to a few times)
+  // instead of losing the whole save. Both message styles are handled: Postgres' 'column "x" ...
+  // does not exist' and the API's "Could not find the 'x' column of 'patients' in the schema cache".
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { error } = await userDB(accessToken).from("patients").upsert(safeProfile, { onConflict: "id" });
+    if (!error) return;
+    const col = error.message.match(/Could not find the '([^']+)' column/)?.[1]
+      || (error.message.includes("does not exist") ? error.message.match(/"([^"]+)"/)?.[1] : undefined);
+    if (!col || !(col in safeProfile) || col === "id" || col === "email") throw new Error(error.message);
+    console.warn(`[DB] patients.${col} is missing - saving without it`);
+    delete safeProfile[col];
   }
+  throw new Error("Too many missing columns in patients table");
 }
 
 export async function insertSearchHistory(patientId: string, symptoms: string[], rubricsUsed: string[], results: any[], confidence: number): Promise<void> {

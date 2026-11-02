@@ -65,6 +65,31 @@ t("variants are safe for PostgREST filters (letters+spaces only)", () => {
 t("remedy name normalisation", () => {
   assert.equal(normalizeRemedyName("ARSENICUM ALBUM."), normalizeRemedyName("Arsenicum  album"));
 });
+t("same remedy under two spellings is merged by full name", () => {
+  const same: Array<[string, string]> = [
+    ["BRYONIA", "BRYONIA ALBA"], ["PULSATILLA", "PULSATILLA PRATENSIS"], ["SEPIA", "SEPIA OFFICINALIS"],
+    ["KALI BICHROMICUM", "KALIUM BICHROMICUM"], ["NATRUM MURIATICUM", "NATRIUM MURIATICUM"],
+    ["DULCAMARA BITTER SWEET", "DULCAMARA"], ["CROTALUS HORRIDUS (RATTLESNAKE)", "CROTALUS HORRIDUS"],
+    ["EUPATORIUM PERFOLIATUM (BONESET)", "EUPATORIUM PERFOLIATUM"], ["COFFEA", "COFFEA CRUDA"],
+    ["NITRIC ACID", "NITRICUM ACIDUM"], ["PICRIC ACID.", "PICRICUM ACIDUM"], ["COLOCYNTH", "COLOCYNTHIS"],
+    ["CINCHONA", "CHINA OFFICINALIS"], ["STAPHISAGRIA", "STAPHYSAGRIA"], ["MAGNESIA PHOSPHORICA", "MAGNESIUM PHOSPHORICUM"],
+  ];
+  for (const [a, b] of same) assert.equal(normalizeRemedyName(a), normalizeRemedyName(b), `${a} / ${b}`);
+});
+t("different remedies with a similar name stay separate", () => {
+  assert.notEqual(normalizeRemedyName("AURUM MURIATICUM (NATRONATUM)"), normalizeRemedyName("AURUM MURIATICUM"));
+  assert.equal(normalizeRemedyName("AURUM MURIATICUM (NATRONATUM)"), normalizeRemedyName("AURUM MURIATICUM NATRONATUM"));
+  assert.equal(normalizeRemedyName("ACTAEA RACEMOSA (BLACK COHOSH)"), "actaea racemosa");
+  const different: Array<[string, string]> = [
+    ["ALUMINA", "ALUMINA SILICATA"], ["SULPHUR", "SULPHUR IODATUM"], ["CAMPHORA", "CAMPHORA BROMATA"],
+    ["BERBERIS VULGARIS", "BERBERIS AQUIFOLIUM"], ["AURUM MURIATICUM", "AURUM MURIATICUM NATRONATUM"],
+    ["TUBERCULINUM", "TUBERCULINUM BOVINUM"], ["MERCURIUS", "MERCURIUS CORROSIVUS"],
+    ["KALI CARBONICUM", "KALI BICHROMICUM"], ["NATRUM MURIATICUM", "NATRUM SULPHURICUM"],
+    ["ARSENICUM ALBUM", "ARSENICUM IODATUM"], ["PODOPHYLLUM", "PODOPHYLLINUM"],
+    ["SPIGELIA ANTHELMIA", "SPIGELIA ANTHELMINTICA"], ["NITRIC ACID", "PHOSPHORIC ACID"],
+  ];
+  for (const [a, b] of different) assert.notEqual(normalizeRemedyName(a), normalizeRemedyName(b), `${a} / ${b}`);
+});
 t("category → section patterns", () => {
   assert.deepEqual(sectionPatterns("Respiration"), ["respirat", "cough", "chest", "larynx"]);
   assert.ok(sectionPatterns("Hands, Legs & Back")!.includes("extremit"));

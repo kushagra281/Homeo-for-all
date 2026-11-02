@@ -19,7 +19,8 @@ import { detectRedFlags, type RedFlag } from "@shared/redFlags";
 import LanguageMenu from "./language-menu";
 import PsychologyQuestionnaire from "./psychology-questionnaire";
 import { psychologyPhrases, psychologySummary, type PsyAnswers } from "@/lib/psychology";
-import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState } from "@/lib/caseTaking";
+import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
+import { fetchNextQuestion, fetchExplanation, type AiExplanation } from "@/lib/aiCase";
 
 const AVOID_RECOMMENDATIONS: Record<string, string[]> = {
   "Mind": ["Coffee and stimulants", "Alcohol", "Overthinking before bed", "Social media overuse", "Skipping meals", "Isolation"],
@@ -239,10 +240,19 @@ export default function RemedyScorer({
   const [showMind, setShowMind] = useState(false);
   const [mindAnswers, setMindAnswers] = useState<PsyAnswers>({});
   const [mindNote, setMindNote] = useState("");
+  // The AI writes the next question from the symptoms and answers. If it is unavailable (no key, slow,
+  // bad reply) the built-in question bank takes over, so the interview never blocks.
+  const [aiQ, setAiQ] = useState<CaseQuestion | null>(null);
+  const [aiCustom, setAiCustom] = useState<Record<string, CaseQuestion>>({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiOff, setAiOff] = useState(false);
+  const [aiDone, setAiDone] = useState(false);
+  const aiReq = useRef(0);
+  const [aiExplain, setAiExplain] = useState<{ loading: boolean; data: AiExplanation | null }>({ loading: false, data: null });
   const activeCategory0 = initialCategory || category || "";
   const caseState: CaseState = useMemo(
-    () => ({ symptoms, category: activeCategory0, answers: caseAnswers }),
-    [symptoms, activeCategory0, caseAnswers],
+    () => ({ symptoms, category: activeCategory0, answers: caseAnswers, custom: aiCustom }),
+    [symptoms, activeCategory0, caseAnswers, aiCustom],
   );
   // "Question: answer" text from the interview, used for the red-flag scan and the result screen.
   const questionAnswers: Record<string, string> = useMemo(
@@ -319,7 +329,7 @@ export default function RemedyScorer({
   const submitToAI = (syms: string[], answers: Record<string, string[]>) => {
     const allSymptoms = [
       ...syms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
-      ...answerPhrases({ symptoms: syms, category: activeCategory, answers }),   // every interview answer
+      ...answerPhrases({ symptoms: syms, category: activeCategory, answers, custom: aiCustom }),   // every interview answer
       ...psychologyPhrases(mindAnswers),                 // chosen mind / emotion answers
       ...(mindNote ? [mindNote] : []),
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
@@ -333,13 +343,34 @@ export default function RemedyScorer({
     scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
   };
 
-  const currentQ = nextQuestion(caseState);
+  const useAi = !aiOff && !aiDone;
+  const currentQ = useAi ? aiQ : nextQuestion(caseState);
 
   const finishInterview = (answers: Record<string, string[]>) => {
+    aiReq.current += 1; setAiLoading(false);             // a late AI reply must not search a second time
     setShowQuestionnaire(false);
     setPicked([]);
     if (symptoms.length > 0 || Object.keys(answers).length > 0) submitToAI(symptoms, answers);
   };
+
+  // Ask the AI for the next question whenever none is open.
+  useEffect(() => {
+    if (!showQuestionnaire || !useAi || aiQ || aiLoading) return;
+    const real = symptoms.filter((x) => !x.startsWith("🔍"));
+    const sent = real.length ? real : activeCategory ? [`${activeCategory} complaint`] : [];
+    if (!sent.length) { setAiOff(true); return; }
+    const id = `ai-${++aiReq.current}`;
+    setAiLoading(true);
+    fetchNextQuestion(sent, answerLines(caseState, true), id).then((r) => {
+      if (id !== `ai-${aiReq.current}`) return;           // a newer request or a reset replaced this one
+      setAiLoading(false);
+      if (!r) { setAiOff(true); return; }
+      if (r.done) { setAiDone(true); finishInterview(caseAnswers); return; }
+      setAiCustom((c) => ({ ...c, [id]: r.question }));
+      setAiQ(r.question);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showQuestionnaire, useAi, aiQ, aiLoading, answerOrder.length]);
 
   // Records the open question (empty list = skipped) and moves on, or searches when the case is complete.
   const commitAnswer = (labels: string[]) => {
@@ -348,7 +379,8 @@ export default function RemedyScorer({
     setCaseAnswers(answers);
     setAnswerOrder((prev) => [...prev, currentQ.id]);
     setPicked([]);
-    if (!nextQuestion({ symptoms, category: activeCategory, answers })) finishInterview(answers);
+    if (useAi) { setAiQ(null); return; }                   // the effect above fetches the next one
+    if (!nextQuestion({ symptoms, category: activeCategory, answers, custom: aiCustom })) finishInterview(answers);
   };
 
   const togglePick = (label: string) => {
@@ -366,9 +398,31 @@ export default function RemedyScorer({
     setCaseAnswers(rest);
     setAnswerOrder((prev) => prev.slice(0, -1));
     setPicked(previous || []);
+    if (useAi) { aiReq.current += 1; setAiLoading(false); setAiQ(aiCustom[last] || null); }   // show the earlier AI question again
   };
 
   const handleSkipQuestionnaire = () => finishInterview(caseAnswers);
+
+  // AI explanation of the ranking the engine already made (it cannot change the ranking).
+  useEffect(() => {
+    const data = scoreMutation.data as any[] | undefined;
+    if (!showResults || !data?.length) return;
+    const ranked = data.slice(0, 5).map((r: any) => ({
+      name: String(r.remedy?.name || ""), score: Math.round(Number(r.score) || 0),
+      mental: (r.mental_matches || []).slice(0, 6), physical: (r.physical_matches || r.matching_symptoms || []).slice(0, 6),
+    })).filter((r) => r.name);
+    const real = symptoms.filter((x) => !x.startsWith("🔍"));
+    const lines = [
+      ...answerLines(caseState),
+      ...psychologySummary(mindAnswers),                 // answers given in the separate Mind / Psychology form
+    ];
+    let cancelled = false;
+    setAiExplain({ loading: true, data: null });
+    fetchExplanation(real.length ? real : [activeCategory || "complaint"], lines, ranked)
+      .then((d) => { if (!cancelled) setAiExplain({ loading: false, data: d }); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showResults, scoreMutation.data]);
 
   const handleAddSymptom = () => {
     if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
@@ -461,6 +515,7 @@ export default function RemedyScorer({
     setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
     setShowResults(false); setShowQuestionnaire(false);
     setCaseAnswers({}); setAnswerOrder([]); setPicked([]);
+    aiReq.current += 1; setAiQ(null); setAiCustom({}); setAiLoading(false); setAiOff(false); setAiDone(false); setAiExplain({ loading: false, data: null });
     setShowMind(false); setMindAnswers({}); setMindNote("");
     setAnalyzingFiles([]); setReportError(""); setHistorySaveError("");
     scoreMutation.reset();
@@ -504,6 +559,25 @@ export default function RemedyScorer({
   }
 
   if (showQuestionnaire) {
+    if (useAi && !currentQ) {
+      return (
+        <div>
+          <PageHeader />
+          <div className="max-w-2xl mx-auto px-4">
+            <Card className="p-6 text-center space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto" />
+              <p className="text-gray-700">Thinking about your case…</p>
+              <div className="flex justify-center gap-3">
+                {answerOrder.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={goBack}>← Back</Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={handleSkipQuestionnaire} className="text-gray-500">Show results now →</Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+    }
     if (!currentQ) {
       // every relevant question is already answered: nothing more to ask
       return (
@@ -528,8 +602,8 @@ export default function RemedyScorer({
       );
     }
     const answeredCount = answerOrder.length;
-    const total = Math.max(plannedCount(caseState), answeredCount + 1);
-    const progress = (answeredCount / total) * 100;
+    const total = useAi ? 12 : Math.max(plannedCount(caseState), answeredCount + 1);
+    const progress = Math.min(95, (answeredCount / total) * 100);
     const topics = detectTopics(symptoms.filter((x) => !x.startsWith("🔍")), activeCategory);
     return (
       <div>
@@ -548,6 +622,7 @@ export default function RemedyScorer({
                 <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
               <div className="flex flex-wrap gap-1 mt-2">
+                {useAi && <Badge className="text-xs bg-green-100 text-green-700 border-green-300">AI-guided</Badge>}
                 {topics.slice(0, 3).map((t) => (
                   <Badge key={t} variant="secondary" className="text-xs">{TOPIC_LABELS[t] || t}</Badge>
                 ))}
@@ -684,6 +759,33 @@ export default function RemedyScorer({
                     <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {(aiExplain.loading || aiExplain.data) && (
+              <div className="mb-4 p-4 rounded-lg border border-indigo-200 bg-indigo-50" data-testid="ai-explanation">
+                <p className="text-sm font-semibold text-indigo-900 mb-2">🧠 Case analysis</p>
+                {aiExplain.loading && <p className="text-xs text-indigo-700">Writing the analysis of your case…</p>}
+                {aiExplain.data && (
+                  <div className="space-y-2 text-sm text-indigo-950">
+                    {aiExplain.data.overview && <p>{aiExplain.data.overview}</p>}
+                    {aiExplain.data.remedies.map((r) => (
+                      <p key={r.name}>
+                        <span className="font-semibold notranslate" translate="no">{r.name}:</span> {r.why}
+                        {r.against && <span className="text-indigo-800"> <em>Against:</em> {r.against}</span>}
+                      </p>
+                    ))}
+                    {aiExplain.data.ask_next.length > 0 && (
+                      <div>
+                        <p className="font-medium">To tell the top remedies apart, ask:</p>
+                        <ul className="list-disc pl-5">{aiExplain.data.ask_next.map((q) => <li key={q}>{q}</li>)}</ul>
+                      </div>
+                    )}
+                    <p className="text-xs text-indigo-700 pt-1">
+                      Written by AI from the matches below. The ranking itself comes only from the materia medica text, and this is not medical advice.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

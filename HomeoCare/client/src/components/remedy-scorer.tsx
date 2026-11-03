@@ -17,8 +17,7 @@ import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
 import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 import { detectRedFlags, type RedFlag } from "@shared/redFlags";
 import LanguageMenu from "./language-menu";
-import PsychologyQuestionnaire from "./psychology-questionnaire";
-import { psychologyPhrases, psychologySummary, type PsyAnswers } from "@/lib/psychology";
+import { psychologySummary } from "@/lib/psychology";
 import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
 import { fetchNextQuestion, fetchExplanation, type AiExplanation } from "@/lib/aiCase";
 
@@ -237,9 +236,6 @@ export default function RemedyScorer({
   const [historyText, setHistoryText] = useState("");
   const [historySaveError, setHistorySaveError] = useState("");
   const [healthProfile, setHealthProfile] = useState<Record<string, any> | null>(null);
-  const [showMind, setShowMind] = useState(false);
-  const [mindAnswers, setMindAnswers] = useState<PsyAnswers>({});
-  const [mindNote, setMindNote] = useState("");
   // The AI writes the next question from the symptoms and answers. If it is unavailable (no key, slow,
   // bad reply) the built-in question bank takes over, so the interview never blocks.
   const [aiQ, setAiQ] = useState<CaseQuestion | null>(null);
@@ -261,10 +257,10 @@ export default function RemedyScorer({
   );
   const redFlags = useMemo(
     () => detectRedFlags(
-      [...symptoms.filter((x) => !x.startsWith("🔍")), ...Object.values(questionAnswers), mindNote, historyText],
+      [...symptoms.filter((x) => !x.startsWith("🔍")), ...Object.values(questionAnswers), historyText],
       healthProfile as any,
     ),
-    [symptoms, questionAnswers, mindNote, historyText, healthProfile],
+    [symptoms, questionAnswers, historyText, healthProfile],
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -330,8 +326,6 @@ export default function RemedyScorer({
     const allSymptoms = [
       ...syms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
       ...answerPhrases({ symptoms: syms, category: activeCategory, answers, custom: aiCustom }),   // every interview answer
-      ...psychologyPhrases(mindAnswers),                 // chosen mind / emotion answers
-      ...(mindNote ? [mindNote] : []),
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
     ].filter(Boolean);
 
@@ -414,7 +408,6 @@ export default function RemedyScorer({
     const real = symptoms.filter((x) => !x.startsWith("🔍"));
     const lines = [
       ...answerLines(caseState),
-      ...psychologySummary(mindAnswers),                 // answers given in the separate Mind / Psychology form
     ];
     let cancelled = false;
     setAiExplain({ loading: true, data: null });
@@ -505,9 +498,11 @@ export default function RemedyScorer({
     if (pending.length) analyzeFiles(pending);
   }, []);
 
+  // "Apply & Search" starts the case-taking questions (mind and body); the search runs when they end.
   const handleSubmit = () => {
     if (symptoms.length === 0) return;
-    submitToAI(symptoms, caseAnswers);
+    setPicked([]);
+    setShowQuestionnaire(true);
   };
 
   const resetForm = () => {
@@ -516,7 +511,6 @@ export default function RemedyScorer({
     setShowResults(false); setShowQuestionnaire(false);
     setCaseAnswers({}); setAnswerOrder([]); setPicked([]);
     aiReq.current += 1; setAiQ(null); setAiCustom({}); setAiLoading(false); setAiOff(false); setAiDone(false); setAiExplain({ loading: false, data: null });
-    setShowMind(false); setMindAnswers({}); setMindNote("");
     setAnalyzingFiles([]); setReportError(""); setHistorySaveError("");
     scoreMutation.reset();
   };
@@ -542,22 +536,6 @@ export default function RemedyScorer({
   );
 
   // ── QUESTIONNAIRE ─────────────────────────────────────────────
-  if (showMind) {
-    return (
-      <div>
-        <PageHeader />
-        <div className="max-w-4xl mx-auto px-4">
-          <PsychologyQuestionnaire
-            initialAnswers={mindAnswers}
-            initialNote={mindNote}
-            onCancel={() => setShowMind(false)}
-            onDone={(a, note) => { setMindAnswers(a); setMindNote(note); setShowMind(false); }}
-          />
-        </div>
-      </div>
-    );
-  }
-
   if (showQuestionnaire) {
     if (useAi && !currentQ) {
       return (
@@ -741,10 +719,10 @@ export default function RemedyScorer({
               </div>
             )}
 
-            {psychologySummary({ ...psyAnswersOf(caseState), ...mindAnswers }).length > 0 && (
+            {psychologySummary(psyAnswersOf(caseState)).length > 0 && (
               <div className="mb-4 p-3 bg-purple-50 rounded-lg text-xs text-purple-900">
                 <span className="font-medium">Mind and emotions considered:</span>{" "}
-                {psychologySummary({ ...psyAnswersOf(caseState), ...mindAnswers }).map((x) => `${x.question} ${x.answer}`).join(" · ")}
+                {psychologySummary(psyAnswersOf(caseState)).map((x) => `${x.question} ${x.answer}`).join(" · ")}
               </div>
             )}
 
@@ -1114,39 +1092,20 @@ export default function RemedyScorer({
 
               <RedFlagBanner flags={redFlags} />
 
+              {Number(healthProfile?.age) > 0 && Number(healthProfile?.age) < 14 && (
+                <div className="mt-3 text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3">
+                  ⚠️ This profile is for a child. Please consult a qualified paediatrician or homeopath before giving any remedy.
+                </div>
+              )}
+
               <Separator className="my-6" />
 
               <AdvancedFilters
                 onFiltersChange={setFilters}
                 onSearch={handleSubmit}
                 isLoading={scoreMutation.isPending}
+                disabled={symptoms.length === 0 || analyzingFiles.length > 0}
               />
-
-              <div className="flex justify-between mt-6">
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline"
-                    onClick={() => { setShowQuestionnaire(true); setPicked([]); }}>
-                    <HelpCircle className="w-4 h-4 mr-2" /> AI Questions
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowMind(true)}>
-                    🧠 Mind / Psychology{psychologyPhrases(mindAnswers).length > 0 || mindNote ? " ✓" : ""}
-                  </Button>
-                </div>
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={resetForm}>Clear</Button>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={
-                      symptoms.length === 0 ||
-                      scoreMutation.isPending ||
-                      analyzingFiles.length > 0
-                    }
-                    className="min-w-32 bg-green-600 hover:bg-green-700"
-                  >
-                    <Search className="w-4 h-4 mr-2" /> Find Remedies
-                  </Button>
-                </div>
-              </div>
 
               {analyzingFiles.length > 0 && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg">

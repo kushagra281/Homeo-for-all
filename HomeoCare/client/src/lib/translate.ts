@@ -117,6 +117,14 @@ export function setLanguage(code: string): boolean {
   if (!(CODES as readonly string[]).includes(code)) return true;
   writeCookie(code);
   window.clearTimeout(restoreTimer);   // a newer choice cancels a pending "back to English" check
+  // Google cannot reliably undo a translation in place (the text stays in the other language).
+  // The cookie is already cleared, so a reload brings the original English page back.
+  if (code === "en") {
+    if (currentLanguage() === "en" || !document.cookie.includes("googtrans")) {
+      window.location.reload();
+      return false;
+    }
+  }
   const select = combo();
   if (select) {
     // Google's empty "Select language" option does not undo a translation; the page language

@@ -494,7 +494,7 @@ export default function RemedyScorer({
     if (pending.length) analyzeFiles(pending);
   }, []);
 
-  // "Apply & Search" starts the case-taking questions (mind and body); the search runs when they end.
+  // The Search button starts the case-taking questions (mind and body); the search runs when they end.
   const handleSubmit = () => {
     if (symptoms.length === 0) return;
     setPicked([]);
@@ -1103,7 +1103,7 @@ export default function RemedyScorer({
                 >
                   {scoreMutation.isPending
                     ? <span className="flex items-center gap-2"><span className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" /> Searching...</span>
-                    : <span className="flex items-center gap-2"><Search size={14} /> Apply & Search</span>}
+                    : <span className="flex items-center gap-2"><Search size={14} /> Search</span>}
                 </Button>
               </div>
 

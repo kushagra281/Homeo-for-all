@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import AdvancedFilters, { FilterState } from "./advanced-filters";
 import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
 import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 import { detectRedFlags, type RedFlag } from "@shared/redFlags";
@@ -224,7 +223,6 @@ export default function RemedyScorer({
   const [, setLocation] = useLocation();
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [currentSymptom, setCurrentSymptom] = useState("");
-  const [filters, setFilters] = useState<FilterState>({ age_group: "", gender: "", condition_type: "", potency: "" });
   const [showResults, setShowResults] = useState(false);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [caseAnswers, setCaseAnswers] = useState<Record<string, string[]>>({});   // question id -> chosen answers
@@ -329,9 +327,7 @@ export default function RemedyScorer({
       ...(activeCategory ? [`category: ${activeCategory}`] : []),
     ].filter(Boolean);
 
-    const cleanFilters: any = Object.fromEntries(
-      Object.entries(filters).filter(([_, v]) => v !== "")
-    );
+    const cleanFilters: any = {};
     if (activeCategory) cleanFilters.symptom_location = activeCategory;
 
     scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
@@ -507,7 +503,6 @@ export default function RemedyScorer({
 
   const resetForm = () => {
     setSymptoms([]); setCurrentSymptom(""); setUploadedFiles([]);
-    setFilters({ age_group: "", gender: "", condition_type: "", potency: "" });
     setShowResults(false); setShowQuestionnaire(false);
     setCaseAnswers({}); setAnswerOrder([]); setPicked([]);
     aiReq.current += 1; setAiQ(null); setAiCustom({}); setAiLoading(false); setAiOff(false); setAiDone(false); setAiExplain({ loading: false, data: null });
@@ -1100,12 +1095,17 @@ export default function RemedyScorer({
 
               <Separator className="my-6" />
 
-              <AdvancedFilters
-                onFiltersChange={setFilters}
-                onSearch={handleSubmit}
-                isLoading={scoreMutation.isPending}
-                disabled={symptoms.length === 0 || analyzingFiles.length > 0}
-              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSubmit}
+                  disabled={scoreMutation.isPending || symptoms.length === 0 || analyzingFiles.length > 0}
+                  className="bg-green-600 hover:bg-green-700 text-sm"
+                >
+                  {scoreMutation.isPending
+                    ? <span className="flex items-center gap-2"><span className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" /> Searching...</span>
+                    : <span className="flex items-center gap-2"><Search size={14} /> Apply & Search</span>}
+                </Button>
+              </div>
 
               {analyzingFiles.length > 0 && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 p-3 rounded-lg">

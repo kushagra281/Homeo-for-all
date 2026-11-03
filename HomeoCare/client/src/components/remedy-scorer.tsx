@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   Search, TrendingUp, ArrowLeft, HelpCircle, Camera,
   Paperclip, X, CheckCircle, FileText, ChevronDown, ChevronUp,
-  ShieldAlert, Info, AlertTriangle,
+  ShieldAlert, Info, AlertTriangle, Download,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -665,6 +665,28 @@ export default function RemedyScorer({
   // ── RESULTS ───────────────────────────────────────────────────
   if (showResults && scoreMutation.data) {
     const topResults = scoreMutation.data.slice(0, 3);
+    // jsPDF is loaded only when the button is pressed, so it does not slow the first page load.
+    const downloadReport = async () => {
+      const { buildReport } = await import("@/lib/report");
+      const doc = buildReport({
+        symptoms,
+        answers: answerLines(caseState),
+        redFlags,
+        profile: healthProfile as any,
+        analysis: aiExplain.data,
+        results: topResults.map((r: any) => ({
+          name: r.remedy?.name || "",
+          score: r.score,
+          dosage: r.remedy?.dosage,
+          why: r.why_explanation || r.ai_insight,
+          matches: [...(r.mental_matches || []), ...(r.physical_matches || r.matching_symptoms || [])],
+          better: (r.remedy?.modalities?.better || []).slice(0, 3),
+          worse: (r.remedy?.modalities?.worse || []).slice(0, 3),
+          warnings: (r.safety_flags || []).map((f: any) => f.message),
+        })),
+      });
+      doc.save(`homeocare-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
     // Beyond the top three: keep any remedy that matches a mental symptom (second-place, fourth, fifth ...).
     const keynoteResults = scoreMutation.data.slice(3).filter((r: any) => r.keynote_matched);
 
@@ -695,9 +717,14 @@ export default function RemedyScorer({
                   </div>
                 )}
               </div>
-              <Button variant="outline" onClick={resetForm} className="flex items-center gap-2">
-                <ArrowLeft className="w-4 h-4" /> New Search
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button variant="outline" onClick={downloadReport} className="flex items-center gap-2" data-testid="download-report">
+                  <Download className="w-4 h-4" /> PDF Report
+                </Button>
+                <Button variant="outline" onClick={resetForm} className="flex items-center gap-2">
+                  <ArrowLeft className="w-4 h-4" /> New Search
+                </Button>
+              </div>
             </div>
 
             <RedFlagBanner flags={redFlags} />

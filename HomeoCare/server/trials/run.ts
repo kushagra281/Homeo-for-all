@@ -1,30 +1,40 @@
 // Runs the real search engine on the classical cases and prints a pass/fail table.
 // Needs SCRAPER_SUPABASE_URL and SCRAPER_SUPABASE_KEY (the publishable key is enough: the tables are public-read).
-import { CASES } from "./cases";
 import { appendFileSync } from "node:fs";
+import { CASES } from "./cases";
 import { search } from "../services/searchService";
-
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
-const hit = (got: string, want: string) => norm(got).includes(norm(want).slice(0, 8)) || norm(want).includes(norm(got).slice(0, 8));
+import { remedyMatches } from "./match";
 
 (async () => {
   if (!process.env.SCRAPER_SUPABASE_URL || !process.env.SCRAPER_SUPABASE_KEY) {
     console.error("SCRAPER_SUPABASE_URL / SCRAPER_SUPABASE_KEY missing"); process.exit(2);
   }
   const log = console.log; console.log = () => {};   // silence the engine's own logging
-  const rows: string[] = []; let pass = 0;
+  const rows: string[] = []; const failed: string[] = [];
+  let top1 = 0, top3 = 0, top5 = 0, errors = 0;
   for (const c of CASES) {
     let top: string[] = [], err = "";
-    try { const res = await search({ symptoms: c.symptoms, filters: {} });
-      top = [...res.remedies, ...res.alternatives].slice(0, 5).map((r) => r.name); }
-    catch (e: any) { err = e?.message || String(e); }
-    const rank = top.findIndex((n) => c.expect.some((w) => hit(n, w)));
-    const ok = rank >= 0; if (ok) pass++;
-    rows.push(`| ${ok ? "✅" : "❌"} | ${c.name} | ${c.expect.join(" / ")} | ${err ? "ERROR " + err : top.join(", ") || "none"} |`);
+    try {
+      const res = await search({ symptoms: c.symptoms, filters: {} });
+      top = [...res.remedies, ...res.alternatives].slice(0, 5).map((r) => r.name);
+    } catch (e: any) { err = e?.message || String(e); }
+    const rank = top.findIndex((n) => c.expect.some((w) => remedyMatches(n, w))) + 1;   // 0 = not in top 5
+    if (err) errors++;
+    if (rank >= 1) top5++; if (rank >= 1 && rank <= 3) top3++; if (rank === 1) top1++;
+    if (!rank) failed.push(c.name);
+    rows.push(`| ${rank ? "✅" : "❌"} | ${rank ? "#" + rank : "-"} | ${c.name} | ${c.expect.join(" / ")} | ${err ? "ERROR " + err : top.join(", ") || "none"} |`);
   }
   console.log = log;
-  const out = [`## Trials: ${pass}/${CASES.length} passed (expected remedy in top 5)`, "", "| | Case | Expected | Top 5 |", "|---|---|---|---|", ...rows].join("\n");
+  const n = CASES.length;
+  const out = [
+    `## Trials: ${top5}/${n} in top 5 (${Math.round((top5 / n) * 100)}%)`,
+    "",
+    `**Top 1: ${top1}/${n}** · **Top 3: ${top3}/${n}** · **Top 5: ${top5}/${n}**${errors ? ` · errors: ${errors}` : ""}`,
+    "",
+    "| | Rank | Case | Expected | Top 5 |", "|---|---|---|---|---|", ...rows,
+    "", failed.length ? `**Missed:** ${failed.join("; ")}` : "**Nothing missed.**",
+  ].join("\n");
   console.log(out);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, out + "\n");
-  process.exit(pass === CASES.length ? 0 : 1);
+  process.exit(top5 === n ? 0 : 1);
 })();

@@ -27,8 +27,6 @@ export interface CoveredRubric {
   grade:        number;
   weight:       number;
   contribution: number; // grade × weight
-  /** Where the line came from (set for materia-medica sentences). */
-  section?:     string;
 }
 
 export interface RemedyScore {

@@ -39,6 +39,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Basic security headers. No Content-Security-Policy on purpose: the Google Translate widget needs remote scripts.
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.removeHeader("X-Powered-By");
+  next();
+});
+
 // Only the report-image route needs a big body; everything else is small JSON.
 app.set("trust proxy", 1);   // behind Render/Railway: use the real client IP (rate limiting)
 app.use("/api/remedies/analyze-report", express.json({ limit: "10mb" }));
@@ -49,24 +58,10 @@ app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
+      const logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       log(logLine);
     }
   });
@@ -87,8 +82,10 @@ app.use((req, res, next) => {
   // ── FIX 2a: removed "throw err" — was crashing Node process in production
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    console.error(`[Error] ${status} — ${message}`);
+    const detail = err.message || "Internal Server Error";
+    console.error(`[Error] ${status} — ${detail}`);
+    // Client errors (bad JSON, too large) keep their message; server errors do not leak internals.
+    const message = status >= 500 ? "Something went wrong. Please try again." : detail;
     res.status(status).json({ success: false, error: "SERVER_ERROR", message });
     // NOTE: throw err removed — it crashed the Node process on every unhandled error
   });

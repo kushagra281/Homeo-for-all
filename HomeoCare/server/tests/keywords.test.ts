@@ -99,4 +99,26 @@ t("category → section patterns", () => {
   assert.equal(sectionPatterns("Others"), undefined); assert.equal(sectionPatterns("Clinical"), undefined);
   assert.equal(sectionPatterns(undefined), undefined);
 });
+t("patient wording reaches the old text: 'desire cold drinks' finds 'Thirst for very cold water'", () => {
+  const e = extractKeywords(["desire cold drinks", "vomiting when water becomes warm"]);
+  const hit = (text: string) => e.groups.some((g) => groupMatches(text, g));
+  assert.ok(extractKeywords(["desire cold drinks"]).groups.some((g) => groupMatches("thirst for very cold water", g) && g.key !== "cold"));
+  assert.ok(hit("water is thrown up as soon as it gets warm in the stomach"));
+  assert.ok(extractKeywords(["craves sweets"]).groups.every((g) => g.variants.length <= 7));
+  assert.ok(groupMatches("desire for sugar", extractKeywords(["sweets"]).groups[0]));
+  assert.ok(groupMatches("bruised sore feeling", extractKeywords(["bruised"]).groups[0]));
+});
+t("broad words do not drag in unrelated symptoms ('loose tooth' is not diarrhoea, 'stool' is not 'motion')", () => {
+  const loose = extractKeywords(["loose tooth"]).groups.find((g) => g.key === "loose")!;
+  assert.ok(!groupMatches("diarrhoea; watery stools", loose));
+  const stool = extractKeywords(["hard stool"]).groups.find((g) => g.key === "stool")!;
+  assert.ok(!groupMatches("worse from motion", stool));
+});
+t("synonym lists stay within the 7-variant cap and never drop the patient's own word", () => {
+  for (const w of ["desire", "drink", "throbbing", "injury", "grief", "piles", "bleeding", "stabbing"]) {
+    const g = extractKeywords([w]).groups[0];
+    assert.ok(g.variants.length >= 2 && g.variants.length <= 7, `${w}: ${g.variants.length}`);
+    assert.ok(g.variants[0].text.length >= 2);
+  }
+});
 console.log(`\n${n} checks passed`);

@@ -14,6 +14,7 @@ import ProfilePage from "@/pages/profile";
 import DictionaryPage from "@/pages/dictionary";
 import ModalitiesPage from "@/pages/modalities";
 import Community from "@/pages/community";
+import RepertoryPage from "@/pages/repertory";
 function Router() {
   return (
     <Switch>
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/dictionary" component={DictionaryPage} />
       <Route path="/modalities" component={ModalitiesPage} />
       <Route path="/community" component={Community} />
+      <Route path="/repertory" component={RepertoryPage} />
       <Route path="/remedies/:category" component={Remedies} />
       <Route path="/symptom-analysis" component={SymptomAnalysis} />
       <Route path="/potency-guide" component={PotencyGuidePage} />

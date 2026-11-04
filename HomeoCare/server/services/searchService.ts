@@ -12,6 +12,7 @@
 //     shows "something went wrong" instead of a misleading "no remedies found"
 
 import { scoreRemedies, buildSafetyFlags, gradeToDosage, splitMatches } from "./scoringService";
+import { repertoryMode, scoreWithRepertory, fuse } from "./repertorySearch";
 import type { RemedyScore, SafetyFlag, Contradiction } from "./scoringService";
 import {
   searchScraperRubrics,
@@ -72,7 +73,7 @@ export interface SearchResult {
   contradictions: Contradiction[];
   rubrics_used:   string[];
   rubric_count:   number;
-  engine:         "scraper" | "remedy_symptoms";
+  engine:         "scraper" | "remedy_symptoms" | "repertory" | "hybrid";
   history_considered?: string[];   // history phrases that were looked up
 }
 
@@ -249,48 +250,97 @@ export async function search(input: {
 
   let dbError: any = null;
 
-  // ── STEP 1: ranked scraper rubrics → scoring ─────────────────
+  // ── STEP 1: ranked rubrics → scoring ─────────────────────────
+  // REPERTORY_ENGINE=on|hybrid also searches the graded repertory (see repertorySearch.ts); "off" (the
+  // default) changes nothing. A failure of the repertory never breaks the search.
+  const mode = repertoryMode();
+  const repPromise = mode === "off"
+    ? Promise.resolve(null)
+    : scoreWithRepertory(english.length ? [...clean, english.join(" ")] : clean, extra, sectionPats)
+        .catch((e: any) => { console.error("[Search] graded repertory failed:", e?.message || e); return null; });
+
+  type Scored = {
+    remedies: RemedyScore[]; contradictions: Contradiction[];
+    rubricTexts: string[]; rubricCount: number; engine: SearchResult["engine"];
+  };
+  let scored: Scored | null = null;
+
   try {
-    const rubrics = await searchScraperRubrics(kw, sectionPats);
-    if (rubrics.length > 0) {
-      const remedyRows = await getRemediesForRubricIds(rubrics.map((r) => r.id));
-      console.log(`[Search] ${rubrics.length} rubrics, ${remedyRows.length} remedy rows`);
+    if (mode === "on") {
+      const rep = await repPromise;
+      if (rep && rep.remedies.length >= 2) {
+        scored = {
+          remedies: rep.remedies, contradictions: rep.contradictions,
+          rubricTexts: rep.rubrics.slice(0, 10).map((r) => r.full_path), rubricCount: rep.rubrics.length, engine: "repertory",
+        };
+      }
+    }
+    if (!scored) {
+      const rubrics = await searchScraperRubrics(kw, sectionPats);
+      if (rubrics.length > 0) {
+        const remedyRows = await getRemediesForRubricIds(rubrics.map((r) => r.id));
+        console.log(`[Search] ${rubrics.length} rubrics, ${remedyRows.length} remedy rows`);
 
-      if (remedyRows.length > 0) {
-        const relevanceById = new Map(rubrics.map((r) => [r.id, r.relevance] as [number, number]));
-        const { remedies, contradictions } = scoreRemedies(
-          toRubricMatches(rubrics),
-          toScoringRows(remedyRows, relevanceById)
-        );
-
-        if (remedies.length >= 2) {
-          // Patient history: re-order the matches (never adds remedies). Optional - a failure here
-          // must not break the search.
-          const phrases = historyPhrases(healthHistory, healthProfile);
-          let ordered: (RemedyScore & { history_matches?: string[] })[] = remedies;
-          if (phrases.length) {
-            try { ordered = applyHistory(remedies, await remediesForHistory(phrases)); }
-            catch (e: any) { console.error("[Search] patient history lookup failed:", e?.message || e); }
+        if (remedyRows.length > 0) {
+          const relevanceById = new Map(rubrics.map((r) => [r.id, r.relevance] as [number, number]));
+          const { remedies, contradictions } = scoreRemedies(
+            toRubricMatches(rubrics),
+            toScoringRows(remedyRows, relevanceById)
+          );
+          if (remedies.length >= 2) {
+            scored = {
+              remedies, contradictions,
+              rubricTexts: rubrics.slice(0, 10).map((r) => r.rubric_text), rubricCount: rubrics.length, engine: "scraper",
+            };
           }
-          const top3 = ordered.slice(0, 3).map((r) => formatResult(r, healthProfile));
-          const alts = ordered.slice(3, 5).map((r) => formatResult(r, healthProfile));
-          const keynoteExtra = ordered.slice(5)
-            .filter((r) => splitMatches(r.covered_rubrics).keynote)
-            .slice(0, 3)
-            .map((r) => formatResult(r, healthProfile));
-          console.log(`[Search] Scraper engine: ${remedies.length} results, top=${remedies[0]?.remedy_name}`);
-          return {
-            remedies: top3, alternatives: alts, keynote_extra: keynoteExtra, contradictions,
-            rubrics_used: rubrics.slice(0, 10).map((r) => r.rubric_text),
-            rubric_count: rubrics.length, engine: "scraper",
-            history_considered: phrases,
-          };
         }
       }
     }
   } catch (e: any) {
     dbError = e;
     console.error("[Search] scraper rubric engine failed:", e?.message || e);
+  }
+
+  if (mode === "hybrid") {
+    const rep = await repPromise;
+    if (rep && rep.remedies.length >= 2) {
+      scored = scored
+        ? {
+            remedies: fuse(scored.remedies, rep.remedies), contradictions: scored.contradictions,
+            rubricTexts: [...scored.rubricTexts.slice(0, 5), ...rep.rubrics.slice(0, 5).map((r) => r.full_path)],
+            rubricCount: scored.rubricCount + rep.rubrics.length, engine: "hybrid",
+          }
+        : {
+            remedies: rep.remedies, contradictions: rep.contradictions,
+            rubricTexts: rep.rubrics.slice(0, 10).map((r) => r.full_path), rubricCount: rep.rubrics.length, engine: "repertory",
+          };
+      dbError = null;   // the repertory answered, so an error from the other engine no longer matters
+    }
+  }
+
+  if (scored) {
+    const { remedies, contradictions } = scored;
+    // Patient history: re-order the matches (never adds remedies). Optional - a failure here
+    // must not break the search.
+    const phrases = historyPhrases(healthHistory, healthProfile);
+    let ordered: (RemedyScore & { history_matches?: string[] })[] = remedies;
+    if (phrases.length) {
+      try { ordered = applyHistory(remedies, await remediesForHistory(phrases)); }
+      catch (e: any) { console.error("[Search] patient history lookup failed:", e?.message || e); }
+    }
+    const top3 = ordered.slice(0, 3).map((r) => formatResult(r, healthProfile));
+    const alts = ordered.slice(3, 5).map((r) => formatResult(r, healthProfile));
+    const keynoteExtra = ordered.slice(5)
+      .filter((r) => splitMatches(r.covered_rubrics).keynote)
+      .slice(0, 3)
+      .map((r) => formatResult(r, healthProfile));
+    console.log(`[Search] ${scored.engine} engine: ${remedies.length} results, top=${remedies[0]?.remedy_name}`);
+    return {
+      remedies: top3, alternatives: alts, keynote_extra: keynoteExtra, contradictions,
+      rubrics_used: scored.rubricTexts,
+      rubric_count: scored.rubricCount, engine: scored.engine,
+      history_considered: phrases,
+    };
   }
 
   // ── STEP 2: Fallback — remedy_symptoms table (materia medica sentences) ──

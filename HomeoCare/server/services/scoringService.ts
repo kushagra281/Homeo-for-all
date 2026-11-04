@@ -24,6 +24,8 @@ export interface RubricRemedyRow {
 export interface CoveredRubric {
   rubric_code:  string;
   label:        string;
+  /** chapter / body section the rubric sits in (used for the result card's category) */
+  section?:     string;
   grade:        number;
   weight:       number;
   contribution: number; // grade × weight
@@ -162,6 +164,7 @@ export function scoreRemedies(
     entry.covered_rubrics.push({
       rubric_code:  row.rubric_code,
       label:        row.rubric_label,
+      section:      row.body_system || undefined,
       grade:        row.grade,
       weight,
       contribution,

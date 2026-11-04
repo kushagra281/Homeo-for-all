@@ -10,6 +10,7 @@ import { join } from "path";
 import type { MedicalTerm } from "@shared/schema";
 import remediesRouter from "./routes/remedies";
 import profileRouter  from "./routes/profile";
+import repertoryRouter from "./routes/repertory";
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
@@ -27,6 +28,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── Route modules ──────────────────────────────────────────────
   app.use("/api/remedies",  remediesRouter);
   app.use("/api/profile",   profileRouter);
+  app.use("/api/repertory", repertoryRouter);
 
   // ── Medical dictionary (used by the /dictionary page) ─────────
   let medicalTerms: MedicalTerm[] | null = null;

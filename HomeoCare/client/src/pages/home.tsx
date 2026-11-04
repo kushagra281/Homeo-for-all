@@ -4,7 +4,7 @@ import { useLocation } from "wouter"
 import {
   Search, LogOut, User, Clock, ChevronRight,
   Paperclip, ArrowLeft, X, Trash2, Globe,
-  Heart, Calendar, Mail, Edit3, Check
+  Heart, Calendar, Mail, Edit3, Check, BookOpen
 } from "lucide-react"
 import { getCurrentUser, signOut, getSearchHistory, deleteHistoryItem, getHealthProfile, saveHealthProfile } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -172,6 +172,10 @@ export default function Home() {
         ) : (
           <div className="flex items-center gap-1.5">
             <LanguageMenu />
+            <button onClick={() => setLocation("/repertory")} data-testid="nav-repertory"
+              className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-green-50 hover:text-green-700 transition">
+              <BookOpen size={14} /> Repertory
+            </button>
 
             {user && (
               <>

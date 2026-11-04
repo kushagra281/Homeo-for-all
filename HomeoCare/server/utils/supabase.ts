@@ -25,6 +25,8 @@ export function fromCache<T>(key: string): T | null {
 export function toCache(key: string, value: any) {
   _cache.set(key, { value, ts: Date.now() });
 }
+/** For tests: forget everything cached. */
+export function _clearCache() { _cache.clear(); }
 
 /** Thrown when every query against a database failed (paused project, bad key, network). */
 export class DbUnavailableError extends Error {

@@ -12,6 +12,8 @@ import { memoryRepertoryStore } from "../utils/repertoryMemory";
 import { safeWords, chapterMatches, type RepertoryRubric, type RepertoryStore } from "../utils/repertoryStore";
 import repertoryRouter, { useRepertoryStoreForTests, MAX_CASE_RUBRICS } from "../routes/repertory";
 import { DbUnavailableError } from "../utils/supabase";
+import { compareMethods } from "../services/repertorize";
+import { pickProfile } from "../services/remedyProfile";
 
 let n = 0;
 const t = async (name: string, fn: () => void | Promise<void>) => { await fn(); n++; console.log("ok  ", name); };
@@ -281,6 +283,75 @@ await t("routes: a repertory that is not loaded answers 503 with a plain message
   assert.match(a.body.message, /not available/); assert.equal(a.body.loaded, false);
   assert.ok(!JSON.stringify(a.body).includes("repertory_sources"), "no table names leak to the browser");
   useRepertoryStoreForTests(store);
+});
+
+await t("themes: totals are split Mind / Generals / Particulars, and a theme can be required in full", async () => {
+  const r = repertorize({ rubrics: byId([3, 5, 8]), names: NAMES });
+  const ars = r.rows.find((x) => x.abbrev === "Ars.")!;
+  assert.deepEqual(ars.themes, { mental: 6, general: 0, particular: 0 });
+  const bell = r.rows.find((x) => x.abbrev === "Bell.")!;
+  assert.deepEqual(bell.themes, { mental: 0, general: 0, particular: 3 });
+  assert.deepEqual(r.rubrics.map((x) => x.theme), ["mental", "mental", "particular"]);
+  const gate = repertorize({ rubrics: byId([3, 5, 8]), names: NAMES, coverTheme: "mental" });
+  assert.deepEqual(gate.rows.map((x) => x.abbrev).sort(), ["Acon.", "Ars."]);       // both Mind rubrics, nothing else
+  assert.equal(repertorize({ rubrics: byId([3, 5, 8]), names: NAMES, coverTheme: "general" }).rows.length, r.rows.length, "no General rubric chosen: nothing is required");
+});
+
+await t("compare: one remedy, three methods, ranks and scores", async () => {
+  const c = compareMethods({ rubrics: byId([3, 5]), names: NAMES });
+  assert.deepEqual(c.methods, ["grades", "presence", "emphasis"]);
+  const ars = c.rows.find((x) => x.abbrev === "Ars.")!;
+  assert.deepEqual(ars.scores, { grades: 6, presence: 2, emphasis: 18 });
+  assert.equal(ars.ranks.grades, 1); assert.equal(ars.ranks.emphasis, 1);
+  assert.equal(ars.scores.presence, c.rows.find((x) => x.abbrev === "Acon.")!.scores.presence, "presence ties them (the tie is broken by name)");
+  assert.equal(c.rows[0].abbrev, "Ars.");
+  // Acon.: grade 1 in rubric 3 and grade 3 in 5 -> 4 / 2 / 10 and ranks behind Ars.
+  const acon = c.rows.find((x) => x.abbrev === "Acon.")!;
+  assert.deepEqual(acon.scores, { grades: 4, presence: 2, emphasis: 10 });
+  assert.ok(acon.ranks.grades > 1);
+});
+
+await t("by remedy: rubrics holding all included remedies at a grade, none of the excluded, narrowest first", async () => {
+  const ids = async (q: any) => (await store.byRemedies(q)).map((r) => r.id);
+  assert.deepEqual(await ids({ include: ["Acon."], exclude: ["Puls."], minGrade: 3 }), [5, 4]);
+  assert.deepEqual(await ids({ include: ["Acon.", "Ars."], minGrade: 3 }), [5, 2]);
+  assert.deepEqual(await ids({ include: [] }), []);
+  assert.ok(!(await ids({ include: ["Acon."] })).includes(1), "chapter roots are not rubrics");
+  const hit = (await store.byRemedies({ include: ["Acon.", "Ars."], minGrade: 3 }))[0];
+  assert.deepEqual(hit.grades, { "Acon.": 3, "Ars.": 3 });
+  assert.equal(pickProfile("x", []), null);
+});
+
+await t("remedy profile matching: exact name first, else same first word, general text before a single lecture", async () => {
+  const C = (id: number, name: string, source_site: string) => ({ id, slug: String(id), name, common_name: null, source_site });
+  const list = [C(1, "SULPHURIC ACID", "materiamedica.info/kent"), C(2, "SULPHUR IODATUM", "materiamedica.info"), C(3, "SULPHUR", "materiamedica.info")];
+  assert.equal(pickProfile("Sulphur", list)!.id, 3);
+  assert.equal(pickProfile("Pulsatilla Pratensis", [C(4, "PULSATILLA", "materiamedica.info"), C(5, "PULSATILLA NUTTALLIANA", "materiamedica.info")])!.id, 4);
+  assert.equal(pickProfile("Calcarea carbonica", [C(6, "KENT CALCAREA", "materiamedica.info/kent"), C(7, "CALCAREA PHOSPHORICA", "materiamedica.info")])!.id, 7);
+  assert.equal(pickProfile("Zincum", list), null);
+});
+
+await t("routes: remedies list, by-remedy validation, compare, theme gate, unknown remedy profile", async () => {
+  const names = await get("/remedies");
+  assert.equal(names.body.length, 7); assert.equal(names.body[0].name, "Aconitum napellus");
+  const ok = await post("/by-remedy", { include: ["Acon."], exclude: ["Puls."], minGrade: 3 });
+  assert.equal(ok.status, 200); assert.deepEqual(ok.body.rubrics.map((x: any) => x.id), [5, 4]);
+  assert.equal(ok.body.include[0].name, "Aconitum napellus");
+  assert.equal((await post("/by-remedy", {})).status, 400);
+  assert.equal((await post("/by-remedy", { include: [] })).status, 400);
+  assert.equal((await post("/by-remedy", { include: ["Nope."] })).status, 400);
+  assert.equal((await post("/by-remedy", { include: [5, "x".repeat(40)] })).status, 400);
+  const many = await post("/by-remedy", { include: ["Acon.", "Ars.", "Bell.", "Bry.", "Phos.", "Puls.", "Rhus-t."], minGrade: 99, limit: 99999, offset: -5 });
+  assert.equal(many.status, 200); assert.equal(many.body.include.length, 5);              // capped at five remedies
+  const cmp = await post("/compare", { rubricIds: [3, 5] });
+  assert.equal(cmp.status, 200); assert.equal(cmp.body.rows[0].abbrev, "Ars.");
+  assert.equal((await post("/compare", { rubricIds: [] })).status, 400);
+  assert.equal((await post("/compare", { rubricIds: [999999] })).status, 404);
+  const gate = await post("/repertorize", { rubricIds: [3, 5, 8], coverTheme: "mental" });
+  assert.deepEqual(gate.body.rows.map((x: any) => x.abbrev).sort(), ["Acon.", "Ars."]);
+  assert.equal((await post("/repertorize", { rubricIds: [3, 5, 8], coverTheme: "nonsense" })).body.rows.length, 4);
+  assert.equal((await get("/remedy/Nope.")).status, 404);
+  assert.equal((await get("/remedy/" + "x".repeat(40))).status, 400);
 });
 
 server.close();

@@ -49,6 +49,12 @@ export interface RubricQuery {
   order:        "narrow" | "broad";
 }
 
+export interface ByRemediesQuery { include: string[]; exclude?: string[]; minGrade?: number; limit?: number; offset?: number }
+export interface RemedyRubricHit extends RepertoryNode {
+  /** grade of each included remedy in this rubric */
+  grades: Record<string, number>;
+}
+
 export interface RepertoryStore {
   sources():      Promise<RepertorySource[]>;
   /** abbreviation -> remedy name */
@@ -59,6 +65,11 @@ export interface RepertoryStore {
   children(parentId: number | null, limit?: number): Promise<RepertoryNode[]>;
   /** Rubrics whose own path contains every word (for the search box of the Repertory page). */
   searchText(words: string[], limit: number):   Promise<RepertoryNode[]>;
+  /**
+   * Rubrics that hold ALL the included remedies (1-5, as abbreviations) and none of the excluded
+   * ones, every included remedy at minGrade or higher. Narrowest rubric first.
+   */
+  byRemedies(q: ByRemediesQuery):               Promise<RemedyRubricHit[]>;
   /**
    * How many rubrics each group matches (rare words say more about a case than "pain"). Optional:
    * when it is missing or fails, every group counts the same. Also returns the number of rubrics.
@@ -157,6 +168,18 @@ export function supabaseRepertoryStore(source = DEFAULT_SOURCE): RepertoryStore 
       const { data, error } = await req.order("rubric_text", { ascending: true }).order("id", { ascending: true }).limit(limit);
       if (error) fail("children", error.message);
       return (data || []) as RepertoryNode[];
+    },
+
+    async byRemedies(q) {
+      const include = Array.from(new Set(q.include)).slice(0, 5);
+      if (!include.length) return [];
+      const { data, error } = await db().rpc("repertory_rubrics_by_remedies", {
+        p_source: source, p_include: include, p_exclude: Array.from(new Set(q.exclude || [])).slice(0, 50),
+        p_min_grade: Math.min(3, Math.max(1, Math.round(q.minGrade || 1))),
+        p_limit: Math.min(200, Math.max(1, Math.round(q.limit || 100))), p_offset: Math.max(0, Math.round(q.offset || 0)),
+      });
+      if (error) fail("by-remedies", error.message);
+      return (data || []) as RemedyRubricHit[];
     },
 
     async groupFrequency(groups) {

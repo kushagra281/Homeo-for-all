@@ -1,6 +1,6 @@
 // Repertory page: browse the graded repertory (chapter > rubric tree), choose rubrics for a case,
 // and see the remedy x rubric grid with totals. The numbers come from /api/repertory/repertorize.
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { useLocation } from "wouter"
 import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Plus, Search, Trash2, X } from "lucide-react"
@@ -13,9 +13,14 @@ import { Card } from "@/components/ui/card"
 interface Node { id: number; parent_id: number | null; chapter: string; rubric_text: string; full_path: string; depth: number; n_remedies: number; child_count: number }
 interface Source { slug: string; title: string; author: string; year: number | null; licence: string; attribution: string; note: string; rubric_count: number; link_count: number }
 interface PeekRemedy { abbrev: string; name: string; grade: number }
-interface GridRow { abbrev: string; name: string; total: number; covered: number; grades: number[] }
+type Theme = "mental" | "general" | "particular"
+interface GridRow { abbrev: string; name: string; total: number; covered: number; themes: Record<Theme, number>; grades: number[] }
+interface Compare { methods: Method[]; rows: Array<{ abbrev: string; name: string; covered: number; scores: Record<Method, number>; ranks: Record<Method, number>; best_rank: number }> }
+interface RemedyHit extends Node { grades: Record<string, number> }
+interface RemedyOpt { abbrev: string; name: string }
+interface Profile { abbrev: string; name: string; common_name: string; source: string; sections: Array<{ heading: string; content: string }> }
 interface Grid {
-  rubrics: Array<{ id: number; full_path: string; n_remedies: number; weight: number }>
+  rubrics: Array<{ id: number; full_path: string; n_remedies: number; weight: number; theme: Theme }>
   rows: GridRow[]; total_remedies: number; method: Method; min_grade: number
 }
 type Method = "grades" | "presence" | "emphasis"
@@ -24,8 +29,8 @@ type SortBy = "total" | "coverage"
 const MAX_RUBRICS = 30
 const STORE = "homeowell:repertory-case:v1"
 
-interface SavedCase { ids: number[]; weights: Record<number, number>; exclude: string[]; method: Method; minGrade: number; coverAll: boolean; sortBy: SortBy }
-const EMPTY: SavedCase = { ids: [], weights: {}, exclude: [], method: "grades", minGrade: 1, coverAll: false, sortBy: "total" }
+interface SavedCase { ids: number[]; weights: Record<number, number>; exclude: string[]; method: Method; minGrade: number; coverAll: boolean; coverTheme: Theme | ""; sortBy: SortBy }
+const EMPTY: SavedCase = { ids: [], weights: {}, exclude: [], method: "grades", minGrade: 1, coverAll: false, coverTheme: "", sortBy: "total" }
 
 function loadCase(): SavedCase {
   try {
@@ -122,7 +127,7 @@ function TreeNode({ node, caseIds, onToggle, depth = 0 }: { node: Node; caseIds:
 // ── The page ──────────────────────────────────────────────────────
 export default function RepertoryPage() {
   const [, setLocation] = useLocation()
-  const [tab, setTab] = useState<"browse" | "case">("browse")
+  const [tab, setTab] = useState<"browse" | "remedy" | "case">("browse")
   const [saved, setSaved] = useState<SavedCase>(loadCase)
   const [chapter, setChapter] = useState<Node | null>(null)
   const [text, setText] = useState("")
@@ -139,7 +144,7 @@ export default function RepertoryPage() {
 
   const payload = useMemo(() => ({
     rubricIds: saved.ids, weights: saved.weights, exclude: saved.exclude, method: saved.method,
-    minGrade: saved.minGrade, coverAll: saved.coverAll, sortBy: saved.sortBy, limit: 60,
+    minGrade: saved.minGrade, coverAll: saved.coverAll, coverTheme: saved.coverTheme || undefined, sortBy: saved.sortBy, limit: 60,
   }), [saved])
   const grid = useQuery<Grid>({
     queryKey: ["repertorize", JSON.stringify(payload)],
@@ -170,11 +175,11 @@ export default function RepertoryPage() {
           </button>
         </div>
         <div className="max-w-5xl mx-auto px-4 flex gap-1">
-          {(["browse", "case"] as const).map(t => (
+          {(["browse", "remedy", "case"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} data-testid={`tab-${t}`}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
                 tab === t ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-              {t === "browse" ? "Browse" : `My case (${saved.ids.length})`}
+              {t === "browse" ? "Browse" : t === "remedy" ? "By remedy" : `My case (${saved.ids.length})`}
             </button>
           ))}
         </div>
@@ -243,6 +248,11 @@ export default function RepertoryPage() {
           </>
         )}
 
+        {/* ── BY REMEDY ──────────────────────────────────────── */}
+        {tab === "remedy" && !unavailable && (
+          <RemedyTab caseIds={saved.ids} onToggle={toggle} full={full} />
+        )}
+
         {/* ── CASE ───────────────────────────────────────────── */}
         {tab === "case" && !unavailable && (
           <CaseView saved={saved} patch={patch} grid={grid} toggleId={id => patch({ ids: saved.ids.filter(i => i !== id) })}
@@ -274,6 +284,16 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
   saved: SavedCase; patch: (p: Partial<SavedCase>) => void
   grid: ReturnType<typeof useQuery<Grid>>; toggleId: (id: number) => void; onBrowse: () => void
 }) {
+  const data = grid.data
+  const [sheet, setSheet] = useState<string | null>(null)
+  const [showCompare, setShowCompare] = useState(false)
+  const compareBody = { rubricIds: saved.ids, weights: saved.weights, exclude: saved.exclude, minGrade: saved.minGrade, coverAll: saved.coverAll, coverTheme: saved.coverTheme || undefined }
+  const compare = useQuery<Compare>({
+    queryKey: ["repertory-compare", JSON.stringify(compareBody)],
+    queryFn: async () => (await apiRequest("POST", "/api/repertory/compare", compareBody)).json(),
+    enabled: showCompare && saved.ids.length > 0, retry: false, placeholderData: keepPreviousData,
+  })
+  const themesPresent = new Set(data?.rubrics.map(r => r.theme) || [])
   if (saved.ids.length === 0) {
     return (
       <Card className="p-5 text-center">
@@ -282,7 +302,6 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
       </Card>
     )
   }
-  const data = grid.data
   const rubricOf = (id: number) => data?.rubrics.find(r => r.id === id)
   const select = "border border-gray-200 rounded-lg text-sm px-2 py-1.5 bg-white"
 
@@ -337,6 +356,16 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
               <option value="total">Total score</option><option value="coverage">Rubrics covered</option>
             </select>
           </label>
+          {themesPresent.size > 0 && (
+            <label className="flex items-center gap-2">Must be in all
+              <select className={select} value={saved.coverTheme} onChange={e => patch({ coverTheme: e.target.value as Theme | "" })} data-testid="covertheme">
+                <option value="">— nothing —</option>
+                {themesPresent.has("mental") && <option value="mental">Mind rubrics</option>}
+                {themesPresent.has("general") && <option value="general">General rubrics</option>}
+                {themesPresent.has("particular") && <option value="particular">Particular rubrics</option>}
+              </select>
+            </label>
+          )}
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={saved.coverAll} onChange={e => patch({ coverAll: e.target.checked })} data-testid="coverall" />
             Only remedies in every rubric
@@ -363,7 +392,7 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
           <>
             <div className="px-3 pt-3 pb-1 text-xs text-gray-500">
               {data.rows.length < data.total_remedies ? `Top ${data.rows.length} of ${data.total_remedies} remedies` : `${data.total_remedies} remedies`}.
-              Tap a remedy to leave it out.
+              Tap a remedy to read about it or leave it out.
             </div>
             <div className="overflow-x-auto">
               <table className="text-sm min-w-full">
@@ -372,6 +401,8 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
                     <th className="sticky left-0 bg-white text-left font-medium px-3 py-2">Remedy</th>
                     <th className="px-2 py-2 font-medium">Total</th>
                     <th className="px-2 py-2 font-medium">Covers</th>
+                    {themesPresent.size > 1 && (["mental", "general", "particular"] as Theme[]).map(t => (
+                      <th key={t} className="px-2 py-2 font-medium" title={THEME_LABEL[t]}>{THEME_LABEL[t][0]}</th>))}
                     {data.rubrics.map((_, i) => <th key={i} className="px-2 py-2 font-medium">{i + 1}</th>)}
                   </tr>
                 </thead>
@@ -379,13 +410,15 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
                   {data.rows.map(row => (
                     <tr key={row.abbrev} className="border-b border-gray-50" data-testid={`row-${row.abbrev}`}>
                       <th className="sticky left-0 bg-white text-left font-normal px-3 py-1.5 whitespace-nowrap">
-                        <button onClick={() => patch({ exclude: [...saved.exclude, row.abbrev] })} className="hover:text-red-600 text-left" title={`Leave out ${row.name}`}>
+                        <button onClick={() => setSheet(row.abbrev)} className="hover:text-green-700 text-left" title={`About ${row.name}`} data-testid={`remedy-${row.abbrev}`}>
                           <span className="font-semibold text-gray-800">{row.abbrev.replace(/\.$/, "")}</span>
                           <span className="text-xs text-gray-400 ml-1.5 hidden sm:inline">{row.name}</span>
                         </button>
                       </th>
                       <td className="px-2 py-1.5 text-center font-semibold text-gray-800">{row.total}</td>
                       <td className="px-2 py-1.5 text-center text-gray-600">{row.covered}/{data.rubrics.length}</td>
+                      {themesPresent.size > 1 && (["mental", "general", "particular"] as Theme[]).map(t => (
+                        <td key={t} className="px-2 py-1.5 text-center text-gray-500">{row.themes[t] || "·"}</td>))}
                       {row.grades.map((g, i) => (
                         <td key={i} className="px-0.5 py-1">
                           <div className={`w-7 h-7 mx-auto rounded flex items-center justify-center text-xs ${gradeCell(g)}`}>{g || "·"}</div>
@@ -398,10 +431,195 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
             </div>
             <p className="px-3 py-2 text-xs text-gray-400">
               Grade 3 = strongest (bold), 2 = medium (italic), 1 = weakest. Numbers at the top match the chosen rubrics above.
+              {themesPresent.size > 1 && " M, G, P = score from Mind, General and Particular rubrics."}
             </p>
           </>
         )}
       </Card>
+
+      {data && data.rows.length > 0 && (
+        <Card className="p-3" data-testid="bars">
+          <h2 className="font-semibold text-gray-800 mb-2">Top remedies</h2>
+          <div className="space-y-1.5">
+            {data.rows.slice(0, 10).map(r => (
+              <div key={r.abbrev} className="flex items-center gap-2 text-sm">
+                <span className="w-16 shrink-0 text-gray-700 truncate">{r.abbrev.replace(/\.$/, "")}</span>
+                <div className="flex-1 bg-gray-100 rounded h-4 overflow-hidden">
+                  <div className="h-full bg-green-500" style={{ width: `${Math.max(3, (r.total / (data.rows[0].total || 1)) * 100)}%` }} />
+                </div>
+                <span className="w-8 text-right text-gray-600">{r.total}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-3" data-testid="compare">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800">Compare methods</h2>
+          <Button size="sm" variant="outline" onClick={() => setShowCompare(v => !v)} data-testid="compare-toggle">{showCompare ? "Hide" : "Show"}</Button>
+        </div>
+        {showCompare && (
+          <div className="mt-2 overflow-x-auto">
+            {compare.isLoading && <p className="text-sm text-gray-400">Calculating…</p>}
+            {compare.isError && <Notice>Could not compare. Please try again.</Notice>}
+            {compare.data && (
+              <>
+                <p className="text-xs text-gray-500 mb-1">The same rubrics under each way of counting. A remedy that stays near the top in all three is the safer choice. “#” is its rank.</p>
+                <table className="text-sm min-w-full">
+                  <thead><tr className="text-xs text-gray-500 border-b border-gray-100">
+                    <th className="text-left font-medium px-2 py-1.5">Remedy</th>
+                    {(["grades", "presence", "emphasis"] as Method[]).map(m => <th key={m} colSpan={2} className="font-medium px-2 py-1.5">{m === "grades" ? "Grades" : m === "presence" ? "Presence" : "Emphasis"}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {compare.data.rows.map(r => (
+                      <tr key={r.abbrev} className="border-b border-gray-50">
+                        <th className="text-left font-normal px-2 py-1 whitespace-nowrap"><span className="font-semibold text-gray-800">{r.abbrev.replace(/\.$/, "")}</span></th>
+                        {(["grades", "presence", "emphasis"] as Method[]).map(m => (
+                          <Fragment key={m}>
+                            <td className="px-2 py-1 text-center text-gray-800">{r.scores[m] || "·"}</td>
+                            <td className={`px-2 py-1 text-center text-xs ${r.ranks[m] === 1 ? "text-green-700 font-bold" : "text-gray-400"}`}>{r.ranks[m] ? `#${r.ranks[m]}` : ""}</td>
+                          </Fragment>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {sheet && (
+        <RemedySheet abbrev={sheet} excluded={saved.exclude.includes(sheet)} onClose={() => setSheet(null)}
+          onExclude={() => { patch({ exclude: saved.exclude.includes(sheet) ? saved.exclude : [...saved.exclude, sheet] }); setSheet(null) }} />
+      )}
+    </>
+  )
+}
+
+const THEME_LABEL: Record<Theme, string> = { mental: "Mind", general: "General", particular: "Particular" }
+
+// ── A remedy: its materia medica text, and the choice to leave it out ──
+function RemedySheet({ abbrev, excluded, onClose, onExclude }: { abbrev: string; excluded: boolean; onClose: () => void; onExclude: () => void }) {
+  const { data, isLoading, error } = useQuery<Profile>({ queryKey: ["/api/repertory/remedy", encodeURIComponent(abbrev)], retry: false })
+  const [open, setOpen] = useState<string | null>(null)
+  return (
+    <div className="fixed inset-0 z-30 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose} data-testid="remedy-sheet">
+      <div className="bg-white w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="font-bold text-gray-900">{data?.name || abbrev.replace(/\.$/, "")}</h2>
+            {data?.common_name && <p className="text-xs text-gray-500">{data.common_name}</p>}
+          </div>
+          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+        {isLoading && <p className="text-sm text-gray-400 mt-3">Loading…</p>}
+        {error && <p className="text-sm text-gray-500 mt-3">We have no materia medica text for this remedy yet.</p>}
+        {data && (
+          <div className="mt-3 divide-y divide-gray-100">
+            {data.sections.map(sec => (
+              <div key={sec.heading} className="py-1.5">
+                <button onClick={() => setOpen(open === sec.heading ? null : sec.heading)} className="w-full flex items-center justify-between text-left text-sm font-medium text-gray-800">
+                  {sec.heading} {open === sec.heading ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                </button>
+                {open === sec.heading && <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{sec.content}</p>}
+              </div>
+            ))}
+            {data.source && <p className="text-xs text-gray-400 pt-2">Source: {data.source}</p>}
+          </div>
+        )}
+        <div className="flex gap-2 mt-4">
+          <Button variant="outline" onClick={onExclude} disabled={excluded}>{excluded ? "Left out" : "Leave out of this case"}</Button>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Which rubrics hold these remedies (and not those) ─────────────
+function RemedyTab({ caseIds, onToggle, full }: { caseIds: number[]; onToggle: (n: Node) => void; full: boolean }) {
+  const [include, setInclude] = useState<RemedyOpt[]>([])
+  const [exclude, setExclude] = useState<RemedyOpt[]>([])
+  const [minGrade, setMinGrade] = useState(1)
+  const [mode, setMode] = useState<"include" | "exclude">("include")
+  const [text, setText] = useState("")
+  const q = text.trim().toLowerCase()
+  const remedies = useQuery<RemedyOpt[]>({ queryKey: ["/api/repertory/remedies"], retry: false, staleTime: 3600_000 })
+  const matches = useMemo(() => q.length < 2 ? [] :
+    (remedies.data || []).filter(r => (r.name.toLowerCase().includes(q) || r.abbrev.toLowerCase().startsWith(q))
+      && !include.some(x => x.abbrev === r.abbrev) && !exclude.some(x => x.abbrev === r.abbrev))
+      // names that start with the typed text first ("sulph" -> Sulphur before Antimonium sulphuratum)
+      .sort((a, b) => Number(b.name.toLowerCase().startsWith(q)) - Number(a.name.toLowerCase().startsWith(q)) || a.name.length - b.name.length)
+      .slice(0, 8), [q, remedies.data, include, exclude])
+  const body = { include: include.map(r => r.abbrev), exclude: exclude.map(r => r.abbrev), minGrade, limit: 100 }
+  const hits = useQuery<{ rubrics: RemedyHit[] }>({
+    queryKey: ["repertory-by-remedy", JSON.stringify(body)],
+    queryFn: async () => (await apiRequest("POST", "/api/repertory/by-remedy", body)).json(),
+    enabled: include.length > 0, retry: false, placeholderData: keepPreviousData,
+  })
+  const pick = (r: RemedyOpt) => {
+    if (mode === "include" && include.length < 5) setInclude(v => [...v, r])
+    if (mode === "exclude" && exclude.length < 50) setExclude(v => [...v, r])
+    setText("")
+  }
+  const chip = (r: RemedyOpt, drop: () => void, cls: string) => (
+    <button key={r.abbrev} onClick={drop} className={`text-sm px-2.5 py-1 rounded-full border flex items-center gap-1 ${cls}`} title="Tap to remove">
+      {r.name} <X size={12} />
+    </button>
+  )
+  return (
+    <>
+      <Card className="p-3 space-y-2">
+        <div className="flex gap-1.5 text-xs">
+          {(["include", "exclude"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)} data-testid={`mode-${m}`}
+              className={`px-3 py-1 rounded-full border ${mode === m ? "bg-green-600 border-green-600 text-white" : "border-gray-200 text-gray-600"}`}>
+              {m === "include" ? "Must have (up to 5)" : "Must not have"}
+            </button>
+          ))}
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <Input value={text} onChange={e => setText(e.target.value)} className="pl-9" placeholder="Type a remedy, e.g. sulphur" data-testid="remedy-search" />
+        </div>
+        {matches.length > 0 && (
+          <div className="flex flex-wrap gap-1.5" data-testid="remedy-matches">
+            {matches.map(r => <button key={r.abbrev} onClick={() => pick(r)} className="text-sm px-2.5 py-1 rounded-full bg-gray-100 hover:bg-green-50">{r.name}</button>)}
+          </div>
+        )}
+        {(include.length > 0 || exclude.length > 0) && (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {include.map(r => chip(r, () => setInclude(v => v.filter(x => x.abbrev !== r.abbrev)), "bg-green-50 border-green-300 text-green-800"))}
+            {exclude.map(r => chip(r, () => setExclude(v => v.filter(x => x.abbrev !== r.abbrev)), "bg-red-50 border-red-200 text-red-700 line-through"))}
+          </div>
+        )}
+        <label className="flex items-center gap-2 text-sm">Lowest grade
+          <select className="border border-gray-200 rounded-lg text-sm px-2 py-1.5 bg-white" value={minGrade} onChange={e => setMinGrade(Number(e.target.value))}>
+            <option value={1}>1 and up</option><option value={2}>2 and up</option><option value={3}>3 only</option>
+          </select>
+        </label>
+        <p className="text-xs text-gray-400">Shows the rubrics that contain every “must have” remedy and none of the others, smallest rubric first.</p>
+      </Card>
+      {include.length === 0 && <Notice>Choose at least one remedy.</Notice>}
+      {hits.isError && <Notice>Could not search. Please try again.</Notice>}
+      {hits.data && hits.data.rubrics.length === 0 && <Notice>No rubric has all of those remedies. Try a lower grade or fewer remedies.</Notice>}
+      {hits.data && hits.data.rubrics.length > 0 && (
+        <Card className="p-3" data-testid="remedy-results">
+          {hits.data.rubrics.map(n => (
+            <div key={n.id} className="border-b border-gray-50 last:border-0">
+              <RubricLine node={n} full inCase={caseIds.includes(n.id)} onToggle={() => onToggle(n)} />
+              <div className="flex gap-1 pb-1 pl-1">
+                {include.map(r => <span key={r.abbrev} className={`text-xs px-1.5 py-0.5 rounded ${gradeCell(n.grades[r.abbrev] || 0)}`}>{r.abbrev.replace(/\.$/, "")} {n.grades[r.abbrev]}</span>)}
+              </div>
+            </div>
+          ))}
+          {hits.data.rubrics.length >= 100 && <p className="text-xs text-gray-400 mt-2">Showing the 100 smallest rubrics.</p>}
+        </Card>
+      )}
+      {full && <Notice>A case holds at most {MAX_RUBRICS} rubrics. Remove one to add another.</Notice>}
     </>
   )
 }

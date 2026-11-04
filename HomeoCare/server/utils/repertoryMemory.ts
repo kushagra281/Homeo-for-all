@@ -54,6 +54,19 @@ export function memoryRepertoryStore(
         .map(node);
     },
 
+    async byRemedies(q) {
+      const include = Array.from(new Set(q.include)).slice(0, 5);
+      if (!include.length) return [];
+      const exclude = new Set(q.exclude || []);
+      const min = Math.min(3, Math.max(1, Math.round(q.minGrade || 1)));
+      const hits = rows.filter((r) => r.depth > 0 &&
+        include.every((a) => (r.remedies[a] || 0) >= min) && !Object.keys(r.remedies).some((a) => exclude.has(a)));
+      hits.sort((a, b) => a.n_remedies - b.n_remedies || a.id - b.id);
+      const off = Math.max(0, q.offset || 0);
+      return hits.slice(off, off + Math.min(200, Math.max(1, q.limit || 100)))
+        .map((r) => ({ ...node(r), grades: Object.fromEntries(include.map((a) => [a, r.remedies[a]])) }));
+    },
+
     async groupFrequency(groups) {
       const counts = groups.map((g) => {
         let n = 0;

@@ -6,6 +6,7 @@
 // (rubric, remedy) with the printed grade -> the existing scoreRemedies() adds them up.
 // Pure apart from the RepertoryStore it is given, so it runs the same on the database and in memory.
 
+import { themeOf } from "./repertorize";
 import { extractKeywords, groupMatches, normalizeRemedyName, type ExtractedKeywords, type KeywordGroup, type Modality } from "../utils/keywords";
 import type { RepertoryRubric, RepertoryStore } from "../utils/repertoryStore";
 import type { RubricRemedyRow } from "./scoringService";
@@ -186,12 +187,7 @@ export async function findRubrics(
 }
 
 // ── Scoring rows ──────────────────────────────────────────────────
-function symptomType(chapter: string): "mental" | "general" | "particular" {
-  const c = chapter.toLowerCase();
-  if (c === "mind") return "mental";
-  if (c === "generalities") return "general";
-  return "particular";
-}
+const symptomType = themeOf;
 
 export function toScoringRows(
   rubrics: RankedRepertoryRubric[], names: Map<string, string>, o: Partial<EngineOptions> = {},

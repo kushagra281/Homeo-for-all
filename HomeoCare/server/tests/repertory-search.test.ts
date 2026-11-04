@@ -126,6 +126,18 @@ await t("group frequency: one counting request per group, result cached, failure
   await assert.rejects(() => s.groupFrequency!(kw.groups), /repertory/);
 });
 
+await t("by remedy: one POST to the database function, at most five remedies, nothing sent for none", async () => {
+  handler = (u) => (u.pathname.endsWith("/rpc/repertory_rubrics_by_remedies") ? { body: [{ id: 5, grades: { "Acon.": 3 } }] } : { body: [] });
+  const s = supabaseRepertoryStore();
+  const hits = await s.byRemedies({ include: ["Acon.", "Ars.", "Bell.", "Bry.", "Phos.", "Puls."], exclude: ["Sil."], minGrade: 3 });
+  assert.equal(hits.length, 1); assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "POST"); assert.match(calls[0].url.pathname, /\/rpc\/repertory_rubrics_by_remedies$/);
+  calls.length = 0;
+  assert.deepEqual(await s.byRemedies({ include: [] }), []); assert.equal(calls.length, 0);
+  handler = (u) => (u.pathname.includes("/rpc/") ? { status: 404, body: { message: "Could not find the function public.repertory_rubrics_by_remedies" } } : { body: [] });
+  await assert.rejects(() => s.byRemedies({ include: ["Acon."] }), /repertory/);
+});
+
 // ── search() ─────────────────────────────────────────────────────
 mute();
 delete process.env.REPERTORY_ENGINE;

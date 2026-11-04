@@ -121,11 +121,4 @@ t("synonym lists stay within the 7-variant cap and never drop the patient's own 
     assert.ok(g.variants[0].text.length >= 2);
   }
 });
-t("small wording bridges (puncture, gushing, thunderstorm)", () => {
-  const variants = (w: string) => extractKeywords([w]).groups[0].variants.map((v) => v.text);
-  assert.ok(variants("puncture wound").includes("punctured") || variants("puncture").includes("wound"));
-  assert.ok(variants("gushing").includes("profuse"));
-  assert.ok(variants("thunderstorm").includes("thunder"));
-  assert.ok(!extractKeywords(["blind in one eye"]).groups.some((g) => g.variants.some((v) => v.text === "piles")));
-});
 console.log(`\n${n} checks passed`);

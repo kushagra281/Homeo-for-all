@@ -27,7 +27,6 @@ import {
   normalizeRemedyName,
 } from "../utils/keywords";
 import { sectionPatterns } from "../utils/sections";
-import { blendSymptomRows } from "./symptomBlend";
 
 // ── Types ─────────────────────────────────────────────────────────
 export interface SearchFilters {
@@ -247,17 +246,10 @@ export async function search(input: {
 
       if (remedyRows.length > 0) {
         const relevanceById = new Map(rubrics.map((r) => [r.id, r.relevance] as [number, number]));
-        const scoredRubrics = scoreRemedies(
+        const { remedies, contradictions } = scoreRemedies(
           toRubricMatches(rubrics),
           toScoringRows(remedyRows, relevanceById)
         );
-        const { contradictions } = scoredRubrics;
-        // Add the remedies' own materia-medica sentences to the score. Optional: a failure here
-        // leaves the rubric-only ranking untouched.
-        let remedies = scoredRubrics.remedies;
-        try {
-          remedies = blendSymptomRows(remedies, await searchScraperRemedySymptoms(kw, sectionPats), kw);
-        } catch (e: any) { console.error("[Search] remedy_symptoms blend failed:", e?.message || e); }
 
         if (remedies.length >= 2) {
           // Patient history: re-order the matches (never adds remedies). Optional - a failure here

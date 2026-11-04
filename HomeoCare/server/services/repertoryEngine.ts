@@ -149,6 +149,9 @@ function rankUnit(
   return kept.slice(0, o.perUnit).map(({ _s, ...r }) => r);
 }
 
+const MAX_UNITS = 12;
+const UNIT_CONCURRENCY = 3;
+
 /** Best rubrics for every symptom, de-duplicated across symptoms (a rubric found twice keeps its better match). */
 export async function findRubrics(
   units: ExtractedKeywords[],
@@ -157,9 +160,16 @@ export async function findRubrics(
   options: Partial<EngineOptions> = {},
 ): Promise<RankedRepertoryRubric[]> {
   const o = { ...DEFAULT_OPTIONS, ...options };
-  const perUnit = await Promise.all(units.map(async (kw, i) => {
-    const wk = await weigh(kw, store);
-    return rankUnit(i, wk, await candidates(wk, store, chapterPats, o), o);
+  // at most MAX_UNITS symptoms, and only UNIT_CONCURRENCY of them query the database at once
+  const work = units.slice(0, MAX_UNITS);
+  const perUnit: RankedRepertoryRubric[][] = new Array(work.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(UNIT_CONCURRENCY, work.length) }, async () => {
+    while (next < work.length) {
+      const i = next++;
+      const wk = await weigh(work[i], store);
+      perUnit[i] = rankUnit(i, wk, await candidates(wk, store, chapterPats, o), o);
+    }
   }));
   const best = new Map<number, RankedRepertoryRubric>();
   for (const list of perUnit) {

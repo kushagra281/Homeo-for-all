@@ -117,9 +117,14 @@ export function supabaseRepertoryStore(source = DEFAULT_SOURCE): RepertoryStore 
     async remedyNames() {
       const hit = fromCache<Map<string, string>>("rep:names:" + source);
       if (hit) return hit;
-      const { data, error } = await db().from("repertory_remedies").select("abbrev, name").eq("source", source).limit(5000);
-      if (error) fail("remedies", error.message);
-      const map = new Map<string, string>((data || []).map((r: any) => [r.abbrev as string, r.name as string]));
+      const map = new Map<string, string>();
+      for (let from = 0; from < 20000; from += 1000) {   // PostgREST caps one response at 1000 rows
+        const { data, error } = await db().from("repertory_remedies").select("abbrev, name").eq("source", source)
+          .order("abbrev", { ascending: true }).range(from, from + 999);
+        if (error) fail("remedies", error.message);
+        for (const r of (data || []) as any[]) map.set(r.abbrev as string, r.name as string);
+        if ((data || []).length < 1000) break;
+      }
       if (map.size) toCache("rep:names:" + source, map);
       return map;
     },

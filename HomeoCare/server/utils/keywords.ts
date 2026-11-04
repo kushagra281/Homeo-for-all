@@ -224,7 +224,7 @@ function toVariant(text: string): Variant | null {
   return { text: t, wordStart: t.length <= 3 };
 }
 
-function buildGroup(raw: string, key: string): KeywordGroup {
+function buildGroup(raw: string, key: string, extra?: Record<string, string[]>): KeywordGroup {
   const seen = new Set<string>();
   const variants: Variant[] = [];
   const add = (t: string) => {
@@ -234,7 +234,14 @@ function buildGroup(raw: string, key: string): KeywordGroup {
   add(key);
   for (const s of SYNONYMS[raw] || []) add(s);
   if (key !== raw) for (const s of SYNONYMS[key] || []) add(s);
-  return { key, variants: variants.slice(0, 7) };
+  const base = variants.slice(0, 7);
+  // Extra words suggested by the AI (see aiSynonyms.ts) go after the built-in ones, at most 3 more.
+  const ai = [...(extra?.[raw] || []), ...(key !== raw ? extra?.[key] || [] : [])];
+  for (const t of ai) {
+    const v = toVariant(t);
+    if (v && !seen.has(v.text) && base.length < 10) { seen.add(v.text); base.push(v); }
+  }
+  return { key, variants: base };
 }
 
 // Parenthesised common names the sources add after a remedy name. Any other bracket text is kept,
@@ -253,7 +260,7 @@ export function normalizeRemedyName(name: string): string {
 }
 
 // ── Main extraction ───────────────────────────────────────────────
-export function extractKeywords(symptoms: string[], maxGroups = 12): ExtractedKeywords {
+export function extractKeywords(symptoms: string[], maxGroups = 12, extra?: Record<string, string[]>): ExtractedKeywords {
   const groups = new Map<string, KeywordGroup>();
   const order: string[] = [];
   const modalities: Modality[] = [];
@@ -273,7 +280,7 @@ export function extractKeywords(symptoms: string[], maxGroups = 12): ExtractedKe
         if (negate) { negate = false; continue; }   // "no thirst" → skip "thirst"
 
         const key = stem(raw);
-        if (!groups.has(key)) { groups.set(key, buildGroup(raw, key)); order.push(key); }
+        if (!groups.has(key)) { groups.set(key, buildGroup(raw, key, extra)); order.push(key); }
         if (dir) modalities.push({ dir, key });
       }
     }

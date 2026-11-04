@@ -27,6 +27,7 @@ import {
   normalizeRemedyName,
 } from "../utils/keywords";
 import { sectionPatterns } from "../utils/sections";
+import { expandSymptoms } from "./aiSynonyms";
 
 // ── Types ─────────────────────────────────────────────────────────
 export interface SearchFilters {
@@ -224,7 +225,9 @@ export async function search(input: {
   const clean = cleanSymptoms(symptoms);
   if (!clean.length) return emptyResult("scraper");
 
-  const kw = extractKeywords(clean);
+  // Optional AI help: extra search words for the patient's wording. {} when off, slow or failing.
+  const extra = await expandSymptoms(clean);
+  const kw = extractKeywords(clean, 12, extra);
   if (!kw.groups.length) return emptyResult("scraper");
 
   const section = filters.symptom_location || filters.category || undefined;

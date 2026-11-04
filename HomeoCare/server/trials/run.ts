@@ -4,6 +4,7 @@ import { appendFileSync } from "node:fs";
 import { CASES } from "./cases";
 import { search } from "../services/searchService";
 import { remedyMatches } from "./match";
+import { hasGroqKey } from "../utils/groq";
 
 (async () => {
   if (!process.env.SCRAPER_SUPABASE_URL || !process.env.SCRAPER_SUPABASE_KEY) {
@@ -12,7 +13,9 @@ import { remedyMatches } from "./match";
   const log = console.log; console.log = () => {};   // silence the engine's own logging
   const rows: string[] = []; const failed: string[] = [];
   let top1 = 0, top3 = 0, top5 = 0, errors = 0;
+  const ai = hasGroqKey() && process.env.AI_SYNONYMS !== "off";
   for (const c of CASES) {
+    if (ai) await new Promise((r) => setTimeout(r, 2500));   // stay under the model's request limit
     let top: string[] = [], err = "";
     try {
       const res = await search({ symptoms: c.symptoms, filters: {} });
@@ -27,7 +30,7 @@ import { remedyMatches } from "./match";
   console.log = log;
   const n = CASES.length;
   const out = [
-    `## Trials: ${top5}/${n} in top 5 (${Math.round((top5 / n) * 100)}%)`,
+    `## Trials: ${top5}/${n} in top 5 (${Math.round((top5 / n) * 100)}%) · AI synonyms: ${ai ? "ON" : "off"}`,
     "",
     `**Top 1: ${top1}/${n}** · **Top 3: ${top3}/${n}** · **Top 5: ${top5}/${n}**${errors ? ` · errors: ${errors}` : ""}`,
     "",

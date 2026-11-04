@@ -1,0 +1,17 @@
+# Pings the live app every 10 minutes so Render's free plan does not put it to sleep
+# (a sleeping server takes 30-60 seconds to answer the first request, which feels like "the app hangs").
+# Harmless on a paid plan. Disable it in the Actions tab if you do not want it.
+name: Keep app warm
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health
+        run: |
+          curl -fsS --max-time 90 --retry 2 --retry-delay 10 https://helios-bcov.onrender.com/api/health

@@ -27,7 +27,7 @@ import {
   normalizeRemedyName,
 } from "../utils/keywords";
 import { sectionPatterns } from "../utils/sections";
-import { expandSymptoms } from "./aiSynonyms";
+import { expandSymptoms, translateSymptoms } from "./aiSynonyms";
 
 // ── Types ─────────────────────────────────────────────────────────
 export interface SearchFilters {
@@ -227,7 +227,10 @@ export async function search(input: {
 
   // Optional AI help: extra search words for the patient's wording. {} when off, slow or failing.
   const extra = await expandSymptoms(clean);
-  const kw = extractKeywords(clean, 12, extra);
+  // Symptoms typed in another script (Devanagari...) have no Latin words to search: the AI turns them
+  // into English words, searched in addition. [] for ordinary input, or when the AI is off or slow.
+  const english = await translateSymptoms(clean);
+  const kw = extractKeywords(english.length ? [...clean, english.join(", ")] : clean, 12, extra);
   if (!kw.groups.length) return emptyResult("scraper");
 
   const section = filters.symptom_location || filters.category || undefined;

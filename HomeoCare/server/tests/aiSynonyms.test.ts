@@ -1,6 +1,6 @@
 // Run: npx tsx server/tests/aiSynonyms.test.ts   (no database, no AI key needed)
 import assert from "node:assert/strict";
-import { parseExpansion, cleanTerm, expandSymptoms, _clearCache } from "../services/aiSynonyms";
+import { parseExpansion, cleanTerm, expandSymptoms, _clearCache, hasNonLatin, parseEnglish, translateSymptoms, _clearTranslateCache } from "../services/aiSynonyms";
 import { extractKeywords } from "../utils/keywords";
 
 let n = 0; const t = async (name: string, fn: () => Promise<void> | void) => { await fn(); n++; console.log("ok  ", name); };
@@ -57,6 +57,34 @@ let n = 0; const t = async (name: string, fn: () => Promise<void> | void) => { a
     _clearCache(); process.env.AI_SYNONYMS = "off";
     assert.deepEqual(await expandSymptoms(["x"], async () => '{"terms":{"x":["abc"]}}'), {});
     delete process.env.AI_SYNONYMS;
+  });
+  await t("hasNonLatin: Devanagari yes, Hinglish and English no", () => {
+    assert.ok(hasNonLatin(["सिरदर्द और बुखार"])); assert.ok(hasNonLatin(["head ache सिर"]));
+    assert.ok(!hasNonLatin(["sar dard bukhar"])); assert.ok(!hasNonLatin(["café headache"]));
+  });
+  await t("parseEnglish keeps clean single words only", () => {
+    assert.deepEqual(parseEnglish('x {"english":["Headache","fever","two words","<b>","headache"]}'), ["headache", "fever"]);
+    assert.deepEqual(parseEnglish("garbage"), []); assert.deepEqual(parseEnglish('{"english":"no"}'), []);
+  });
+  await t("translateSymptoms: Latin-only input never calls the AI", async () => {
+    _clearTranslateCache(); let calls = 0;
+    assert.deepEqual(await translateSymptoms(["sar dard"], async () => { calls++; return '{"english":["x"]}'; }), []);
+    assert.equal(calls, 0);
+  });
+  await t("translateSymptoms: Devanagari is translated, cached, and failure gives []", async () => {
+    _clearTranslateCache(); let calls = 0;
+    const ok = async () => { calls++; return '{"english":["headache","fever"]}'; };
+    assert.deepEqual(await translateSymptoms(["सिरदर्द बुखार"], ok), ["headache", "fever"]);
+    await translateSymptoms(["सिरदर्द बुखार"], ok);
+    assert.equal(calls, 1);
+    _clearTranslateCache();
+    assert.deepEqual(await translateSymptoms(["सिरदर्द"], async () => { throw new Error("x"); }), []);
+  });
+  await t("translated words joined by spaces keep 'worse' attached to 'night'", () => {
+    const space = extractKeywords(["headache worse night"]).modalities.map((m) => `${m.dir}:${m.key}`);
+    assert.deepEqual(space, ["worse:night"]);
+    const comma = extractKeywords(["headache, worse, night"]).modalities;
+    assert.equal(comma.length, 0);   // why the join must use spaces
   });
   console.log(`${n} checks passed`);
 })();

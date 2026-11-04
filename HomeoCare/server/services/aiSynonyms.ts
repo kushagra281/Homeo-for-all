@@ -49,14 +49,14 @@ Reply with JSON only: {"terms": {"<patient word>": ["word", "word"]}}`;
 
 const MODELS = [process.env.GROQ_TEXT_MODEL, "openai/gpt-oss-120b", "qwen/qwen3.8-27b"].filter(Boolean) as string[];
 
-async function askGroq(symptoms: string[], signal: AbortSignal): Promise<string> {
+async function askGroq(symptoms: string[], signal: AbortSignal, system: string = SYSTEM): Promise<string> {
   let last: unknown;
   for (const model of MODELS) {
     if (signal.aborted) break;
     try {
       const body: any = {
         model, max_tokens: 700, temperature: 0, response_format: { type: "json_object" },
-        messages: [{ role: "system", content: SYSTEM }, { role: "user", content: symptoms.join("\n") }],
+        messages: [{ role: "system", content: system }, { role: "user", content: symptoms.join("\n") }],
       };
       if (model.startsWith("openai/gpt-oss")) body.reasoning_effort = "low";
       const r = await groq().chat.completions.create(body, { timeout: TIMEOUT_MS, signal });
@@ -99,6 +99,65 @@ export async function expandSymptoms(
   } catch (e: any) {
     console.warn("[AI synonyms] skipped:", e?.message || e);
     return {};                       // not cached: the next search may try again
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── Non-Latin script (Devanagari etc.) ────────────────────────────
+// The keyword search reads only Latin letters, so a complaint typed in Devanagari would give no
+// keywords at all. For such input the AI translates the whole complaint into plain English search
+// words, which are searched in addition to whatever Latin text there is. Same safety nets as above.
+
+/** True when the text contains letters outside the Latin alphabet (Devanagari, Arabic, ...). */
+export function hasNonLatin(texts: string[]): boolean {
+  return texts.some((t) => /[\p{L}]/u.test(t.replace(/[\u0000-\u024F]/g, "")));
+}
+
+/** Untrusted model text -> up to 12 clean single English words. */
+export function parseEnglish(raw: string): string[] {
+  const m = (raw || "").match(/\{[\s\S]*\}/);
+  if (!m) return [];
+  let obj: any;
+  try { obj = JSON.parse(m[0]); } catch { return []; }
+  const list = obj && Array.isArray(obj.english) ? obj.english : [];
+  return [...new Set(list.map(cleanTerm).filter(Boolean) as string[])].slice(0, 12);
+}
+
+const SYSTEM_TRANSLATE = `You help a homeopathy search engine. The patient describes symptoms in a language written in a non-Latin script (for example Hindi in Devanagari). Translate the complaint into plain English symptom words as a materia medica or repertory would word them (e.g. "सिरदर्द" -> headache; "दस्त" -> diarrhoea, stool).
+Rules: up to 12 single lowercase English words; no remedy names; no diagnoses; keep modality words such as worse, better, night, morning, cold, warm.
+Reply with JSON only: {"english": ["word", "word"]}`;
+
+const tcache = new Map<string, string[]>();
+export function _clearTranslateCache() { tcache.clear(); }
+
+/** English search words for non-Latin input, or [] (not needed, AI off, slow or failing). `ask` is injectable for tests. */
+export async function translateSymptoms(
+  symptoms: string[],
+  ask?: (s: string[], signal: AbortSignal) => Promise<string>,
+  timeoutMs = TIMEOUT_MS,
+): Promise<string[]> {
+  if (process.env.AI_SYNONYMS === "off") return [];
+  const clean = symptoms.map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 12);
+  if (!clean.length || !hasNonLatin(clean)) return [];
+  if (!ask && !hasGroqKey()) return [];
+  const run = ask ?? ((x: string[], sig: AbortSignal) => askGroq(x, sig, SYSTEM_TRANSLATE));
+  const key = clean.join("|");
+  const hit = tcache.get(key);
+  if (hit) return hit;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const words = parseEnglish(await Promise.race([
+      run(clean, ctl.signal),
+      new Promise<string>((_, rej) => ctl.signal.addEventListener("abort", () => rej(new Error("timeout")))),
+    ]));
+    if (tcache.size >= CACHE_MAX) tcache.delete(tcache.keys().next().value as string);
+    tcache.set(key, words);
+    return words;
+  } catch (e: any) {
+    console.warn("[AI translate] skipped:", e?.message || e);
+    return [];
   } finally {
     clearTimeout(timer);
   }

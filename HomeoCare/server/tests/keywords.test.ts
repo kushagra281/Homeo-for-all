@@ -108,6 +108,12 @@ t("patient wording reaches the old text: 'desire cold drinks' finds 'Thirst for 
   assert.ok(groupMatches("desire for sugar", extractKeywords(["sweets"]).groups[0]));
   assert.ok(groupMatches("bruised sore feeling", extractKeywords(["bruised"]).groups[0]));
 });
+t("broad words do not drag in unrelated symptoms ('loose tooth' is not diarrhoea, 'stool' is not 'motion')", () => {
+  const loose = extractKeywords(["loose tooth"]).groups.find((g) => g.key === "loose")!;
+  assert.ok(!groupMatches("diarrhoea; watery stools", loose));
+  const stool = extractKeywords(["hard stool"]).groups.find((g) => g.key === "stool")!;
+  assert.ok(!groupMatches("worse from motion", stool));
+});
 t("synonym lists stay within the 7-variant cap and never drop the patient's own word", () => {
   for (const w of ["desire", "drink", "throbbing", "injury", "grief", "piles", "bleeding", "stabbing"]) {
     const g = extractKeywords([w]).groups[0];

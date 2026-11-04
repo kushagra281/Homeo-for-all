@@ -80,5 +80,11 @@ let n = 0; const t = async (name: string, fn: () => Promise<void> | void) => { a
     _clearTranslateCache();
     assert.deepEqual(await translateSymptoms(["सिरदर्द"], async () => { throw new Error("x"); }), []);
   });
+  await t("translated words joined by spaces keep 'worse' attached to 'night'", () => {
+    const space = extractKeywords(["headache worse night"]).modalities.map((m) => `${m.dir}:${m.key}`);
+    assert.deepEqual(space, ["worse:night"]);
+    const comma = extractKeywords(["headache, worse, night"]).modalities;
+    assert.equal(comma.length, 0);   // why the join must use spaces
+  });
   console.log(`${n} checks passed`);
 })();

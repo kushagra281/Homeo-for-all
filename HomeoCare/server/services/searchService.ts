@@ -226,11 +226,17 @@ export async function search(input: {
   if (!clean.length) return emptyResult("scraper");
 
   // Optional AI help: extra search words for the patient's wording. {} when off, slow or failing.
-  const extra = await expandSymptoms(clean);
   // Symptoms typed in another script (Devanagari...) have no Latin words to search: the AI turns them
-  // into English words, searched in addition. [] for ordinary input, or when the AI is off or slow.
-  const english = await translateSymptoms(clean);
-  const kw = extractKeywords(english.length ? [...clean, english.join(", ")] : clean, 12, extra);
+  // into English words, searched in addition. Synonym expansion only reads Latin words, so it is
+  // skipped for input with none; when both apply they run together (one wait, not two).
+  const hasLatin = clean.some((s) => /[a-z]{3}/.test(s));
+  const [extra, english] = await Promise.all([
+    hasLatin ? expandSymptoms(clean) : Promise.resolve({}),
+    translateSymptoms(clean),
+  ]);
+  // Joined with spaces (not commas) so a modality word stays with what it modifies:
+  // "headache worse night" keeps worse -> night.
+  const kw = extractKeywords(english.length ? [...clean, english.join(" ")] : clean, 12, extra);
   if (!kw.groups.length) return emptyResult("scraper");
 
   const section = filters.symptom_location || filters.category || undefined;

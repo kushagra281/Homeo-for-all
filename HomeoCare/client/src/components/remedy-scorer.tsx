@@ -15,6 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
 import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 import { detectRedFlags, type RedFlag } from "@shared/redFlags";
+import { elementTags, elementTagLabel } from "@shared/elements";
 import AppHeader from "@/components/app-header";
 import { psychologySummary } from "@/lib/psychology";
 import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
@@ -794,6 +795,16 @@ export default function RemedyScorer({
                           <span className="text-xs text-gray-400">({result.remedy.abbreviation})</span>
                         )}
                       </div>
+                      {elementTags(result.remedy?.name).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5" data-testid="element-tags"
+                          title="Where the elements named in this remedy sit in the periodic table (Scholten's series and stage)">
+                          {elementTags(result.remedy?.name).map(t => (
+                            <span key={t.symbol} className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 text-[11px] px-2 py-0.5 notranslate" translate="no">
+                              <b className="font-semibold text-slate-800">{t.symbol}</b> {elementTagLabel(t)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <p className="text-sm text-gray-500 mt-0.5">{result.remedy?.condition}</p>
                     </div>
                     <div className="text-right shrink-0 ml-3">

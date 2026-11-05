@@ -272,7 +272,7 @@ const GENERAL: CaseQuestion[] = [
   { id: "gen-digestion", topic: "general", multi: true, required: true, text: "How are your appetite and digestion?", why: "Appetite and digestion are general symptoms that often decide between similar remedies.", covers: ["digestion"],
     options: [o("Good, no problem"), o("Poor appetite", "loss of appetite"), o("Very hungry, eats a lot", "ravenous appetite"), o("Acidity or heartburn", "acidity heartburn"), o("Gas or bloating", "flatulence"), o("Indigestion after meals", "indigestion"), o("Nausea", "nausea")],
     skipIf: /digest|appetite|acidity|heartburn|bloat|gas\b|indigest|nausea|bhook/i },
-  { id: "gen-bowels", topic: "general", multi: false, text: "How are your bowels?", why: "The bowel habit is part of the whole picture.", covers: ["bowels"],
+  { id: "gen-bowels", topic: "general", multi: false, required: true, text: "How are your bowels?", why: "The bowel habit is part of the whole picture.", covers: ["bowels"],
     options: [o("Regular, normal"), o("Constipation", "constipation"), o("Loose motions often", "diarrhoea"), o("Constipation and loose motions by turns", "constipation alternating diarrhoea"), o("Never feels fully cleared", "stool unsatisfactory")],
     skipIf: /constip|diarrh|loose|stool|kabz|dast|bowel/i },
   { id: "gen-desire", topic: "general", multi: true, required: true, text: "Any strong cravings or dislikes in food?", why: "Food desires and aversions are important general symptoms.", covers: ["desire"],

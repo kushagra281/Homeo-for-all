@@ -9,7 +9,6 @@ const SymptomAnalysis = lazy(() => import("@/pages/symptom-analysis"));
 const AuthPage = lazy(() => import("@/pages/auth-page"));
 import NotFound from "@/pages/not-found";
 const ProfilePage = lazy(() => import("@/pages/profile"));
-const DictionaryPage = lazy(() => import("@/pages/dictionary"));
 const Community = lazy(() => import("@/pages/community"));
 const RepertoryPage = lazy(() => import("@/pages/repertory"));
 function Router() {
@@ -19,7 +18,6 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/profile" component={ProfilePage} />
-      <Route path="/dictionary" component={DictionaryPage} />
       <Route path="/community" component={Community} />
       <Route path="/repertory" component={RepertoryPage} />
       <Route path="/symptom-analysis" component={SymptomAnalysis} />

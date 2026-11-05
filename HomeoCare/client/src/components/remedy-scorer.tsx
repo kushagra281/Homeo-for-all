@@ -755,33 +755,6 @@ export default function RemedyScorer({
               </div>
             )}
 
-            {(aiExplain.loading || aiExplain.data) && (
-              <div className="mb-4 p-4 rounded-lg border border-indigo-200 bg-indigo-50" data-testid="ai-explanation">
-                <p className="text-sm font-semibold text-indigo-900 mb-2">🧠 Case analysis</p>
-                {aiExplain.loading && <p className="text-xs text-indigo-700">Writing the analysis of your case…</p>}
-                {aiExplain.data && (
-                  <div className="space-y-2 text-sm text-indigo-950">
-                    {aiExplain.data.overview && <p>{aiExplain.data.overview}</p>}
-                    {aiExplain.data.remedies.map((r) => (
-                      <p key={r.name}>
-                        <span className="font-semibold notranslate" translate="no">{r.name}:</span> {r.why}
-                        {r.against && <span className="text-indigo-800"> <em>Against:</em> {r.against}</span>}
-                      </p>
-                    ))}
-                    {aiExplain.data.ask_next.length > 0 && (
-                      <div>
-                        <p className="font-medium">To tell the top remedies apart, ask:</p>
-                        <ul className="list-disc pl-5">{aiExplain.data.ask_next.map((q) => <li key={q}>{q}</li>)}</ul>
-                      </div>
-                    )}
-                    <p className="text-xs text-indigo-700 pt-1">
-                      Written by AI from the matches below. The ranking itself comes only from the materia medica text, and this is not medical advice.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Remedy cards */}
             <div className="space-y-5">
               {topResults.map((result: any, idx: number) => (
@@ -906,6 +879,34 @@ export default function RemedyScorer({
                 </div>
               ))}
             </div>
+
+            {/* Case analysis: after the top remedies, so the remedies are the first thing read */}
+            {(aiExplain.loading || aiExplain.data) && (
+              <div className="mt-6 p-4 rounded-lg border border-indigo-200 bg-indigo-50" data-testid="ai-explanation">
+                <p className="text-sm font-semibold text-indigo-900 mb-2">🧠 Case analysis</p>
+                {aiExplain.loading && <p className="text-xs text-indigo-700">Writing the analysis of your case…</p>}
+                {aiExplain.data && (
+                  <div className="space-y-2 text-sm text-indigo-950">
+                    {aiExplain.data.overview && <p>{aiExplain.data.overview}</p>}
+                    {aiExplain.data.remedies.map((r) => (
+                      <p key={r.name}>
+                        <span className="font-semibold notranslate" translate="no">{r.name}:</span> {r.why}
+                        {r.against && <span className="text-indigo-800"> <em>Against:</em> {r.against}</span>}
+                      </p>
+                    ))}
+                    {aiExplain.data.ask_next.length > 0 && (
+                      <div>
+                        <p className="font-medium">To tell the top remedies apart, ask:</p>
+                        <ul className="list-disc pl-5">{aiExplain.data.ask_next.map((q) => <li key={q}>{q}</li>)}</ul>
+                      </div>
+                    )}
+                    <p className="text-xs text-indigo-700 pt-1">
+                      Written by AI from the matches above. The ranking itself comes only from the materia medica text, and this is not medical advice.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Remedies below the top three that still match the mental symptoms */}
             {keynoteResults.length > 0 && (

@@ -7,6 +7,9 @@ Supabase. This file describes the code as it is now.
 ```
 client/src/pages/home.tsx          landing page, category + free-text entry
 client/src/components/remedy-scorer.tsx   questionnaire, results, history  (calls POST /api/remedies/score)
+client/src/components/nav-drawer.tsx      the menu: Home, History, Profile, Privacy, Terms, Sign in/out
+client/src/pages/auth-page.tsx, reset-password.tsx   sign in / sign up / forgot password (Supabase Auth)
+client/src/pages/legal.tsx         /privacy and /terms (set CONTACT_EMAIL there to show a contact line)
         |
 server/routes/remedies.ts          HTTP layer: /score, /analyze-report, browse routes   (rate limited)
 server/routes/profile.ts           /api/profile/me | save | history       (needs a signed-in user)
@@ -39,6 +42,12 @@ Supabase projects (in production the users, history and the scraped data are in 
   Boericke's and Kent's Materia Medica. These are materia medica texts and carry
   **no grades, potencies or doses** (every rubric link is grade 1). The graded repertory (Repertorium Publicum,
   `repertory_*` tables) is read by the Repertory pages and, when `REPERTORY_ENGINE` is `on` or `hybrid`, by the search.
+
+Pages that exist but are not linked in the menu: `/repertory` (browse the graded repertory, saved cases; needs
+`docs/sql/2026-11-repertory-cases.sql` for saved cases) and `/community` (anonymous chat, in-memory history).
+History is read 20 rows at a time (`getSearchHistory(offset)`, "Load more" in the UI).
+`docs/sql/2026-11-db-cleanup.sql` drops two duplicate indexes and speeds up five RLS policies (run by hand in the SQL editor).
+Password-reset links need the site's `/reset-password` URL in Supabase Auth > URL Configuration > Redirect URLs.
 
 Environment variables: see `.env.example`. `/api/health` shows which ones are set.
 

@@ -41,6 +41,10 @@ export default function NavDrawer({ open, onOpenChange, user, onHome, onHistory 
           ))}
         </nav>
         <div className="border-t border-gray-100 py-2">
+          <div className="flex gap-4 px-5 py-2 text-xs text-gray-400">
+            <button data-testid="menu-privacy" onClick={() => go(() => setLocation("/privacy"))} className="hover:text-green-700">Privacy</button>
+            <button data-testid="menu-terms" onClick={() => go(() => setLocation("/terms"))} className="hover:text-green-700">Terms</button>
+          </div>
           {user ? (
             <button data-testid="menu-signout" onClick={() => go(logout)}
               className="w-full flex items-center gap-3 px-5 py-3 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition text-left">

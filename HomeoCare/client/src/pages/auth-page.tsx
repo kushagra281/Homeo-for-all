@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
-import { signIn, signUp } from "@/lib/supabase"
+import { signIn, signUp, requestPasswordReset } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -13,6 +13,8 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [forgot, setForgot] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
   const [form, setForm] = useState({ name: "", email: "", password: "" })
 
   useEffect(() => {
@@ -31,6 +33,11 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true); setError("")
     try {
+      if (forgot) {
+        await requestPasswordReset(form.email.trim())
+        setResetSent(true)
+        return
+      }
       if (isLogin) {
         await signIn(form.email, form.password)
       } else {
@@ -124,7 +131,7 @@ export default function AuthPage() {
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
+        {!forgot && <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
           <button
             onClick={() => { setIsLogin(true); setError("") }}
             className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${isLogin ? "bg-white shadow text-green-700" : "text-gray-500"}`}
@@ -133,10 +140,16 @@ export default function AuthPage() {
             onClick={() => { setIsLogin(false); setError("") }}
             className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${!isLogin ? "bg-white shadow text-green-700" : "text-gray-500"}`}
           >Sign Up</button>
-        </div>
+        </div>}
+        {forgot && (
+          <div className="mb-6 text-center">
+            <h2 className="text-lg font-semibold text-gray-900">Reset your password</h2>
+            <p className="text-sm text-gray-500 mt-1">Enter your email and we will send you a link to set a new password.</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {!isLogin && !forgot && (
             <div>
               <Label htmlFor="name">Full Name</Label>
               <Input id="name" name="name" placeholder="Enter your name"
@@ -148,11 +161,23 @@ export default function AuthPage() {
             <Input id="email" name="email" type="email" placeholder="Enter your email"
               value={form.email} onChange={handleChange} className="mt-1" required />
           </div>
-          <div>
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" placeholder="Min. 6 characters"
-              value={form.password} onChange={handleChange} className="mt-1" required minLength={6} />
-          </div>
+          {!forgot && (
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" name="password" type="password" placeholder="Min. 6 characters"
+                value={form.password} onChange={handleChange} className="mt-1" required minLength={6} />
+              {isLogin && (
+                <button type="button" data-testid="forgot-password" onClick={() => { setForgot(true); setError(""); setResetSent(false) }}
+                  className="mt-2 text-sm text-green-600 hover:underline">Forgot password?</button>
+              )}
+            </div>
+          )}
+
+          {resetSent && (
+            <div data-testid="reset-sent" className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg">
+              If an account exists for this email, a reset link is on its way. Check your inbox and spam folder.
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg">
@@ -161,17 +186,27 @@ export default function AuthPage() {
           )}
 
           <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white py-5" disabled={loading}>
-            {loading ? "Please wait..." : isLogin ? "Login" : "Create Account"}
+            {loading ? "Please wait..." : forgot ? "Send reset link" : isLogin ? "Login" : "Create Account"}
           </Button>
+          {forgot && (
+            <button type="button" onClick={() => { setForgot(false); setResetSent(false); setError("") }}
+              className="w-full text-center text-sm text-green-600 hover:underline">Back to login</button>
+          )}
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
+        <p className="text-center text-xs text-gray-400 mt-4">
+          By continuing you agree to our{" "}
+          <a href="/terms" className="underline">Terms</a> and{" "}
+          <a href="/privacy" className="underline">Privacy Policy</a>.
+        </p>
+
+        {!forgot && <p className="text-center text-sm text-gray-500 mt-6">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button onClick={() => { setIsLogin(!isLogin); setError("") }}
             className="text-green-600 font-medium hover:underline">
             {isLogin ? "Sign Up" : "Login"}
           </button>
-        </p>
+        </p>}
       </Card>
     </div>
   )

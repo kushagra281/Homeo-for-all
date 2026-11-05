@@ -10,6 +10,7 @@ export interface AiExplanation {
   overview: string;
   remedies: Array<{ name: string; why: string; against: string }>;
   ask_next: string[];
+  lifestyle?: { do: string[]; avoid: string[] };
 }
 
 async function post(path: string, body: unknown, ms: number): Promise<any | null> {

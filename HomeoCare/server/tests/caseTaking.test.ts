@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  ALL_QUESTIONS, MAX_QUESTIONS, answerLines, answerPhrases, detectTopics, nextQuestion, psyAnswersOf, queueFor, type CaseState,
+  ALL_QUESTIONS, MAX_QUESTIONS, answerLines, answerPhrases, detectTopics, generalLeft, inferCovers, nextQuestion, psyAnswersOf, queueFor,
+  type CaseQuestion, type CaseState,
 } from "../../client/src/lib/caseTaking";
 import { extractKeywords } from "../utils/keywords";
 
@@ -159,4 +160,84 @@ t("a mixed complaint asks which emotion leads and covers every emotion named", (
   assert.ok(ids.includes("psy-5") && ids.includes("psy-10"), "anxiety and anger sections both present");
   state.answers["mind-main"] = ["Anger or irritability"];
   assert.ok(queueFor(state).some((q) => q.id === "psy-10"));
+});
+
+// ── hair loss and the general review ────────────────────────────────
+// An AI-written question as the app stores it while the interview runs.
+const aiQ = (id: string, text: string): CaseQuestion =>
+  ({ id, topic: "ai", text, why: "", multi: false, options: [{ label: "Yes", phrases: [] }, { label: "No", phrases: [] }] });
+
+t("hair complaints are recognised, English and Hinglish", () => {
+  assert.equal(detectTopics(["hair loss"])[0], "hair");
+  assert.equal(detectTopics(["Hairloss", "Dandruff"])[0], "hair");
+  assert.equal(detectTopics(["baal jhad rahe hain"])[0], "hair");
+  assert.equal(detectTopics(["itching scalp"])[0], "hair");
+  assert.equal(detectTopics(["bald patches"])[0], "hair");
+});
+
+t("a hair complaint gets hair questions, then the general review", () => {
+  const { asked } = interview(["hair loss"]);
+  assert.ok(asked.includes("hair-pattern") && asked.includes("hair-onset") && asked.includes("hair-health"));
+  for (const id of ["gen-digestion", "gen-sleep", "gen-sweat", "gen-desire", "gen-temp", "gen-thirst"]) {
+    assert.ok(asked.includes(id), `${id} is part of the interview`);
+  }
+});
+
+t("the new general questions answer into search phrases (so they reach the diagnosis)", () => {
+  const state: CaseState = { symptoms: ["hair loss"], answers: {
+    "gen-digestion": ["Indigestion after meals", "Acidity or heartburn"], "gen-sweat": ["Mostly on the head"], "hair-pattern": ["Round bald patches"],
+  } };
+  const ph = answerPhrases(state);
+  for (const p of ["indigestion", "acidity heartburn", "perspiration head", "baldness patches"]) assert.ok(ph.includes(p), p);
+});
+
+t("what the AI already asked is not asked again in the general top-up", () => {
+  const state: CaseState = {
+    symptoms: ["hair loss"],
+    answers: { "ai-1": ["Yes"], "ai-2": ["Yes"], "ai-3": ["No"] },
+    custom: {
+      "ai-1": aiQ("ai-1", "Do you wake up at a particular time at night?"),
+      "ai-2": aiQ("ai-2", "Are you generally thirsty or thirstless?"),
+      "ai-3": aiQ("ai-3", "How is your digestion and appetite?"),
+    },
+  };
+  const ids = queueFor(state, { generalOnly: true }).map((q) => q.id);
+  assert.ok(!ids.includes("gen-sleep") && !ids.includes("gen-thirst") && !ids.includes("gen-digestion"));
+  assert.deepEqual(ids.sort(), ["gen-desire", "gen-sweat", "gen-temp"]);
+  assert.equal(generalLeft(state), 3);
+});
+
+t("a top-up question the AI skipped is still asked, and the top-up ends when all are settled", () => {
+  const state: CaseState = { symptoms: ["hair loss"], answers: {}, custom: {} };
+  assert.equal(generalLeft(state), 6, "nothing covered: all six required areas");
+  const seen: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const q = nextQuestion(state, { generalOnly: true });
+    if (!q) break;
+    seen.push(q.id);
+    state.answers[q.id] = [q.options[0].label];
+  }
+  assert.deepEqual(seen.sort(), ["gen-desire", "gen-digestion", "gen-sleep", "gen-sweat", "gen-temp", "gen-thirst"]);
+  assert.equal(generalLeft(state), 0);
+});
+
+t("a skipped AI question settles nothing, and the top-up works past the normal question cap", () => {
+  const custom = { "ai-1": aiQ("ai-1", "How is your sleep?") };
+  assert.ok(queueFor({ symptoms: ["x"], answers: { "ai-1": [] }, custom }, { generalOnly: true }).some((q) => q.id === "gen-sleep"));
+  const many: Record<string, string[]> = {};
+  for (let i = 0; i < MAX_QUESTIONS + 2; i++) many[`ai-${i}`] = ["Yes"];
+  assert.ok(nextQuestion({ symptoms: ["x"], answers: many }, { generalOnly: true }), "the cap does not hide the required questions");
+  assert.equal(nextQuestion({ symptoms: ["x"], answers: many }), null, "the full interview still stops at the cap");
+});
+
+t("what a question text settles is read correctly", () => {
+  assert.deepEqual(inferCovers("How are your appetite and digestion?"), ["digestion"]);
+  assert.ok(inferCovers("Do you sweat a lot at night?").includes("sweat"));
+  assert.ok(inferCovers("Are you chilly or hot by nature?").includes("temp"));
+  assert.deepEqual(inferCovers("Where exactly is the pain?"), []);
+});
+
+t("the typed words settle the general questions too", () => {
+  const ids = queueFor({ symptoms: ["hair loss", "constipation and acidity", "poor sleep"], answers: {} }).map((q) => q.id);
+  assert.ok(!ids.includes("gen-digestion") && !ids.includes("gen-sleep") && !ids.includes("gen-bowels"));
 });

@@ -21,6 +21,7 @@ export interface CaseQuestion {
   covers?: string[];                  // modality kinds this question settles: time, temp, motion, thirst ...
   skipIf?: RegExp;                    // patient already said it in the symptom text
   when?: (ctx: Ctx) => boolean;       // only after earlier answers make it relevant
+  required?: boolean;                 // a general area every case needs (checked again when the AI says it is done)
 }
 interface Ctx { text: string; has: (id: string, label: string) => boolean; answered: (id: string) => boolean }
 
@@ -34,10 +35,11 @@ const better = (label: string, extra = label.toLowerCase()) => o(label, `better 
 export const TOPIC_LABELS: Record<string, string> = {
   mind: "Mind and emotions", head: "Head", fever: "Fever", stomach: "Stomach and digestion",
   respiration: "Cough and breathing", throat: "Throat and cold", skin: "Skin", joints: "Joints, back and limbs",
-  urinary: "Urinary", sleep: "Sleep", female: "Female complaints",
+  urinary: "Urinary", sleep: "Sleep", female: "Female complaints", hair: "Hair and scalp",
 };
 const TOPIC_PATTERNS: Array<[string, RegExp]> = [
   ["mind", /anxi|fear|afraid|panic|depress|sad|grief|anger|angry|irritab|restless|weep|cry|crying|mood|stress|worr|tension|lonely|hopeless|nervous|phobia|ghabra|dar\b|darr|gussa|udaas|udas|rona|chinta|tanav|mental|emotion|jealous|suicid|memory|forget/i],
+  ["hair", /hair|\bbaal|\bbalon|alopecia|bald|dandruff|scalp|gaanj|ganj|khalit/i],
   ["head", /head|migraine|sar\s*dard|sir\s*dard|temple|forehead|vertigo|dizz|chakkar/i],
   ["fever", /fever|bukhar|chill|shiver|temperature|sweat/i],
   ["stomach", /stomach|pet\b|abdom|nausea|vomit|acid|heartburn|bloat|gas\b|constipat|diarrh|loose motion|digest|appetite|indigest|ulti|kabz|dast|gastric|liver|colic|flatul/i],
@@ -159,7 +161,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Body ache", "aching body"), o("Restlessness", "restlessness"), o("Drowsiness", "drowsiness"), o("Headache", "headache"), o("Rash", "eruption"), o("Cough", "cough"), o("Vomiting", "vomiting"), o(NONE)] },
   ],
   stomach: [
-    { id: "stomach-main", topic: "stomach", multi: true, text: "What is the main complaint?", why: "Tells which part of the digestion is involved.",
+    { id: "stomach-main", topic: "stomach", multi: true, text: "What is the main complaint?", why: "Tells which part of the digestion is involved.", covers: ["digestion", "bowels"],
       options: [o("Nausea", "nausea"), o("Vomiting", "vomiting"), o("Acidity or heartburn", "acidity heartburn"), o("Bloating or gas", "flatulence"), o("Pain", "abdominal pain"), o("Constipation", "constipation"), o("Loose motions", "diarrhoea"), o("Poor appetite", "loss of appetite")],
       skipIf: /nausea|vomit|acid|heartburn|bloat|gas|constip|diarrh|loose|appetite|ulti|kabz|dast/i },
     { id: "stomach-food", topic: "stomach", multi: true, text: "Which food or drink worsens it?", why: "Food aggravations are reliable digestive guides.",
@@ -168,7 +170,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Better after eating", "better eating"), o("Worse after eating", "worse eating"), o("Worse on empty stomach", "worse hunger"), o("Worse immediately on eating", "worse eating immediately"), o("No relation")] },
     { id: "stomach-pain", topic: "stomach", multi: false, text: "What type of pain?", why: "The character of the pain helps choosing the remedy.", covers: ["motion", "pressure"],
       options: [o("Burning", "burning pain"), o("Cramping, better bending double", "colic better bending"), o("Cutting", "cutting pain"), o("Pressing like a stone", "pressing pain"), o("Better by hard pressure", "better pressure"), o("No pain")] },
-    { id: "stomach-desire", topic: "stomach", multi: true, text: "Strong cravings or dislikes?", why: "Food desires and aversions are important general symptoms.",
+    { id: "stomach-desire", topic: "stomach", multi: true, text: "Strong cravings or dislikes?", why: "Food desires and aversions are important general symptoms.", covers: ["desire"],
       options: [o("Sweets", "desire sweets"), o("Salt", "desire salt"), o("Sour things", "desire sour"), o("Cold drinks", "desire cold drinks"), o("Warm food", "desire warm"), o("Aversion to milk", "aversion milk"), o(NONE)] },
   ],
   respiration: [
@@ -222,12 +224,26 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Dark and hot", "urine dark"), o("Strong smell", "urine offensive"), o("Cloudy", "urine turbid"), o("Pale and profuse", "urine profuse"), o("Normal")] },
   ],
   sleep: [
-    { id: "sleep-type", topic: "sleep", multi: true, text: "What is the sleep problem?", why: "Different sleep problems have different remedies.",
+    { id: "sleep-type", topic: "sleep", multi: true, text: "What is the sleep problem?", why: "Different sleep problems have different remedies.", covers: ["sleep"],
       options: [o("Cannot fall asleep", "sleeplessness"), o("Wakes at a fixed hour", "waking night"), o("Unrefreshing sleep", "sleep unrefreshing"), o("Vivid dreams", "dreams"), o("Nightmares", "dreams"), o("Restless, tossing", "restlessness night")] },
     { id: "sleep-why", topic: "sleep", multi: true, text: "What keeps you awake?", why: "The reason for sleeplessness points to the mental picture.",
       options: [o("Racing thoughts", "thinking"), o("Worry", "anxiety"), o("Pain or discomfort"), o("Heat in bed", "heat bed"), o("Noise", "noise"), o("No reason")] },
     { id: "sleep-hour", topic: "sleep", multi: false, text: "At what time do you wake?", why: "Time of waking is a classical key.", covers: ["time"],
       options: [o("11 pm to 1 am", "waking midnight"), o("2 to 4 am", "waking 3 am"), o("Early morning, cannot sleep again", "waking early"), o("Varies")] },
+  ],
+  hair: [
+    { id: "hair-pattern", topic: "hair", multi: true, text: "How is the hair loss?", why: "The pattern of hair loss points to different remedies.",
+      options: [o("Thinning all over", "hair falling thinning"), o("Receding at the temples or front", "hair falling temples"), o("Thinning on top of the head", "hair falling vertex"), o("Round bald patches", "baldness patches"), o("Falls in handfuls", "hair falling profuse"), o("Only when combing or washing", "hair falling combing")],
+      skipIf: /patch|thinning|receding|crown|handful|bald|temples|vertex/i },
+    { id: "hair-onset", topic: "hair", multi: false, text: "What seems to have started it?", why: "Hair loss that follows a particular event has its own remedies.",
+      options: [o("A fever or illness", "hair falling after illness"), o("Childbirth or hormonal change", "hair falling after childbirth"), o("Stress, grief or shock", "hair falling grief"), o("A new medicine or hair treatment", "hair falling medicines"), o("Weight loss or poor diet", "hair falling weakness"), o("Slowly, no clear reason", "hair falling gradually")] },
+    { id: "hair-scalp", topic: "hair", multi: true, text: "How is the scalp?", why: "The state of the scalp narrows the choice.",
+      options: [o("Dandruff", "dandruff"), o("Itching", "itching scalp"), o("Oily or greasy", "greasy scalp"), o("Dry and flaky", "dry scalp"), o("Burning", "burning scalp"), o("Boils or pimples", "eruptions scalp"), o("Sweating of the scalp", "perspiration scalp"), o("Normal scalp")],
+      skipIf: /dandruff|itch|oily|greasy|flaky|burning scalp/i },
+    { id: "hair-with", topic: "hair", multi: true, text: "Anything else with the hair?", why: "Hair, nails and skin often change together.",
+      options: [o("Early grey hair", "grey hair premature"), o("Dry, brittle hair", "hair dry brittle"), o("Splitting or breaking hair", "hair brittle"), o("Brittle nails", "nails brittle"), o("Dry skin", "skin dry"), o("Eyebrows or body hair also falling", "eyebrows falling"), none()] },
+    { id: "hair-health", topic: "hair", multi: true, text: "Any known health issue?", why: "Some causes of hair loss need a doctor, so they are asked about to rule them out.",
+      options: [o("Thyroid problem"), o("Low iron, vitamin D or B12"), o("PCOS or irregular periods", "menses irregular"), o("Diabetes"), o("Recent weight change"), o("Long-term medicines"), none()] },
   ],
   female: [
     { id: "fem-main", topic: "female", multi: true, text: "What is the complaint?", why: "Tells which women's complaint leads.",
@@ -243,17 +259,50 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
 
 // ── General modalities: asked once, only if not already known ────────
 const GENERAL: CaseQuestion[] = [
-  { id: "gen-temp", topic: "general", multi: false, text: "Are you generally chilly or too warm?", why: "Body heat is one of the most important general symptoms.", covers: ["temp"],
+  { id: "gen-temp", topic: "general", multi: false, text: "Are you generally chilly or too warm?", why: "Body heat is one of the most important general symptoms.", covers: ["temp"], required: true,
     options: [o("Chilly, wants warm clothes", "chilly"), o("Hot, wants open air", "hot"), o("Depends"), o("Cannot say")], skipIf: /chilly|warm blooded|hot patient|feel cold|feel hot|thand|garmi/i },
   { id: "gen-time", topic: "general", multi: false, text: "At what time is the whole complaint worse?", why: "Time of aggravation is a classical modality.", covers: ["time"],
     options: [worse("Morning"), worse("Afternoon"), worse("Evening"), worse("Night"), worse("After midnight", "midnight"), o("No fixed time")], skipIf: /morning|afternoon|evening|night|midnight|subah|shaam|raat/i },
   { id: "gen-motion", topic: "general", multi: false, text: "Motion or rest?", why: "Whether movement helps or hurts is a core modality.", covers: ["motion"],
     options: [o("Better by motion", "better motion"), o("Worse by motion", "worse motion"), o("Better by rest", "better rest"), o("No effect")], skipIf: /motion|movement|rest\b|walking/i },
-  { id: "gen-thirst", topic: "general", multi: false, text: "How is your thirst?", why: "Thirst is a general symptom that separates similar remedies.", covers: ["thirst"],
+  { id: "gen-thirst", topic: "general", multi: false, text: "How is your thirst?", why: "Thirst is a general symptom that separates similar remedies.", covers: ["thirst"], required: true,
     options: [o("Very thirsty", "thirst"), o("Thirstless", "thirstless"), o("Normal")], skipIf: /thirst|pyaas/i },
   { id: "gen-air", topic: "general", multi: false, text: "Open air or closed room?", why: "Air preference is another general modality.", covers: ["air"],
     options: [o("Better in open air", "better open air"), o("Worse in open air", "worse open air"), o("Worse in a closed room", "worse closed room"), o("No effect")], skipIf: /open air|fresh air|closed room|hawa/i },
+  { id: "gen-digestion", topic: "general", multi: true, required: true, text: "How are your appetite and digestion?", why: "Appetite and digestion are general symptoms that often decide between similar remedies.", covers: ["digestion"],
+    options: [o("Good, no problem"), o("Poor appetite", "loss of appetite"), o("Very hungry, eats a lot", "ravenous appetite"), o("Acidity or heartburn", "acidity heartburn"), o("Gas or bloating", "flatulence"), o("Indigestion after meals", "indigestion"), o("Nausea", "nausea")],
+    skipIf: /digest|appetite|acidity|heartburn|bloat|gas\b|indigest|nausea|bhook/i },
+  { id: "gen-bowels", topic: "general", multi: false, text: "How are your bowels?", why: "The bowel habit is part of the whole picture.", covers: ["bowels"],
+    options: [o("Regular, normal"), o("Constipation", "constipation"), o("Loose motions often", "diarrhoea"), o("Constipation and loose motions by turns", "constipation alternating diarrhoea"), o("Never feels fully cleared", "stool unsatisfactory")],
+    skipIf: /constip|diarrh|loose|stool|kabz|dast|bowel/i },
+  { id: "gen-desire", topic: "general", multi: true, required: true, text: "Any strong cravings or dislikes in food?", why: "Food desires and aversions are important general symptoms.", covers: ["desire"],
+    options: [o("Sweets", "desire sweets"), o("Salty food", "desire salt"), o("Sour things", "desire sour"), o("Spicy food", "desire spicy"), o("Fatty or rich food", "desire fat"), o("Cold drinks", "desire cold drinks"), o("Warm food or drinks", "desire warm"), o("Dislike of milk", "aversion milk"), o(NONE)],
+    skipIf: /crav|desire|aversion|dislike|sweets|salty/i },
+  { id: "gen-sleep", topic: "general", multi: true, required: true, text: "How is your sleep?", why: "Sleep and dreams are general symptoms every case needs.", covers: ["sleep"],
+    options: [o("Sound and refreshing"), o("Cannot fall asleep", "sleeplessness"), o("Wakes during the night", "waking night"), o("Unrefreshing, tired on waking", "sleep unrefreshing"), o("Sleepy in the daytime", "sleepiness day"), o("Vivid or disturbing dreams", "dreams")],
+    skipIf: /sleep|insomnia|neend|dream/i },
+  { id: "gen-sweat", topic: "general", multi: false, required: true, text: "Do you sweat much?", why: "The way a person sweats is a general symptom.", covers: ["sweat"],
+    options: [o("Normal"), o("Profuse sweating", "perspiration profuse"), o("Sweats at night", "perspiration night"), o("Offensive-smelling sweat", "perspiration offensive"), o("Mostly on the head", "perspiration head"), o("Very little or none", "perspiration scanty")],
+    skipIf: /sweat|perspir|paseena/i },
+  { id: "gen-energy", topic: "general", multi: false, text: "How is your energy?", why: "Strength and tiredness show how much the whole body is affected.", covers: ["energy"],
+    options: [o("Normal"), o("Tires easily", "weakness"), o("Weak even after rest", "exhaustion"), o("Restless, cannot sit still", "restlessness"), o("Sluggish and slow", "sluggishness")],
+    skipIf: /tired|fatigue|weak|exhaust|energy|thakan|kamzori/i },
 ];
+
+// What an AI-written question already settles, read from its text (built-in questions list their `covers`).
+const COVER_PATTERNS: Array<[string, RegExp]> = [
+  ["digestion", /digest|appetite|acidity|heartburn|bloat|indigest|hunger/i],
+  ["bowels", /stool|bowel|constipat|loose motion|diarrh/i],
+  ["thirst", /thirst/i],
+  ["temp", /chilly|thermal|hot or cold|cold or hot|warm or cold|cold or warm|body heat|too warm|feel (?:too )?(?:hot|cold)|heat or cold|cold or heat/i],
+  ["sleep", /\bsleep|dream|insomnia|\bwake\b|waking|nightmare/i],
+  ["sweat", /sweat|perspir/i],
+  ["desire", /craving|crave|desire|aversion|dislike|food prefer|favou?rite food|longing/i],
+  ["energy", /energy|tired|fatigue|exhaust|weakness/i],
+];
+export function inferCovers(text: string): string[] {
+  return COVER_PATTERNS.filter(([, re]) => re.test(text)).map(([k]) => k);
+}
 
 // ── Choosing the next question ─────────────────────────────────────
 export interface CaseState {
@@ -262,7 +311,7 @@ export interface CaseState {
   answers: Record<string, string[]>;        // question id -> chosen labels (empty array = skipped)
   custom?: Record<string, CaseQuestion>;    // questions written by the AI during this interview
 }
-export const MAX_QUESTIONS = 16;
+export const MAX_QUESTIONS = 20;
 
 function context(state: CaseState): Ctx {
   const text = state.symptoms.filter((s) => !s.startsWith("🔍")).join(" . ").toLowerCase();
@@ -273,7 +322,12 @@ function context(state: CaseState): Ctx {
   };
 }
 
-export function queueFor(state: CaseState): CaseQuestion[] {
+export interface QueueOpts {
+  /** Only the required general questions that nothing answered so far has settled (used after the AI says it is done). */
+  generalOnly?: boolean;
+}
+
+export function queueFor(state: CaseState, opts: QueueOpts = {}): CaseQuestion[] {
   const ctx = context(state);
   const texts = state.symptoms.filter((s) => !s.startsWith("🔍"));
   const topics = detectTopics(texts, state.category || "");
@@ -287,19 +341,31 @@ export function queueFor(state: CaseState): CaseQuestion[] {
     const limited = topic === "mind" || topics[0] === topic ? bank : bank.slice(0, 3);
     queue.push(...limited);
   };
-  for (const t of topics.slice(0, 3)) take(t);
+  if (!opts.generalOnly) for (const t of topics.slice(0, 3)) take(t);
 
-  // answered or skipped questions stay in the list so the progress count is stable
-  const covered = new Set<string>();
-  for (const q of queue) if ((state.answers[q.id] || []).length > 0) for (const c of q.covers || []) covered.add(c);   // a skipped question settles nothing
-  const general = GENERAL.filter((g) => !g.covers!.some((c) => covered.has(c)));
+  // What each answered question settles (a skipped question settles nothing). AI questions are read from
+  // their text, so a general area the AI already asked about is not asked again.
+  const coveredBy = new Map<string, Set<string>>();
+  for (const [id, labels] of Object.entries(state.answers)) {
+    if (!labels.length) continue;
+    const q = findQuestion(state, id);
+    if (!q) continue;
+    for (const c of [...(q.covers || []), ...(q.topic === "ai" ? inferCovers(q.text) : [])]) {
+      if (!coveredBy.has(c)) coveredBy.set(c, new Set());
+      coveredBy.get(c)!.add(id);
+    }
+  }
+  // settled by a different question (a question never removes itself from the list)
+  const settledByOther = (q: CaseQuestion) =>
+    (q.covers || []).some((c) => [...(coveredBy.get(c) || [])].some((id) => id !== q.id));
+  const general = GENERAL.filter((g) => !settledByOther(g) && (!opts.generalOnly || g.required));
 
   const out: CaseQuestion[] = [];
   const seen = new Set<string>();
   for (const q of [...queue, ...general]) {
     if (seen.has(q.id)) continue;
     seen.add(q.id);
-    if (q.id.startsWith("gen-") && (q.covers || []).some((c) => covered.has(c))) continue;
+    if (q.id.startsWith("gen-") && settledByOther(q)) continue;
     if (!ctx.answered(q.id)) {
       // several emotions named: ask which one leads instead of assuming
       if (q.id === "mind-main" && emotionsFromText(ctx.text).length > 1) { out.push(q); continue; }
@@ -312,9 +378,14 @@ export function queueFor(state: CaseState): CaseQuestion[] {
 }
 
 /** The next unanswered question, or null when the case is complete enough. */
-export function nextQuestion(state: CaseState): CaseQuestion | null {
-  if (Object.keys(state.answers).length >= MAX_QUESTIONS) return null;
-  return queueFor(state).find((q) => !(q.id in state.answers)) || null;
+export function nextQuestion(state: CaseState, opts: QueueOpts = {}): CaseQuestion | null {
+  if (!opts.generalOnly && Object.keys(state.answers).length >= MAX_QUESTIONS) return null;   // the general top-up is short on its own
+  return queueFor(state, opts).find((q) => !(q.id in state.answers)) || null;
+}
+
+/** How many required general questions are still to ask after the AI says it is done. */
+export function generalLeft(state: CaseState): number {
+  return queueFor(state, { generalOnly: true }).filter((q) => !(q.id in state.answers)).length;
 }
 
 /** Rough size of the interview, for the progress bar (answered + still to come, capped). */

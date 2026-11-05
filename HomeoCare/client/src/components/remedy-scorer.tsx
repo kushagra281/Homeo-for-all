@@ -18,25 +18,9 @@ import { detectRedFlags, type RedFlag } from "@shared/redFlags";
 import { elementTags, elementTagLabel } from "@shared/elements";
 import AppHeader from "@/components/app-header";
 import { psychologySummary } from "@/lib/psychology";
-import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
+import { lifestyleFor } from "@/lib/lifestyle";
+import { nextQuestion, plannedCount, generalLeft, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
 import { fetchNextQuestion, fetchExplanation, type AiExplanation } from "@/lib/aiCase";
-
-const AVOID_RECOMMENDATIONS: Record<string, string[]> = {
-  "Mind": ["Coffee and stimulants", "Alcohol", "Overthinking before bed", "Social media overuse", "Skipping meals", "Isolation"],
-  "Head": ["Bright screens in dark rooms", "Skipping meals (hypoglycemia)", "Dehydration", "Strong perfumes", "Loud noise", "Alcohol"],
-  "Fever": ["Cold baths when chilling", "Covering with heavy blankets during heat stage", "Antibiotics without indication", "Fruit juices with preservatives", "Sudden cold exposure"],
-  "Stomach": ["Spicy food", "Fried/oily food", "Late night eating", "Coffee on empty stomach", "Carbonated drinks", "Overeating"],
-  "Respiration": ["Cold drinks", "Ice cream", "Air conditioning direct exposure", "Smoking/passive smoking", "Dairy products (increase mucus)", "Dusty environments"],
-  "Skin": ["Soap with harsh chemicals", "Hot water baths", "Synthetic clothing", "Scratching", "Dairy and sugar (may worsen)", "Cosmetics with parabens"],
-  "Hands, Legs & Back": ["Cold and damp environments", "Sitting in one position too long", "Heavy lifting", "High heels", "Sleeping on very soft mattress", "Overexertion"],
-  "Urinary System": ["Holding urine for long", "Less water intake", "Spicy food", "Alcohol", "Coffee in excess", "Tight clothing"],
-  "Heart": ["Excess salt", "Saturated fats", "Smoking", "Stress without management", "Sedentary lifestyle", "Excess caffeine"],
-};
-
-const DEFAULT_AVOID = [
-  "Coffee and strong tea", "Alcohol", "Strongly scented substances",
-  "Suppressing natural urges", "Irregular sleep schedule", "Processed and junk food",
-];
 
 // ── Safety flag component ─────────────────────────────────────────
 function SafetyFlags({ flags }: { flags: Array<{ level: string; message: string }> }) {
@@ -265,7 +249,8 @@ export default function RemedyScorer({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const activeCategory = initialCategory || category || "";
-  const avoidList = AVOID_RECOMMENDATIONS[activeCategory] || DEFAULT_AVOID;
+  // Do's and don'ts: the AI's list for this case when it wrote one, otherwise the guidance for the kind of complaint
+  const baseLifestyle = useMemo(() => lifestyleFor(symptoms, activeCategory), [symptoms, activeCategory]);
 
   useEffect(() => {
     getHealthProfile()
@@ -335,7 +320,8 @@ export default function RemedyScorer({
   };
 
   const useAi = !aiOff && !aiDone;
-  const currentQ = useAi ? aiQ : nextQuestion(caseState);
+  // After the AI says it is done, the required general questions it did not cover are asked from the built-in bank.
+  const currentQ = useAi ? aiQ : nextQuestion(caseState, { generalOnly: aiDone });
 
   const finishInterview = (answers: Record<string, string[]>) => {
     aiReq.current += 1; setAiLoading(false);             // a late AI reply must not search a second time
@@ -356,7 +342,11 @@ export default function RemedyScorer({
       if (id !== `ai-${aiReq.current}`) return;           // a newer request or a reset replaced this one
       setAiLoading(false);
       if (!r) { setAiOff(true); return; }
-      if (r.done) { setAiDone(true); finishInterview(caseAnswers); return; }
+      if (r.done) {
+        setAiDone(true);
+        if (generalLeft(caseState) === 0) finishInterview(caseAnswers);   // else the general top-up questions come next
+        return;
+      }
       setAiCustom((c) => ({ ...c, [id]: r.question }));
       setAiQ(r.question);
     });
@@ -371,7 +361,7 @@ export default function RemedyScorer({
     setAnswerOrder((prev) => [...prev, currentQ.id]);
     setPicked([]);
     if (useAi) { setAiQ(null); return; }                   // the effect above fetches the next one
-    if (!nextQuestion({ symptoms, category: activeCategory, answers, custom: aiCustom })) finishInterview(answers);
+    if (!nextQuestion({ symptoms, category: activeCategory, answers, custom: aiCustom }, { generalOnly: aiDone })) finishInterview(answers);
   };
 
   const togglePick = (label: string) => {
@@ -389,7 +379,11 @@ export default function RemedyScorer({
     setCaseAnswers(rest);
     setAnswerOrder((prev) => prev.slice(0, -1));
     setPicked(previous || []);
-    if (useAi) { aiReq.current += 1; setAiLoading(false); setAiQ(aiCustom[last] || null); }   // show the earlier AI question again
+    // show the earlier AI question again (also when the general top-up had started: back to the AI's last question)
+    if (useAi || (aiDone && last.startsWith("ai-"))) {
+      aiReq.current += 1; setAiLoading(false); setAiQ(aiCustom[last] || null);
+      if (aiDone) setAiDone(false);
+    }
   };
 
   const handleSkipQuestionnaire = () => finishInterview(caseAnswers);
@@ -565,7 +559,7 @@ export default function RemedyScorer({
       );
     }
     const answeredCount = answerOrder.length;
-    const total = useAi ? 12 : Math.max(plannedCount(caseState), answeredCount + 1);
+    const total = useAi ? 14 : aiDone ? answeredCount + Math.max(generalLeft(caseState), 1) : Math.max(plannedCount(caseState), answeredCount + 1);
     const progress = Math.min(95, (answeredCount / total) * 100);
     const topics = detectTopics(symptoms.filter((x) => !x.startsWith("🔍")), activeCategory);
     return (
@@ -936,23 +930,46 @@ export default function RemedyScorer({
               </div>
             )}
 
-            {/* Avoid section */}
-            <div className="mt-6 border-2 border-red-200 rounded-xl p-5 bg-red-50">
-              <h3 className="text-lg font-bold text-red-700 mb-3 flex items-center gap-2">
-                ⚠️ AVOID
-                <span className="text-sm font-normal text-red-500">
-                  — Things to avoid for {activeCategory || "this condition"}
-                </span>
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {avoidList.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="text-red-500 mt-0.5 shrink-0">✗</span>
-                    <span className="text-sm text-red-700">{item}</span>
+            {/* Do's and Don'ts: written for this case by the AI when it could, else the guidance for the kind of complaint */}
+            {(() => {
+              const ai = aiExplain.data?.lifestyle;
+              const dos = ai && ai.do.length >= 2 ? ai.do : baseLifestyle.lifestyle.do;
+              const donts = ai && ai.avoid.length >= 2 ? ai.avoid : baseLifestyle.lifestyle.avoid;
+              const forWhat = baseLifestyle.topics.map((t) => TOPIC_LABELS[t] || t).join(" and ") || activeCategory || "your complaint";
+              const fromAi = !!ai && ai.do.length >= 2 && ai.avoid.length >= 2;
+              return (
+                <div className="mt-6" data-testid="dos-donts">
+                  <h3 className="text-lg font-bold text-gray-800 mb-1">Do's and Don'ts</h3>
+                  <p className="text-xs text-gray-500 mb-3">
+                    {fromAi ? "Written by AI for your case" : `General guidance for ${forWhat}`}. Everyday habits only, not treatment.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="border-2 border-green-200 rounded-xl p-4 bg-green-50" data-testid="dos-list">
+                      <p className="font-bold text-green-800 mb-2">✓ Do</p>
+                      <div className="space-y-1.5">
+                        {dos.map((item, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-green-600 mt-0.5 shrink-0">✓</span>
+                            <span className="text-sm text-green-900">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="border-2 border-red-200 rounded-xl p-4 bg-red-50" data-testid="donts-list">
+                      <p className="font-bold text-red-700 mb-2">✗ Don't</p>
+                      <div className="space-y-1.5">
+                        {donts.map((item, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-red-500 mt-0.5 shrink-0">✗</span>
+                            <span className="text-sm text-red-800">{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              );
+            })()}
 
             {/* Info safety flag for all results */}
             <div className="mt-4 flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3">

@@ -7,6 +7,7 @@ Supabase. This file describes the code as it is now.
 ```
 client/src/pages/home.tsx          landing page, category + free-text entry
 client/src/components/remedy-scorer.tsx   questionnaire, results, history  (calls POST /api/remedies/score)
+shared/elements.ts                  element tags on result cards: periodic-table row = series, column = stage (names only, no meaning text)
 client/src/components/nav-drawer.tsx      the menu: Home, History, Profile, Privacy, Terms, Sign in/out
 client/src/pages/auth-page.tsx, reset-password.tsx   sign in / sign up / forgot password (Supabase Auth)
 client/src/pages/legal.tsx         /privacy and /terms (set CONTACT_EMAIL there to show a contact line)

@@ -14,6 +14,15 @@ export const supabase = createClient(
 )
 export default supabase
 
+// A reset link signs the person in "for recovery". Note it here, as soon as the client starts,
+// so /reset-password can tell that apart from an ordinary signed-in session.
+let recoveryLink = false
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') recoveryLink = true
+})
+export function hasRecoveryLink() { return recoveryLink }
+export function clearRecoveryLink() { recoveryLink = false }
+
 // ── AUTH ─────────────────────────────────────────────────────
 export async function signUp(email, password, name) {
   const { data, error } = await supabase.auth.signUp({

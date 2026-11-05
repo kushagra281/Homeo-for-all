@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useLocation } from "wouter"
-import { supabase, updatePassword } from "@/lib/supabase"
+import { supabase, updatePassword, hasRecoveryLink, clearRecoveryLink } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -17,15 +17,15 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
+    // Only a verified reset link counts. An ordinary signed-in session must not be able to
+    // change the password here without it.
     let alive = true
-    const { data } = supabase.auth.onAuthStateChange((event: string, session: any) => {
-      if (alive && (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session))) setReady(true)
+    if (hasRecoveryLink()) { setReady(true); return }
+    const { data } = supabase.auth.onAuthStateChange((event: string) => {
+      if (alive && event === "PASSWORD_RECOVERY") setReady(true)
     })
-    // The client reads the link on load; if no session shows up shortly, the link is bad or old.
-    const check = setTimeout(async () => {
-      const { data: s } = await supabase.auth.getSession()
-      if (alive) setReady(prev => prev ?? !!s?.session)
-    }, 1500)
+    // The client reads the link on load; if it never confirms one, the link is bad or old.
+    const check = setTimeout(() => { if (alive) setReady(prev => prev ?? false) }, 2500)
     return () => { alive = false; clearTimeout(check); data?.subscription?.unsubscribe?.() }
   }, [])
 
@@ -37,6 +37,7 @@ export default function ResetPasswordPage() {
     setLoading(true)
     try {
       await updatePassword(password)
+      clearRecoveryLink()
       setDone(true)
       setTimeout(() => setLocation("/"), 1800)
     } catch (err: any) {

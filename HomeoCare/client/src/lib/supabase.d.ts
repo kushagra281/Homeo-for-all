@@ -6,6 +6,8 @@ export function signUp(email: string, password: string, name: string): Promise<a
 export function signIn(email: string, password: string): Promise<any>;
 export function requestPasswordReset(email: string): Promise<void>;
 export function updatePassword(newPassword: string): Promise<void>;
+export function hasRecoveryLink(): boolean;
+export function clearRecoveryLink(): void;
 export function signOut(): Promise<void>;
 export function getCurrentUser(): Promise<any>;
 export function saveSearchHistory(symptoms: string[], results: any[], healthHistory?: string): Promise<{ ok: boolean; reason?: string }>;

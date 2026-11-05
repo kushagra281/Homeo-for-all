@@ -93,7 +93,10 @@ export async function saveSearchHistory(symptoms, results, healthHistory) {
   return { ok: true }
 }
 
-export async function getSearchHistory() {
+export const HISTORY_PAGE = 20
+
+// One page of the person's history, newest first. Pass the number already loaded as `offset`.
+export async function getSearchHistory(offset = 0, limit = HISTORY_PAGE) {
   const user = await getCurrentUser()
   if (!user) return []
   const { data, error } = await supabase
@@ -101,7 +104,7 @@ export async function getSearchHistory() {
     .select('id, symptoms, results, health_history, created_at')
     .eq('patient_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(20)
+    .range(offset, offset + limit - 1)
   if (error) { console.error(error); return [] }
   return data || []
 }

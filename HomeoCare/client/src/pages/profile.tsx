@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
 import { ArrowLeft, User, Save, CheckCircle, Clock } from "lucide-react"
 import AppHeader from "@/components/app-header"
-import { getCurrentUser, getHealthProfile, saveHealthProfile, getSearchHistory, deleteHistoryItem } from "@/lib/supabase"
+import { getCurrentUser, getHealthProfile, saveHealthProfile, getSearchHistory, HISTORY_PAGE, deleteHistoryItem } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -48,10 +48,22 @@ function HistoryTab() {
   const [, setLocation] = useLocation()
   const [history, setHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [more, setMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
-    getSearchHistory().then(h => { setHistory(h || []); setLoading(false) })
+    getSearchHistory().then(h => { setHistory(h || []); setMore((h || []).length === HISTORY_PAGE); setLoading(false) })
   }, [])
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const rows = await getSearchHistory(history.length) || []
+      setHistory(prev => [...prev, ...rows.filter((r: any) => !prev.some(p => p.id === r.id))])
+      setMore(rows.length === HISTORY_PAGE)
+    } catch { /* the button stays so it can be tried again */ }
+    finally { setLoadingMore(false) }
+  }
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -109,12 +121,19 @@ function HistoryTab() {
           <div className="flex items-center gap-1.5 ml-2 shrink-0">
             <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
             <button onClick={e => handleDelete(h.id, e)}
-              className="text-transparent group-hover:text-red-400 hover:!text-red-600 transition p-0.5">
+              aria-label="Delete this entry"
+              className="text-gray-300 hover:text-red-600 transition p-1">
               <Trash2 size={13} />
             </button>
           </div>
         </div>
       ))}
+      {more && (
+        <button data-testid="profile-history-load-more" onClick={loadMore} disabled={loadingMore}
+          className="w-full py-2.5 rounded-xl border border-green-200 text-green-700 text-sm font-medium hover:bg-green-50 transition disabled:opacity-60">
+          {loadingMore ? "Loading..." : "Load more"}
+        </button>
+      )}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import {
   Heart, Calendar, Mail, Edit3, Check, BookOpen,
   Menu, LogIn
 } from "lucide-react"
-import { getCurrentUser, signOut, getSearchHistory, deleteHistoryItem, getHealthProfile, saveHealthProfile } from "@/lib/supabase"
+import { getCurrentUser, signOut, getSearchHistory, HISTORY_PAGE, deleteHistoryItem, getHealthProfile, saveHealthProfile } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import NavDrawer from "@/components/nav-drawer"
 import { Input } from "@/components/ui/input"
@@ -77,6 +77,8 @@ export default function Home() {
   // History state
   const [history, setHistory]               = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyMore, setHistoryMore]       = useState(false)
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
 
   const [reportError, setReportError]   = useState("")
 
@@ -90,9 +92,22 @@ export default function Home() {
 
   const loadHistory = async () => {
     setHistoryLoading(true)
-    try { setHistory(await getSearchHistory() || []) }
-    catch { setHistory([]) }
+    try {
+      const rows = await getSearchHistory() || []
+      setHistory(rows); setHistoryMore(rows.length === HISTORY_PAGE)
+    }
+    catch { setHistory([]); setHistoryMore(false) }
     finally { setHistoryLoading(false) }
+  }
+
+  const loadMoreHistory = async () => {
+    setHistoryLoadingMore(true)
+    try {
+      const rows = await getSearchHistory(history.length) || []
+      setHistory(prev => [...prev, ...rows.filter(r => !prev.some(p => p.id === r.id))])
+      setHistoryMore(rows.length === HISTORY_PAGE)
+    } catch { /* keep what is shown; the button stays so it can be tried again */ }
+    finally { setHistoryLoadingMore(false) }
   }
 
   const handleShowHistory = () => {
@@ -250,7 +265,7 @@ export default function Home() {
         <main className="max-w-2xl mx-auto px-4 py-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
             <Clock size={20} className="text-green-600" /> Consultation History
-            {history.length > 0 && <span className="text-sm text-gray-400 font-normal">({history.length} saved)</span>}
+            {history.length > 0 && <span className="text-sm text-gray-400 font-normal">({history.length}{historyMore ? "+" : ""} saved)</span>}
           </h2>
 
           {historyLoading ? (
@@ -298,7 +313,7 @@ export default function Home() {
                       <button
                         onClick={e => handleDeleteHistory(h.id, e)}
                         className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition"
-                        title="Delete"
+                        title="Delete" aria-label="Delete this entry"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -306,6 +321,12 @@ export default function Home() {
                   </div>
                 </Card>
               ))}
+              {historyMore && (
+                <button data-testid="history-load-more" onClick={loadMoreHistory} disabled={historyLoadingMore}
+                  className="w-full py-3 rounded-xl border border-green-200 bg-white text-green-700 text-sm font-medium hover:bg-green-50 transition disabled:opacity-60">
+                  {historyLoadingMore ? "Loading..." : "Load more"}
+                </button>
+              )}
             </div>
           )}
         </main>

@@ -42,6 +42,18 @@ t("typed words win; the chosen category is used only when nothing typed says mor
   assert.deepEqual(lifestyleTopics(["🔍 acidity"], "Throat"), ["throat"], "search-box markers are not complaints");
 });
 
+t("heart complaints and the Heart category get a heart list, not the general one", () => {
+  for (const s of ["palpitations", "chest pain on climbing stairs", "high blood pressure", "dhadkan tez", "heart disease"]) {
+    assert.equal(lifestyleFor([s]).topics[0], "heart", s);
+  }
+  assert.deepEqual(lifestyleFor(["tiredness"], "Heart").topics, ["heart"]);
+  assert.deepEqual(lifestyleFor(["hair loss"], "Heart").topics[0], "hair", "typed words win over the category");
+  const { lifestyle } = lifestyleFor(["palpitations"]);
+  assert.ok(lifestyle.do.some((x) => /salt/i.test(x)) && lifestyle.avoid.some((x) => /smok/i.test(x)));
+  assert.ok(lifestyle.do.some((x) => /doctor/i.test(x)), "a warning to see a doctor for chest pain");
+  assert.notDeepEqual(lifestyle.do, lifestyleFor(["zzz qqq"]).lifestyle.do);
+});
+
 t("with nothing recognised the general list is shown, with no topic labels", () => {
   const r = lifestyleFor(["zzz qqq"]);
   assert.deepEqual(r.topics, []);
@@ -49,14 +61,15 @@ t("with nothing recognised the general list is shown, with no topic labels", () 
   assert.notDeepEqual(r.lifestyle.do, lifestyleFor(["hair loss"]).lifestyle.do);
 });
 
-t("every list topic is one the case-taking engine can detect from words", () => {
+t("every list topic is recognised from a sample word", () => {
   const sample: Record<string, string> = {
-    hair: "hair loss", mind: "anxiety", head: "headache", fever: "fever", stomach: "acidity", respiration: "cough", throat: "sore throat",
+    hair: "hair loss", heart: "palpitations", mind: "anxiety", head: "headache", fever: "fever", stomach: "acidity", respiration: "cough", throat: "sore throat",
     skin: "itching rash", joints: "joint pain", urinary: "burning urine", sleep: "insomnia", female: "irregular menses",
   };
   assert.deepEqual([...LIFESTYLE_TOPICS].sort(), Object.keys(sample).sort(), "a sample word for every list");
   for (const [topic, word] of Object.entries(sample)) {
-    assert.ok(detectTopics([word]).includes(topic), `${word} -> ${topic}`);
+    if (topic !== "heart") assert.ok(detectTopics([word]).includes(topic), `${word} -> ${topic}`);   // the heart is recognised in lifestyle.ts itself
+    assert.equal(lifestyleFor([word]).topics[0], topic, `${word} -> ${topic}`);
     const { lifestyle } = lifestyleFor([word]);
     assert.ok(lifestyle.do.length >= 4 && lifestyle.avoid.length >= 4, topic);
   }

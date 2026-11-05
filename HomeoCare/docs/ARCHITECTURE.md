@@ -48,12 +48,18 @@ Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
   settled (`queueFor(state, { generalOnly: true })`, `generalLeft`). What the typed words, the built-in answers and the text of
   the AI's own questions already cover (`inferCovers`) is not asked again. This is code, not prompt, so a skipped area cannot
   slip through.
+- Budget: `MAX_QUESTIONS` (20) is room for the whole interview, not only for topic questions. The required general
+  questions still open are reserved a place in it (`nextQuestion`), they come before the optional general ones, and the AI
+  stops asking once `answers + generalLeft >= MAX_QUESTIONS`. A long mind-led case therefore ends with all required areas
+  covered and still within 20 questions.
 
 ## Do's and Don'ts (results page)
 `client/src/lib/lifestyle.ts` holds everyday guidance per topic (hair, stomach, head, skin, ...), chosen from the typed
-complaint (two topics at most are merged; nothing recognised gives a general list). When the AI explanation arrives it may
-carry its own `lifestyle` lists written for the case; `cleanLifestyle` drops anything that names a medicine, a dose, a cure,
-a diagnosis or a ranked remedy, and the page uses the AI list per side only when at least two items survive. It is habits only,
+complaint (two topics at most are merged; nothing recognised gives a general list). The heart is recognised in that file
+(palpitations, chest pain, blood pressure, or the Heart category), because the interview itself has no heart topic. When the AI explanation arrives it may
+carry its own `lifestyle` lists written for the case; `cleanLifestyle` drops anything that names a medicine, supplement, herb, cream,
+dose, cure, diagnosis or a ranked remedy, and keeps a "do" item only if it starts with a habit verb (Eat, Walk, Keep ...). It is a
+filter, not a guarantee. The page uses the AI list per side only when at least two items survive. It is habits only,
 never treatment, and the box says which of the two it is showing.
 
 ## Data

@@ -227,7 +227,11 @@ t("a skipped AI question settles nothing, and the top-up works past the normal q
   const many: Record<string, string[]> = {};
   for (let i = 0; i < MAX_QUESTIONS + 2; i++) many[`ai-${i}`] = ["Yes"];
   assert.ok(nextQuestion({ symptoms: ["x"], answers: many }, { generalOnly: true }), "the cap does not hide the required questions");
-  assert.equal(nextQuestion({ symptoms: ["x"], answers: many }), null, "the full interview still stops at the cap");
+  const q = nextQuestion({ symptoms: ["x"], answers: many });
+  assert.ok(q && q.required, "past the cap only a required general question can still come");
+  const allRequired: Record<string, string[]> = { ...many };
+  for (const id of ["gen-temp", "gen-thirst", "gen-digestion", "gen-bowels", "gen-desire", "gen-sleep", "gen-sweat"]) allRequired[id] = ["Normal"];
+  assert.equal(nextQuestion({ symptoms: ["x"], answers: allRequired }), null, "the full interview stops at the cap once the required ones are done");
 });
 
 t("what a question text settles is read correctly", () => {
@@ -241,4 +245,32 @@ t("what a question text settles is read correctly", () => {
 t("the typed words settle the general questions too", () => {
   const ids = queueFor({ symptoms: ["hair loss", "constipation and acidity", "poor sleep"], answers: {} }).map((q) => q.id);
   assert.ok(!ids.includes("gen-digestion") && !ids.includes("gen-sleep") && !ids.includes("gen-bowels"));
+});
+
+t("a long mind-led case still reaches every required general question, inside the cap", () => {
+  for (const symptoms of [["anxiety and fear"], ["anxiety", "anger", "sadness"], ["hair loss"], ["acidity"], ["headache"]]) {
+    const state: CaseState = { symptoms, answers: {} };
+    const asked: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      const q = nextQuestion(state);
+      if (!q) break;
+      asked.push(q.id);
+      state.answers[q.id] = [q.options[0].label];
+    }
+    assert.ok(asked.length <= MAX_QUESTIONS, `${symptoms.join("+")}: ${asked.length} questions is within the cap`);
+    // every required area is settled: asked, or already answered by a topic question or the typed words
+    assert.equal(generalLeft(state), 0, `${symptoms.join("+")}: required general questions still open`);
+  }
+});
+
+t("required general questions come before the optional ones, and optional ones are the first to go", () => {
+  const ids = queueFor({ symptoms: ["x"], answers: {} }).map((q) => q.id);
+  const lastRequired = Math.max(...ids.map((id, i) => (id.startsWith("gen-") && ["gen-temp", "gen-thirst", "gen-digestion", "gen-bowels", "gen-desire", "gen-sleep", "gen-sweat"].includes(id) ? i : -1)));
+  const firstOptional = Math.min(...ids.map((id, i) => (["gen-time", "gen-motion", "gen-air", "gen-energy"].includes(id) ? i : 999)));
+  assert.ok(lastRequired < firstOptional);
+  // nearly at the cap: a topic question gives way to a required one
+  const many: Record<string, string[]> = {};
+  for (let i = 0; i < MAX_QUESTIONS - 7; i++) many[`ai-${i}`] = ["Yes"];
+  const q = nextQuestion({ symptoms: ["anxiety"], answers: many });
+  assert.ok(q && q.required, "13 answered and 7 required still open: the next one is a required one");
 });

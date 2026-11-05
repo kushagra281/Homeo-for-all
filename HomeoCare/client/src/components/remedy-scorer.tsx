@@ -19,7 +19,7 @@ import { elementTags, elementTagLabel } from "@shared/elements";
 import AppHeader from "@/components/app-header";
 import { psychologySummary } from "@/lib/psychology";
 import { lifestyleFor } from "@/lib/lifestyle";
-import { nextQuestion, plannedCount, generalLeft, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
+import { nextQuestion, plannedCount, generalLeft, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, MAX_QUESTIONS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
 import { fetchNextQuestion, fetchExplanation, type AiExplanation } from "@/lib/aiCase";
 
 // ── Safety flag component ─────────────────────────────────────────
@@ -336,6 +336,12 @@ export default function RemedyScorer({
     const real = symptoms.filter((x) => !x.startsWith("🔍"));
     const sent = real.length ? real : activeCategory ? [`${activeCategory} complaint`] : [];
     if (!sent.length) { setAiOff(true); return; }
+    // the AI gets the same budget as the built-in bank: leave room for the required general questions still open
+    if (answerOrder.length + generalLeft(caseState) >= MAX_QUESTIONS) {
+      setAiDone(true);
+      if (generalLeft(caseState) === 0) finishInterview(caseAnswers);
+      return;
+    }
     const id = `ai-${++aiReq.current}`;
     setAiLoading(true);
     fetchNextQuestion(sent, answerLines(caseState, true), id).then((r) => {

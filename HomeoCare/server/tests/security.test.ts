@@ -18,8 +18,8 @@ const server = app.listen(0, async () => {
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   try {
     // 1. no token -> 401, for every profile route, even when a userId is supplied
-    for (const [method, path] of [["GET", "/api/profile/me"], ["POST", "/api/profile/save"], ["GET", "/api/profile/history"]] as const) {
-      const r = await fetch(base + path, { method, headers: { "Content-Type": "application/json" }, body: method === "POST" ? JSON.stringify({ userId: "someone-else", profile: { name: "x" } }) : undefined });
+    for (const [method, path] of [["GET", "/api/profile/me"], ["POST", "/api/profile/save"], ["GET", "/api/profile/history"], ["GET", "/api/profile/avatar"], ["PUT", "/api/profile/avatar"], ["DELETE", "/api/profile/avatar"]] as const) {
+      const r = await fetch(base + path, { method, headers: { "Content-Type": "application/json" }, body: method === "POST" || method === "PUT" ? JSON.stringify({ userId: "someone-else", profile: { name: "x" }, image: "data:image/jpeg;base64,AAAA" }) : undefined });
       assert.equal(r.status, 401, `${method} ${path} must need a token`);
     }
     console.log("ok   profile routes reject requests without a token (a userId in the body is not enough)");

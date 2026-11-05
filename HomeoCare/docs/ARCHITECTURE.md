@@ -62,6 +62,14 @@ dose, cure, diagnosis or a ranked remedy, and keeps a "do" item only if it start
 filter, not a guarantee. The page uses the AI list per side only when at least two items survive. It is habits only,
 never treatment, and the box says which of the two it is showing.
 
+## Profile photo
+`patients.avatar_url` (SQL in `docs/sql/2026-11-profile-photo.sql`) holds a small data URL, private to the user's row. The browser
+shrinks the chosen picture to a 256 px square JPEG (`client/src/lib/avatar.ts`); `PUT/GET/DELETE /api/profile/avatar` store it for the
+signed-in user only. The server re-checks it (`shared/avatar.ts`: JPEG, PNG or WebP by content, at most 80,000 characters, so SVG
+and anything else is refused). `GET /api/profile/me` leaves the photo out to stay light. If the column does not exist yet the save
+answers 503 `avatar_column_missing` (the page says storage is not set up) and the header just shows the person's initial. The photo
+is shown beside Translate in every header (`components/user-avatar.tsx`) and changed on the Profile page.
+
 ## Data
 Supabase projects (in production the users, history and the scraped data are in the same one,
 `rtfjnfepikhahzospnqq`; `zlsinlcskirptxgqkzuw` is empty and unused):
@@ -90,4 +98,4 @@ labelled as general guidance, not a prescription, and is the same for every reme
 
 ## Tests
 `npm test` - keyword extraction, the search pipeline (against a fake database), security
-(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, and the Do's and Don'ts lists. `npm run check` - TypeScript.
+(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, the Do's and Don'ts lists, and the profile photo checks. `npm run check` - TypeScript.

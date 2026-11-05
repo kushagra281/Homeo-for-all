@@ -1,4 +1,5 @@
 import LanguageMenu from "@/components/language-menu"
+import HeaderAvatar from "@/components/user-avatar"
 import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
 import {
@@ -211,6 +212,7 @@ export default function Home() {
         ) : (
           <div className="flex items-center gap-1.5">
             <LanguageMenu />
+            <HeaderAvatar user={user} />
             {!user && (
               <button onClick={() => setLocation("/auth")} data-testid="sign-in"
                 className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition">

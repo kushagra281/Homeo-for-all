@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocation } from "wouter"
-import { ArrowLeft, User, Save, CheckCircle, Clock } from "lucide-react"
+import { ArrowLeft, User, Save, CheckCircle, Clock, Camera } from "lucide-react"
 import AppHeader from "@/components/app-header"
 import { getCurrentUser, getHealthProfile, saveHealthProfile, getSearchHistory, HISTORY_PAGE, deleteHistoryItem } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -8,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Trash2, ChevronRight, Download } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { UserAvatar } from "@/components/user-avatar"
+import { fetchAvatar, saveAvatar, removeAvatar, shrinkPhoto } from "@/lib/avatar"
 
 // ── Pill selector component ──────────────────────────────────
 function PillGroup({ options, value, onChange }: {
@@ -167,6 +170,12 @@ export default function ProfilePage() {
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
   const [error, setError]     = useState("")
+  const [authUser, setAuthUser] = useState<any>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const queryClient = useQueryClient()
+  const photoKey = ["profile-avatar", authUser?.id]
+  const { data: photo } = useQuery({ queryKey: photoKey, queryFn: fetchAvatar, enabled: !!authUser?.id, staleTime: 10 * 60_000 })
 
   const [form, setForm] = useState({
     name: "", age: "", height_cm: "", weight_kg: "", gender: "",
@@ -181,6 +190,7 @@ export default function ProfilePage() {
     const load = async () => {
       const user = await getCurrentUser()
       if (!user) { setLocation("/auth"); return }
+      setAuthUser(user)
       let profile: any = null
       try { profile = await getHealthProfile() }
       catch { setError("Your saved profile could not be loaded. Please refresh the page.") }
@@ -219,6 +229,33 @@ export default function ProfilePage() {
 
   const set = (field: string, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }))
+
+  // A chosen picture is shrunk to a 256 px square here, then saved on its own (it does not wait for the Save button).
+  const choosePhoto = async (file?: File) => {
+    if (!file) return
+    setPhotoBusy(true)
+    try {
+      const image = await shrinkPhoto(file)
+      await saveAvatar(image)
+      queryClient.setQueryData(photoKey, image)
+      toast({ title: "Photo saved" })
+    } catch (err: any) {
+      toast({ title: "Photo not saved", description: err.message, variant: "destructive" })
+    } finally {
+      setPhotoBusy(false)
+      if (fileRef.current) fileRef.current.value = ""
+    }
+  }
+  const deletePhoto = async () => {
+    setPhotoBusy(true)
+    try {
+      await removeAvatar()
+      queryClient.setQueryData(photoKey, null)
+      toast({ title: "Photo removed" })
+    } catch (err: any) {
+      toast({ title: "Photo not removed", description: err.message, variant: "destructive" })
+    } finally { setPhotoBusy(false) }
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -268,6 +305,31 @@ export default function ProfilePage() {
           <Card className="p-4"><HistoryTab /></Card>
         ) : (
           <form onSubmit={handleSave} className="space-y-4">
+
+            {/* Profile photo */}
+            <Card className="p-5" data-testid="photo-card">
+              <div className="flex items-center gap-4">
+                <UserAvatar src={photo} label={form.name || authUser?.user_metadata?.name || authUser?.email} size={80} />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Profile photo</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" disabled={photoBusy} data-testid="photo-change"
+                      onClick={() => fileRef.current?.click()}>
+                      <Camera size={14} className="mr-1.5" /> {photo ? "Change photo" : "Add photo"}
+                    </Button>
+                    {photo && (
+                      <Button type="button" size="sm" variant="ghost" disabled={photoBusy} data-testid="photo-remove"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={deletePhoto}>
+                        <Trash2 size={14} className="mr-1.5" /> Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">{photoBusy ? "Saving photo..." : "Only you can see it. It is kept small (256 px)."}</p>
+                </div>
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" data-testid="photo-input"
+                onChange={e => choosePhoto(e.target.files?.[0])} />
+            </Card>
 
             {/* Basic Info */}
             <Card className="p-5">

@@ -43,7 +43,9 @@ Supabase projects (in production the users, history and the scraped data are in 
 Environment variables: see `.env.example`. `/api/health` shows which ones are set.
 
 ## What the data does not contain (and the app therefore does not show)
-Potency, dose, age/gender suitability. Those fields are empty rather than invented.
+Potency, dose, age/gender suitability are not in the data. The result card shows a general, case-based potency
+suggestion (`shared/potency.ts`: acute, chronic, child, older adult; none when warning signs are present). It is
+labelled as general guidance, not a prescription, and is the same for every remedy of one result.
 
 ## Tests
 `npm test` - keyword extraction, the search pipeline (against a fake database), security

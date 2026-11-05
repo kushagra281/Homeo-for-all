@@ -1,25 +1,20 @@
-
-import React from 'react';
-import { CommunityChat } from '../components/community-chat';
+import AppHeader from "@/components/app-header"
+import { CommunityChat } from "../components/community-chat"
 
 export default function Community() {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold mb-4">Community Chat</h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Connect with fellow homeopathy enthusiasts, share experiences, and learn from each other's journey to wellness.
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
+      <AppHeader />
+      <main className="max-w-4xl mx-auto px-4 py-6">
+        <div className="mb-5 text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Community Chat</h1>
+          <p className="text-sm text-gray-500 mt-1">Share experiences with other homeopathy learners.</p>
+        </div>
+        <CommunityChat />
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Please be respectful. Discussions here are for information only; consult a qualified homeopath for medical advice.
         </p>
-      </div>
-      
-      <CommunityChat />
-      
-      <div className="mt-8 text-center text-sm text-muted-foreground">
-        <p>
-          Please be respectful and remember that discussions here are for informational purposes only.
-          Always consult with healthcare professionals for medical advice.
-        </p>
-      </div>
+      </main>
     </div>
-  );
+  )
 }

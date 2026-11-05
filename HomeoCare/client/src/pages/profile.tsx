@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { useLocation } from "wouter"
 import { ArrowLeft, User, Save, CheckCircle, Clock } from "lucide-react"
+import AppHeader from "@/components/app-header"
 import { getCurrentUser, getHealthProfile, saveHealthProfile, getSearchHistory, deleteHistoryItem } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -201,18 +202,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-      <header className="bg-white border-b shadow-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={() => setLocation("/")} className="flex items-center gap-2 hover:opacity-80">
-            <span className="text-2xl leading-none">🌿</span>
-            <span className="font-bold text-green-700 text-lg">HomeoWell</span>
-          </button>
-          <button onClick={() => setLocation("/")}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100">
-            <ArrowLeft size={15} /> Back
-          </button>
-        </div>
-      </header>
+      <AppHeader width="max-w-2xl" />
 
       <main className="max-w-2xl mx-auto px-4 py-6">
 

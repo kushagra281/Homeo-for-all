@@ -7,6 +7,7 @@ import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Plus, Search, Tr
 import { apiRequest } from "@/lib/queryClient"
 import { supabase, getCurrentUser } from "@/lib/supabase"
 import { makeCaseStore, parseState, type CaseRow, type VisitRow } from "@/lib/repertoryCasesCore"
+import AppHeader from "@/components/app-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -173,17 +174,7 @@ export default function RepertoryPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BookOpen className="text-green-700" size={20} />
-            <span className="font-bold text-green-700 text-lg">Repertory</span>
-          </div>
-          <button onClick={() => setLocation("/")}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100">
-            <ArrowLeft size={15} /> Back
-          </button>
-        </div>
+      <AppHeader width="max-w-5xl">
         <div className="max-w-5xl mx-auto px-4 flex gap-1">
           {(["browse", "remedy", "case"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} data-testid={`tab-${t}`}
@@ -193,7 +184,7 @@ export default function RepertoryPage() {
             </button>
           ))}
         </div>
-      </header>
+      </AppHeader>
 
       <main className="max-w-5xl mx-auto px-4 py-5 space-y-4">
         {unavailable && !chapters.isLoading && (

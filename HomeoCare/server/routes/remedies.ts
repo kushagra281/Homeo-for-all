@@ -229,38 +229,4 @@ Return ONLY JSON (no markdown):
   }
 });
 
-// ── GET /api/remedies ─────────────────────────────────────────────
-router.get("/", async (req, res) => {
-  try {
-    const { storage } = await import("../storage");
-    res.json(await storage.getAllRemedies());
-  } catch (error) {
-    res.status(500).json({ message: "Failed to fetch remedies" });
-  }
-});
-
-// ── GET /api/remedies/search/:keyword ────────────────────────────
-router.get("/search/:keyword", async (req, res) => {
-  try {
-    const { storage } = await import("../storage");
-    const remedies = await storage.searchRemediesByKeyword(
-      req.params.keyword,
-      req.query.category as string
-    );
-    res.json(remedies);
-  } catch (error) {
-    res.status(500).json({ message: "Failed to search" });
-  }
-});
-
-// ── GET /api/remedies/:category ──────────────────────────────────
-router.get("/:category", async (req, res) => {
-  try {
-    const { storage } = await import("../storage");
-    res.json(await storage.getRemediesByCategory(req.params.category.toUpperCase()));
-  } catch (error) {
-    res.status(500).json({ message: "Failed to fetch remedies" });
-  }
-});
-
 export default router;

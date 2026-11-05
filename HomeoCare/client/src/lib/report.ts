@@ -34,9 +34,10 @@ export function buildReport(input: ReportInput): jsPDF {
   const heading = (s: string) => { y += 6; need(30); text(s, 12, true, [22, 101, 52]); doc.setDrawColor(200).line(M, y - 8, W - M, y - 8); y += 8; };
 
   const p = input.profile;
-  // A name written only in a non-Latin script (e.g. Devanagari) cannot be drawn by the built-in font and
-  // would print as "????", so in that case the line is left out (the file name still carries the name).
-  const patientName = /[A-Za-z0-9]/.test(latin(p?.name)) ? latin(p?.name) : "";
+  // The built-in font cannot draw letters of other scripts (e.g. Devanagari); they would print as "????".
+  // So only the Latin part of the name is printed ("आयुष K" -> "K"), and nothing if none is left.
+  // The file name still carries the whole name.
+  const patientName = String(p?.name ?? "").replace(/[^\x20-\x7E -ÿ]/g, "").replace(/\s+/g, " ").trim();
 
   text("HomeoCare - Case Report", 18, true, [22, 101, 52]);
   if (patientName) text(`Patient: ${patientName}`, 13, true);

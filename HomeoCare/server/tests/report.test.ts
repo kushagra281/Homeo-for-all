@@ -43,6 +43,12 @@ t("a name only in Devanagari is left out instead of printing question marks", ()
   assert.ok(!txt.includes("????"));
 });
 
+t("a mixed-script name prints only its Latin part, never question marks", () => {
+  const txt = pdfText(buildReport({ ...base, symptoms: ["headache"], answers: [], analysis: null, profile: { name: "आयुष Kumar", age: 30 } }));
+  assert.ok(txt.includes("Patient: Kumar"));
+  assert.ok(!txt.includes("?"));   // answers and analysis left out: the sample question texts themselves contain a "?"
+});
+
 t("a report with no name has no Patient line", () => {
   assert.ok(!pdfText(buildReport({ ...base, profile: { age: 30 } })).includes("Patient: "));
 });

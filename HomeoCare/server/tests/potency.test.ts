@@ -24,6 +24,7 @@ t("children and older adults start lower and are sent to a homeopath", () => {
   const o = suggestPotency({ symptoms: ["fever"], age: 75 }); assert.equal(o.basis, "senior"); assert.equal(o.potency, "6C or 30C");
 });
 t("a baby gets no number at all", () => {
+  const z = suggestPotency({ symptoms: ["colic"], age: 0 }); assert.equal(z.basis, "infant"); assert.equal(z.potency, "");
   const s = suggestPotency({ symptoms: ["colic"], age: 1 }); assert.equal(s.basis, "infant"); assert.equal(s.potency, ""); assert.match(s.caution, /paediatrician/);
 });
 t("warning signs: no potency, see a doctor first (even for an adult)", () => {

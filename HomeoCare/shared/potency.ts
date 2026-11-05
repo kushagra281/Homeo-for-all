@@ -27,7 +27,7 @@ const CHRONIC = /\b(\d+|several|few|many)\s*(months?|years?|yrs?)\b|\bchronic\b|
 
 function ageOf(a: unknown): number | null {
   const n = typeof a === "number" ? a : typeof a === "string" && a.trim() !== "" ? Number(a) : NaN;
-  return Number.isFinite(n) && n > 0 && n < 120 ? n : null;
+  return Number.isFinite(n) && n >= 0 && n < 120 ? n : null;
 }
 
 const STOP = "Stop as soon as the symptoms clearly improve. If nothing changes in 2-3 days, or it gets worse, stop and consult a qualified homeopath.";

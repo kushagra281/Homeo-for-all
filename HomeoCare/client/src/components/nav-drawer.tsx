@@ -1,5 +1,5 @@
 import { useLocation } from "wouter"
-import { BookOpen, Clock, FolderOpen, Gauge, Home as HomeIcon, Library, LogIn, LogOut, Pill, User, Users } from "lucide-react"
+import { BookOpen, Clock, FolderOpen, Home as HomeIcon, Library, LogIn, LogOut, Pill, User, Users } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { signOut } from "@/lib/supabase"
 
@@ -24,7 +24,6 @@ export default function NavDrawer({ open, onOpenChange, user, onHome, onHistory 
     { label: "History",          icon: Clock,      testId: "menu-history",    run: onHistory || (() => setLocation("/?view=history")), needsUser: true },
     { label: "Profile",          icon: User,       testId: "menu-profile",    run: () => setLocation("/profile"), needsUser: true },
     { label: "Dictionary",       icon: Library,    testId: "menu-dictionary", run: () => setLocation("/dictionary") },
-    { label: "Potency guide",    icon: Gauge,      testId: "menu-potency",    run: () => setLocation("/potency-guide") },
     { label: "Community",        icon: Users,      testId: "menu-community",  run: () => setLocation("/community") },
   ]
   const logout = async () => { await signOut(); setLocation("/auth") }

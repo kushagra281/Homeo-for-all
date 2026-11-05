@@ -7,6 +7,7 @@ import { search } from "../services/searchService";
 import { groq, hasGroqKey } from "../utils/groq";
 import { rateLimit } from "../utils/rateLimit";
 import { detectRedFlags } from "../../shared/redFlags";
+import { suggestPotency, potencyLine } from "../../shared/potency";
 import { splitMatches } from "../services/scoringService";
 import {
   buildExplainMessages, buildQuestionMessages, parseExplanation, parseNextQuestion,
@@ -124,6 +125,11 @@ router.post("/score", searchLimit, async (req, res) => {
       ...[...result.remedies, ...result.alternatives].map((r) => ({ r, keynoteOnly: false })),
       ...(result.keynote_extra || []).map((r) => ({ r, keynoteOnly: true })),
     ];
+    // One suggestion per case (it depends on the case, not on the remedy).
+    const potency = suggestPotency({
+      symptoms, history: healthHistory, age: healthProfile?.age, redFlags: redFlags.length > 0,
+      heartOrKidney: !!(healthProfile && ((healthProfile.heart_disease && healthProfile.heart_disease !== "None") || (healthProfile.kidney && healthProfile.kidney !== "None"))),
+    });
     const flat = ranked.map(({ r, keynoteOnly }) => {
       const split = splitMatches(r.covered_rubrics || []);
       return {
@@ -133,7 +139,7 @@ router.post("/score", searchLimit, async (req, res) => {
           category:      r.category,
           condition:     r.matching_symptoms.slice(0, 2).join("; "),
           description:   r.why_explanation,
-          dosage:        r.dosage,
+          dosage:        potencyLine(potency),
           symptoms:      r.matching_symptoms,
           // The scraped database has no potency / age / gender data, so these are
           // left empty (= "not specified") instead of inventing values.
@@ -158,6 +164,7 @@ router.post("/score", searchLimit, async (req, res) => {
         contradictions:    result.contradictions,
         rubrics_used:      result.rubrics_used,
         red_flags:         redFlags,
+        potency_suggestion: potency,
         mental_matches:    split.mental,
         physical_matches:  split.physical,
         keynote_matched:   split.keynote,

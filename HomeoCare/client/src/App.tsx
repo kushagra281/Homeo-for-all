@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 const SymptomAnalysis = lazy(() => import("@/pages/symptom-analysis"));
-const PotencyGuidePage = lazy(() => import("@/pages/potency-guide-page"));
 const AuthPage = lazy(() => import("@/pages/auth-page"));
 import NotFound from "@/pages/not-found";
 const ProfilePage = lazy(() => import("@/pages/profile"));
@@ -24,7 +23,6 @@ function Router() {
       <Route path="/community" component={Community} />
       <Route path="/repertory" component={RepertoryPage} />
       <Route path="/symptom-analysis" component={SymptomAnalysis} />
-      <Route path="/potency-guide" component={PotencyGuidePage} />
       <Route component={NotFound} />
     </Switch>
     </Suspense>

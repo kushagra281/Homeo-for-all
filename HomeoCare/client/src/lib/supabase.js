@@ -104,6 +104,7 @@ export async function getSearchHistory(offset = 0, limit = HISTORY_PAGE) {
     .select('id, symptoms, results, health_history, created_at')
     .eq('patient_id', user.id)
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })   // tie-breaker: rows with the same time keep a fixed place between pages
     .range(offset, offset + limit - 1)
   if (error) { console.error(error); return [] }
   return data || []

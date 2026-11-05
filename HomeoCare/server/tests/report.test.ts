@@ -28,3 +28,47 @@ t("an empty optional part is simply left out", () => {
   const doc = buildReport({ ...base, profile: null, analysis: null, redFlags: [], answers: [] });
   assert.ok(doc.getNumberOfPages() >= 1);
 });
+
+// ── patient name and file name ──────────────────────────────────────
+import { reportFileName, historySymptoms } from "../../shared/reportFile";
+const pdfText = (doc: ReturnType<typeof buildReport>) => (doc as any).internal.pages.flat().join("\n");
+
+t("the patient's name is printed on the report", () => {
+  assert.ok(pdfText(buildReport({ ...base, profile: { name: "Ayush Saxena", age: 30 } })).includes("Patient: Ayush Saxena"));
+});
+
+t("a name only in Devanagari is left out instead of printing question marks", () => {
+  const txt = pdfText(buildReport({ ...base, symptoms: ["headache"], profile: { name: "आयुष सक्सेना", age: 30 } }));
+  assert.ok(!txt.includes("Patient: "));
+  assert.ok(!txt.includes("????"));
+});
+
+t("a report with no name has no Patient line", () => {
+  assert.ok(!pdfText(buildReport({ ...base, profile: { age: 30 } })).includes("Patient: "));
+});
+
+t("a saved consultation can be reported without scores or answers", () => {
+  const doc = buildReport({ ...base, answers: [], redFlags: [], analysis: null, consultedOn: "05/11/2026", healthNote: "Diabetic",
+    results: [{ name: "Belladonna", score: null, matches: ["headache"], better: [], worse: [], warnings: [] }] });
+  const txt = pdfText(doc);
+  assert.ok(txt.includes("Consultation on 05/11/2026") && txt.includes("Diabetic") && txt.includes("Belladonna"));
+  assert.ok(!txt.includes("null"));
+});
+
+t("file name is homeocare-report-<date> <name>.pdf", () => {
+  const d = new Date(2026, 10, 5, 23, 59);   // 5 Nov 2026, late evening local time
+  assert.equal(reportFileName("Ayush Saxena", d), "homeocare-report-2026-11-05 Ayush Saxena.pdf");
+  assert.equal(reportFileName("", d), "homeocare-report-2026-11-05.pdf");
+  assert.equal(reportFileName(null, d), "homeocare-report-2026-11-05.pdf");
+  assert.equal(reportFileName("  A/B:C*?  ", d), "homeocare-report-2026-11-05 A B C.pdf");
+  assert.equal(reportFileName("आयुष", d), "homeocare-report-2026-11-05 आयुष.pdf");
+  assert.ok(reportFileName("x".repeat(200), d).length < 100);
+});
+
+t("history bookkeeping entries are not listed as complaints", () => {
+  assert.deepEqual(
+    historySymptoms(["headache", "category:Head", "health history: diabetes", "age 34", "gender: male", "agitation", "🔍 q"]),
+    ["headache", "agitation", "🔍 q"],
+  );
+  assert.deepEqual(historySymptoms(null), []);
+});

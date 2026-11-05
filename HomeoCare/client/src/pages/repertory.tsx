@@ -133,7 +133,10 @@ function TreeNode({ node, caseIds, onToggle, depth = 0 }: { node: Node; caseIds:
 // ── The page ──────────────────────────────────────────────────────
 export default function RepertoryPage() {
   const [, setLocation] = useLocation()
-  const [tab, setTab] = useState<"browse" | "remedy" | "case">("browse")
+  const [tab, setTab] = useState<"browse" | "remedy" | "case">(() => {
+    const t = new URLSearchParams(window.location.search).get("tab")
+    return t === "remedy" || t === "case" ? t : "browse"
+  })
   const [saved, setSaved] = useState<SavedCase>(loadCase)
   const [current, setCurrent] = useState<{ id: string; title: string } | null>(null)   // the saved case being worked on
   const [chapter, setChapter] = useState<Node | null>(null)

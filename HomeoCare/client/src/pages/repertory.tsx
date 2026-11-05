@@ -5,6 +5,8 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { useLocation } from "wouter"
 import { ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Plus, Search, Trash2, X } from "lucide-react"
 import { apiRequest } from "@/lib/queryClient"
+import { supabase, getCurrentUser } from "@/lib/supabase"
+import { makeCaseStore, parseState, type CaseRow, type VisitRow } from "@/lib/repertoryCasesCore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -27,6 +29,7 @@ type Method = "grades" | "presence" | "emphasis"
 type SortBy = "total" | "coverage"
 
 const MAX_RUBRICS = 30
+const caseStore = makeCaseStore(supabase, getCurrentUser)
 const STORE = "homeowell:repertory-case:v1"
 
 interface SavedCase { ids: number[]; weights: Record<number, number>; exclude: string[]; method: Method; minGrade: number; coverAll: boolean; coverTheme: Theme | ""; sortBy: SortBy }
@@ -129,6 +132,7 @@ export default function RepertoryPage() {
   const [, setLocation] = useLocation()
   const [tab, setTab] = useState<"browse" | "remedy" | "case">("browse")
   const [saved, setSaved] = useState<SavedCase>(loadCase)
+  const [current, setCurrent] = useState<{ id: string; title: string } | null>(null)   // the saved case being worked on
   const [chapter, setChapter] = useState<Node | null>(null)
   const [text, setText] = useState("")
   const q = useDebounced(text.trim())
@@ -257,6 +261,11 @@ export default function RepertoryPage() {
         {tab === "case" && !unavailable && (
           <CaseView saved={saved} patch={patch} grid={grid} toggleId={id => patch({ ids: saved.ids.filter(i => i !== id) })}
             onBrowse={() => setTab("browse")} />
+        )}
+        {tab === "case" && !unavailable && (
+          <CaseVault saved={saved} current={current} setCurrent={setCurrent}
+            onOpen={(row) => { setSaved(parseState(row.state, EMPTY)); setCurrent({ id: row.id, title: row.title }) }}
+            onRestore={(state) => setSaved(parseState(state, EMPTY))} onSignIn={() => setLocation("/auth")} />
         )}
 
         <footer className="text-xs text-gray-400 space-y-1 pt-2">
@@ -621,5 +630,120 @@ function RemedyTab({ caseIds, onToggle, full }: { caseIds: number[]; onToggle: (
       )}
       {full && <Notice>A case holds at most {MAX_RUBRICS} rubrics. Remove one to add another.</Notice>}
     </>
+  )
+}
+
+// ── Saved cases and follow-up visits (needs a signed-in user) ─────
+const dateOf = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+
+function CaseVault({ saved, current, setCurrent, onOpen, onRestore, onSignIn }: {
+  saved: SavedCase; current: { id: string; title: string } | null; setCurrent: (c: { id: string; title: string } | null) => void
+  onOpen: (row: CaseRow) => void; onRestore: (state: unknown) => void; onSignIn: () => void
+}) {
+  const [rows, setRows] = useState<CaseRow[] | null>(null)
+  const [visits, setVisits] = useState<VisitRow[]>([])
+  const [status, setStatus] = useState<"loading" | "ok" | "signed-out" | "not-set-up">("loading")
+  const [msg, setMsg] = useState("")
+  const [title, setTitle] = useState(current?.title || "")
+  const [note, setNote] = useState("")
+  const [confirm, setConfirm] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = async () => {
+    const r = await caseStore.list()
+    if (r.ok) { setRows(r.data); setStatus("ok") } else setStatus(r.reason === "error" ? "ok" : r.reason)
+    if (!r.ok && r.reason === "error") setMsg(r.message)
+  }
+  useEffect(() => { refresh() }, [])
+  useEffect(() => { setTitle(current?.title || "") }, [current?.id])
+  useEffect(() => {
+    if (!current) { setVisits([]); return }
+    caseStore.visits(current.id).then(r => setVisits(r.ok ? r.data : []))
+  }, [current?.id])
+
+  const run = async (fn: () => Promise<void>) => { setBusy(true); setMsg(""); try { await fn() } finally { setBusy(false) } }
+
+  const save = (asNew: boolean) => run(async () => {
+    const r = await caseStore.save(title, saved, asNew ? undefined : current?.id)
+    if (!r.ok) return setMsg(r.message)
+    setCurrent({ id: r.data.id, title: r.data.title }); setMsg(asNew || !current ? "Saved." : "Updated."); refresh()
+  })
+  const remove = (id: string) => run(async () => {
+    const r = await caseStore.remove(id)
+    if (!r.ok) return setMsg(r.message)
+    if (current?.id === id) setCurrent(null)
+    setConfirm(null); refresh()
+  })
+  const addVisit = () => run(async () => {
+    if (!current) return
+    const r = await caseStore.addVisit(current.id, note, saved)
+    if (!r.ok) return setMsg(r.message)
+    setVisits(v => [r.data, ...v]); setNote(""); setMsg("Follow-up saved with the case as it is now.")
+  })
+  const dropVisit = (id: string) => run(async () => {
+    const r = await caseStore.removeVisit(id)
+    if (r.ok) setVisits(v => v.filter(x => x.id !== id)); else setMsg(r.message)
+  })
+
+  if (status === "loading") return null
+  if (status === "signed-out") return (
+    <Card className="p-3 flex items-center justify-between gap-2" data-testid="vault-signin">
+      <p className="text-sm text-gray-600">Sign in to save cases and keep follow-up notes.</p>
+      <Button size="sm" onClick={onSignIn}>Sign in</Button>
+    </Card>
+  )
+  if (status === "not-set-up") return (
+    <Card className="p-3"><Notice>Saving cases is not switched on yet. The site owner needs to run one setup script in the database.</Notice></Card>
+  )
+  return (
+    <Card className="p-3 space-y-3" data-testid="vault">
+      <h2 className="font-semibold text-gray-800">Saved cases</h2>
+      <div className="flex gap-2">
+        <Input value={title} onChange={e => setTitle(e.target.value)} maxLength={120} placeholder="Short title, e.g. initials + date" data-testid="case-title" />
+        <Button size="sm" disabled={busy || !title.trim() || saved.ids.length === 0} onClick={() => save(false)} data-testid="case-save">{current ? "Update" : "Save"}</Button>
+        {current && <Button size="sm" variant="outline" disabled={busy || !title.trim()} onClick={() => save(true)}>Save as new</Button>}
+      </div>
+      <p className="text-xs text-gray-400">Use initials or a code, not a full name. Your cases are visible only to you.</p>
+      {msg && <p className="text-sm text-green-700" role="status">{msg}</p>}
+
+      {rows && rows.length === 0 && <p className="text-sm text-gray-400">No saved cases yet.</p>}
+      <div className="divide-y divide-gray-100">
+        {rows?.map(r => (
+          <div key={r.id} className={`py-1.5 flex items-center gap-2 ${current?.id === r.id ? "bg-green-50 -mx-2 px-2 rounded" : ""}`}>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-gray-800 truncate">{r.title}</p>
+              <p className="text-xs text-gray-400">{Array.isArray(r.state?.ids) ? r.state.ids.length : 0} rubrics · {dateOf(r.updated_at)}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => onOpen(r)} data-testid={`case-open-${r.id}`}>Open</Button>
+            {confirm === r.id
+              ? <Button size="sm" variant="destructive" disabled={busy} onClick={() => remove(r.id)}>Delete?</Button>
+              : <button onClick={() => setConfirm(r.id)} className="text-gray-400 hover:text-red-500 p-1" aria-label="Delete case"><Trash2 size={15} /></button>}
+          </div>
+        ))}
+      </div>
+
+      {current && (
+        <div className="border-t border-gray-100 pt-3 space-y-2" data-testid="visits">
+          <h3 className="font-medium text-gray-800 text-sm">Follow-ups for “{current.title}”</h3>
+          <textarea value={note} onChange={e => setNote(e.target.value)} maxLength={2000} rows={2} data-testid="visit-note"
+            className="w-full border border-gray-200 rounded-lg text-sm p-2" placeholder="Remedy given, response, plan…" />
+          <Button size="sm" disabled={busy || (!note.trim() && saved.ids.length === 0)} onClick={addVisit} data-testid="visit-add">
+            Add follow-up (keeps the case as it is now)
+          </Button>
+          {visits.map(v => (
+            <div key={v.id} className="text-sm border border-gray-100 rounded-lg p-2">
+              <div className="flex items-center justify-between text-xs text-gray-400">
+                <span>{dateOf(v.created_at)} · {Array.isArray(v.state?.ids) ? v.state.ids.length : 0} rubrics</span>
+                <span className="flex gap-2">
+                  <button className="text-green-700 hover:underline" onClick={() => onRestore(v.state)}>Load this version</button>
+                  <button className="hover:text-red-500" onClick={() => dropVisit(v.id)} aria-label="Delete follow-up"><X size={13} /></button>
+                </span>
+              </div>
+              {v.note && <p className="text-gray-700 mt-1 whitespace-pre-line">{v.note}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   )
 }

@@ -686,8 +686,8 @@ export default function RemedyScorer({
           <Card className="p-6">
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+              <div className="min-w-0">
                 <h2 className="text-2xl font-bold">Top Remedy Recommendations</h2>
                 <p className="text-neutral-500 text-sm">
                   Best {topResults.length} matches{activeCategory ? ` for ${activeCategory}` : ""}
@@ -706,7 +706,7 @@ export default function RemedyScorer({
                   </div>
                 )}
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-row flex-wrap gap-2">
                 <Button variant="outline" onClick={downloadReport} className="flex items-center gap-2" data-testid="download-report">
                   <Download className="w-4 h-4" /> PDF Report
                 </Button>
@@ -846,12 +846,20 @@ export default function RemedyScorer({
                     </div>
                   )}
 
-                  {/* Dosage */}
-                  <div className="bg-blue-50 rounded-lg p-2 mb-3">
-                    <p className="text-xs text-blue-700">
-                      <strong>Dosage:</strong> {result.remedy?.dosage}
-                    </p>
-                  </div>
+                  {/* Suggested potency (general guidance written for this case) */}
+                  {result.potency_suggestion && (
+                    <div className="bg-blue-50 rounded-lg p-2.5 mb-3" data-testid="potency-suggestion">
+                      {result.potency_suggestion.potency ? (
+                        <>
+                          <p className="text-xs text-blue-800">
+                            <strong>Suggested potency: {result.potency_suggestion.potency}</strong> — {result.potency_suggestion.repeat}
+                          </p>
+                          <p className="text-xs text-blue-700 mt-1">{result.potency_suggestion.stop}</p>
+                        </>
+                      ) : null}
+                      <p className="text-xs text-blue-600 mt-1">{result.potency_suggestion.caution}</p>
+                    </div>
+                  )}
 
                   {/* Covered rubrics — NEW */}
                   <CoveredRubrics rubrics={result.covered_rubrics || []} />

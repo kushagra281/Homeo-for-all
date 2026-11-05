@@ -181,9 +181,7 @@ export default function Home() {
             onClick={() => { setView("home"); setQuery(""); setSelectedCategory(null) }}
             className="flex items-center gap-2 hover:opacity-80 transition"
           >
-            <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
-              <span className="text-xl">🌿</span>
-            </div>
+            <span className="text-2xl leading-none">🌿</span>
             <span className="font-bold text-green-700 text-lg">HomeoWell</span>
           </button>
         </div>

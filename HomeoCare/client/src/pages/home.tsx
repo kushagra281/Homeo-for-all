@@ -4,10 +4,12 @@ import { useLocation } from "wouter"
 import {
   Search, LogOut, User, Clock, ChevronRight,
   Paperclip, ArrowLeft, X, Trash2, Globe,
-  Heart, Calendar, Mail, Edit3, Check, BookOpen
+  Heart, Calendar, Mail, Edit3, Check, BookOpen,
+  Menu, LogIn, Home as HomeIcon, Pill, FolderOpen, Library, Compass, Gauge, Users
 } from "lucide-react"
 import { getCurrentUser, signOut, getSearchHistory, deleteHistoryItem, getHealthProfile, saveHealthProfile } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -150,19 +152,41 @@ export default function Home() {
     return typeof h.health_history === "object" ? h.health_history.text : h.health_history
   }
 
+  // ── MENU (☰) ─────────────────────────────────────────────────
+  const [menuOpen, setMenuOpen] = useState(false)
+  const go = (fn: () => void) => { setMenuOpen(false); fn() }
+  const menuItems: { label: string; icon: any; run: () => void; testId: string; needsUser?: boolean }[] = [
+    { label: "Home",          icon: HomeIcon,    testId: "menu-home",       run: () => { setView("home"); setQuery(""); setSelectedCategory(null) } },
+    { label: "Repertory",     icon: BookOpen,    testId: "menu-repertory",  run: () => setLocation("/repertory") },
+    { label: "Search by remedy", icon: Pill,     testId: "menu-by-remedy",  run: () => setLocation("/repertory?tab=remedy") },
+    { label: "My cases",      icon: FolderOpen,  testId: "menu-cases",      run: () => setLocation("/repertory?tab=case") },
+    { label: "History",       icon: Clock,       testId: "menu-history",    run: handleShowHistory, needsUser: true },
+    { label: "Profile",       icon: User,        testId: "menu-profile",    run: handleShowProfile, needsUser: true },
+    { label: "Dictionary",    icon: Library,     testId: "menu-dictionary", run: () => setLocation("/dictionary") },
+    { label: "Modalities",    icon: Compass,     testId: "menu-modalities", run: () => setLocation("/modalities") },
+    { label: "Potency guide", icon: Gauge,       testId: "menu-potency",    run: () => setLocation("/potency-guide") },
+    { label: "Community",     icon: Users,       testId: "menu-community",  run: () => setLocation("/community") },
+  ]
+
   // ── HEADER ───────────────────────────────────────────────────
   const Header = ({ showBack = false }: { showBack?: boolean }) => (
     <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-20">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        <button
-          onClick={() => { setView("home"); setQuery(""); setSelectedCategory(null) }}
-          className="flex items-center gap-2 hover:opacity-80 transition"
-        >
-          <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
-            <span className="text-xl">🌿</span>
-          </div>
-          <span className="font-bold text-green-700 text-lg">HomeoWell</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setMenuOpen(true)} aria-label="Open menu" data-testid="menu-button"
+            className="p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 transition">
+            <Menu size={22} />
+          </button>
+          <button
+            onClick={() => { setView("home"); setQuery(""); setSelectedCategory(null) }}
+            className="flex items-center gap-2 hover:opacity-80 transition"
+          >
+            <div className="w-9 h-9 bg-green-600 rounded-full flex items-center justify-center shadow-sm">
+              <span className="text-xl">🌿</span>
+            </div>
+            <span className="font-bold text-green-700 text-lg">HomeoWell</span>
+          </button>
+        </div>
 
         {showBack ? (
           <button onClick={() => setView("home")}
@@ -172,48 +196,47 @@ export default function Home() {
         ) : (
           <div className="flex items-center gap-1.5">
             <LanguageMenu />
-            <button onClick={() => setLocation("/repertory")} data-testid="nav-repertory"
-              className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-green-50 hover:text-green-700 transition">
-              <BookOpen size={14} /> Repertory
-            </button>
-
-            {user && (
-              <>
-                {/* History button */}
-                <button onClick={handleShowHistory}
-                  className={`relative flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition ${
-                    view === "history"
-                      ? "bg-green-50 border-green-300 text-green-700"
-                      : "border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50"
-                  }`}>
-                  <Clock size={14} />
-                  <span className="hidden sm:inline">History</span>
-                  {history.length > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-green-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                      {Math.min(history.length, 9)}
-                    </span>
-                  )}
-                </button>
-
-                {/* Profile button — navigates to full /profile page */}
-                <button onClick={handleShowProfile}
-                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-green-700 hover:bg-green-50 transition"
-                  title="Health Profile">
-                  <User size={14} />
-                  <span className="hidden sm:inline text-xs max-w-20 truncate">
-                    {user.user_metadata?.name || user.email?.split("@")[0]}
-                  </span>
-                </button>
-
-                <button onClick={handleLogout}
-                  className="text-gray-400 hover:text-red-500 p-1.5 transition" title="Logout">
-                  <LogOut size={16} />
-                </button>
-              </>
+            {!user && (
+              <button onClick={() => setLocation("/auth")} data-testid="sign-in"
+                className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition">
+                <LogIn size={14} /> Sign in
+              </button>
             )}
           </div>
         )}
       </div>
+
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="left" className="w-72 p-0 flex flex-col" data-testid="menu-drawer">
+          <SheetHeader className="px-5 py-4 border-b border-gray-100 text-left">
+            <SheetTitle className="flex items-center gap-2 text-green-700">
+              <span className="text-xl">🌿</span> HomeoWell
+            </SheetTitle>
+            {user && <p className="text-xs text-gray-400 truncate">{user.user_metadata?.name || user.email}</p>}
+          </SheetHeader>
+          <nav className="flex-1 overflow-y-auto py-2">
+            {menuItems.filter(i => !i.needsUser || user).map(({ label, icon: Icon, run, testId }) => (
+              <button key={label} data-testid={testId} onClick={() => go(run)}
+                className="w-full flex items-center gap-3 px-5 py-3 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition text-left">
+                <Icon size={18} className="text-green-600" /> {label}
+              </button>
+            ))}
+          </nav>
+          <div className="border-t border-gray-100 py-2">
+            {user ? (
+              <button data-testid="menu-signout" onClick={() => go(handleLogout)}
+                className="w-full flex items-center gap-3 px-5 py-3 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 transition text-left">
+                <LogOut size={18} /> Sign out
+              </button>
+            ) : (
+              <button data-testid="menu-signin" onClick={() => go(() => setLocation("/auth"))}
+                className="w-full flex items-center gap-3 px-5 py-3 text-sm text-gray-600 hover:bg-green-50 hover:text-green-700 transition text-left">
+                <LogIn size={18} /> Sign in
+              </button>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </header>
   )
 

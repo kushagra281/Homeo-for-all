@@ -26,6 +26,22 @@ const BY_TOPIC: Record<string, Lifestyle> = {
       "Scratching an itchy scalp or picking at dandruff",
     ],
   },
+  heart: {
+    do: [
+      "Eat less salt and more fruit, vegetables and whole grains",
+      "Walk 30 minutes on most days, as your doctor allows",
+      "Keep a regular sleep time and manage stress with slow breathing",
+      "Keep a healthy weight and get blood pressure checked regularly",
+      "See a doctor at once for chest pain, breathlessness or fainting",
+    ],
+    avoid: [
+      "Too much salt, pickles and packaged snacks",
+      "Fried, fatty and processed food",
+      "Smoking and tobacco in any form",
+      "Letting stress build up without a break",
+      "Sitting for long hours, and too much tea, coffee or energy drinks",
+    ],
+  },
   mind: {
     do: [
       "Keep a fixed time for sleep and meals",
@@ -227,11 +243,16 @@ const take = (a: string[], b: string[], max = 6): string[] => {
   return out;
 };
 
+// The case-taking engine has no heart topic (its questions are general ones), so the heart is recognised here.
+const HEART = /heart|palpitat|cardi|angina|chest pain|blood pressure|hypertens|\bbp\b|dhadkan|dil\b/i;
+
 /** The topics of the complaint (from what was typed; the chosen category only when nothing typed says more). */
 export function lifestyleTopics(symptoms: string[], category = ""): string[] {
   const typed = symptoms.filter((s) => !s.startsWith("🔍"));
   const found = detectTopics(typed);
-  return (found.length ? found : detectTopics([], category)).filter((t) => BY_TOPIC[t]);
+  if (typed.some((s) => HEART.test(s))) found.unshift("heart");
+  if (!found.length) found.push(...(category === "Heart" ? ["heart"] : detectTopics([], category)));
+  return [...new Set(found)].filter((t) => BY_TOPIC[t]);
 }
 
 /** Do's and don'ts for the complaint: the first topic leads, a second adds a few items, nothing found gives the general list. */

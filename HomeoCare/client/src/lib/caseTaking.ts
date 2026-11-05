@@ -35,7 +35,7 @@ const better = (label: string, extra = label.toLowerCase()) => o(label, `better 
 export const TOPIC_LABELS: Record<string, string> = {
   mind: "Mind and emotions", head: "Head", fever: "Fever", stomach: "Stomach and digestion",
   respiration: "Cough and breathing", throat: "Throat and cold", skin: "Skin", joints: "Joints, back and limbs",
-  urinary: "Urinary", sleep: "Sleep", female: "Female complaints", hair: "Hair and scalp",
+  urinary: "Urinary", sleep: "Sleep", female: "Female complaints", hair: "Hair and scalp", heart: "Heart and blood pressure",
 };
 const TOPIC_PATTERNS: Array<[string, RegExp]> = [
   ["mind", /anxi|fear|afraid|panic|depress|sad|grief|anger|angry|irritab|restless|weep|cry|crying|mood|stress|worr|tension|lonely|hopeless|nervous|phobia|ghabra|dar\b|darr|gussa|udaas|udas|rona|chinta|tanav|mental|emotion|jealous|suicid|memory|forget/i],
@@ -272,7 +272,7 @@ const GENERAL: CaseQuestion[] = [
   { id: "gen-digestion", topic: "general", multi: true, required: true, text: "How are your appetite and digestion?", why: "Appetite and digestion are general symptoms that often decide between similar remedies.", covers: ["digestion"],
     options: [o("Good, no problem"), o("Poor appetite", "loss of appetite"), o("Very hungry, eats a lot", "ravenous appetite"), o("Acidity or heartburn", "acidity heartburn"), o("Gas or bloating", "flatulence"), o("Indigestion after meals", "indigestion"), o("Nausea", "nausea")],
     skipIf: /digest|appetite|acidity|heartburn|bloat|gas\b|indigest|nausea|bhook/i },
-  { id: "gen-bowels", topic: "general", multi: false, text: "How are your bowels?", why: "The bowel habit is part of the whole picture.", covers: ["bowels"],
+  { id: "gen-bowels", topic: "general", multi: false, required: true, text: "How are your bowels?", why: "The bowel habit is part of the whole picture.", covers: ["bowels"],
     options: [o("Regular, normal"), o("Constipation", "constipation"), o("Loose motions often", "diarrhoea"), o("Constipation and loose motions by turns", "constipation alternating diarrhoea"), o("Never feels fully cleared", "stool unsatisfactory")],
     skipIf: /constip|diarrh|loose|stool|kabz|dast|bowel/i },
   { id: "gen-desire", topic: "general", multi: true, required: true, text: "Any strong cravings or dislikes in food?", why: "Food desires and aversions are important general symptoms.", covers: ["desire"],
@@ -358,7 +358,9 @@ export function queueFor(state: CaseState, opts: QueueOpts = {}): CaseQuestion[]
   // settled by a different question (a question never removes itself from the list)
   const settledByOther = (q: CaseQuestion) =>
     (q.covers || []).some((c) => [...(coveredBy.get(c) || [])].some((id) => id !== q.id));
-  const general = GENERAL.filter((g) => !settledByOther(g) && (!opts.generalOnly || g.required));
+  // the required general questions come before the optional ones, so the cap never cuts them
+  const general = [...GENERAL.filter((g) => g.required), ...GENERAL.filter((g) => !g.required)]
+    .filter((g) => !settledByOther(g) && (!opts.generalOnly || g.required));
 
   const out: CaseQuestion[] = [];
   const seen = new Set<string>();
@@ -377,10 +379,17 @@ export function queueFor(state: CaseState, opts: QueueOpts = {}): CaseQuestion[]
   return out;
 }
 
-/** The next unanswered question, or null when the case is complete enough. */
+/**
+ * The next unanswered question, or null when the case is complete enough.
+ * MAX_QUESTIONS is room for the whole interview: the required general questions that are still open are
+ * reserved a place in it, so topic and optional questions stop early enough to leave them room.
+ */
 export function nextQuestion(state: CaseState, opts: QueueOpts = {}): CaseQuestion | null {
-  if (!opts.generalOnly && Object.keys(state.answers).length >= MAX_QUESTIONS) return null;   // the general top-up is short on its own
-  return queueFor(state, opts).find((q) => !(q.id in state.answers)) || null;
+  const open = queueFor(state, opts).filter((q) => !(q.id in state.answers));
+  if (opts.generalOnly) return open[0] || null;                     // the top-up is only required questions
+  const required = open.filter((q) => q.required);
+  if (Object.keys(state.answers).length + required.length >= MAX_QUESTIONS) return required[0] || null;
+  return open[0] || null;
 }
 
 /** How many required general questions are still to ask after the AI says it is done. */

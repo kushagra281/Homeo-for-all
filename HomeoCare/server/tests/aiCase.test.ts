@@ -113,20 +113,40 @@ t("the explain prompt asks for a do and avoid list for this case", () => {
   const sys = buildExplainMessages(EX)[0].content;
   assert.ok(sys.includes('"lifestyle"') && sys.includes('"do"') && sys.includes('"avoid"'));
 });
-t("lifestyle lists are cleaned: medicines, doses, cures and the ranked remedy names are dropped", () => {
+t("a do list keeps only habits: no medicines, supplements, herbs, creams, doses, cures or ranked remedy names", () => {
   const out = cleanLifestyle([
     "Eat protein-rich food such as dal and eggs",
+    "Use minoxidil for hair loss",
+    "Apply biotin supplements daily",
     "Take Arsenicum Album 30 every night",
     "Take 500 mg iron tablets daily",
-    "This will cure the hair fall",
+    "Eat amla and drink triphala churna every day",
+    "Eat a diet that will cure the hair fall",
+    "Apply a steroid cream on the scalp",
+    "Use herbal hair oil after consulting nobody",
     "Eat protein-rich food such as dal and EGGS",
+    "Try ashwagandha for stress",
     "ok",
     42,
     "Sleep 7 to 8 hours at a fixed time",
-  ], ["arsenicum album"]);
-  assert.deepEqual(out, ["Eat protein-rich food such as dal and eggs", "Sleep 7 to 8 hours at a fixed time"]);
-  assert.deepEqual(cleanLifestyle("nope"), []);
-  assert.equal(cleanLifestyle(Array.from({ length: 12 }, (_, i) => `Habit number ${i} for daily life`)).length, 5);
+    "Take a short walk after meals",
+    "Massage the scalp gently with lukewarm oil",
+  ], ["arsenicum album"], "do");
+  assert.deepEqual(out, [
+    "Eat protein-rich food such as dal and eggs",
+    "Sleep 7 to 8 hours at a fixed time",
+    "Take a short walk after meals",
+    "Massage the scalp gently with lukewarm oil",
+  ]);
+  assert.deepEqual(cleanLifestyle("nope", [], "do"), []);
+  assert.equal(cleanLifestyle(Array.from({ length: 12 }, (_, i) => `Eat habit number ${i} for daily life`), [], "do").length, 5);
+});
+t("an avoid list is held to the same wording rules but need not start with a verb", () => {
+  const out = cleanLifestyle([
+    "Spicy and fried food", "Tea on an empty stomach", "Using minoxidil without advice", "Painkillers every day",
+    "Hot showers on the hair", "Strong steroid creams", "Smoking and tobacco", "Too much screen time at night",
+  ], [], "avoid");
+  assert.deepEqual(out, ["Spicy and fried food", "Tea on an empty stomach", "Hot showers on the hair", "Smoking and tobacco", "Too much screen time at night"]);
 });
 t("the explanation carries the case's lifestyle lists, cleaned", () => {
   const out = parseExplanation(JSON.stringify({
@@ -143,4 +163,15 @@ t("the explanation carries the case's lifestyle lists, cleaned", () => {
   });
   const none = parseExplanation(JSON.stringify({ overview: "x", remedies: [{ name: "Arsenicum Album", why: "y" }] }), EX)!;
   assert.equal(none.lifestyle, undefined, "no lifestyle key when the model sent none");
+});
+t("a model that recommends a medicine in its lifestyle lists never reaches the page", () => {
+  const out = parseExplanation(JSON.stringify({
+    overview: "Hair fall.",
+    remedies: [{ name: "Arsenicum Album", why: "y" }],
+    lifestyle: {
+      do: ["Use minoxidil for hair loss", "Eat a light dinner before 8 pm", "Walk for 20 minutes daily"],
+      avoid: ["Skipping breakfast", "Painkillers every day", "Hot showers on the hair"],
+    },
+  }), EX)!;
+  assert.deepEqual(out.lifestyle, { do: ["Eat a light dinner before 8 pm", "Walk for 20 minutes daily"], avoid: ["Skipping breakfast", "Hot showers on the hair"] });
 });

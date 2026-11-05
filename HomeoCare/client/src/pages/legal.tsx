@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import AppHeader from "@/components/app-header"
 
 /** Where people can write to about their data. Leave empty to hide the line until an address is chosen. */
-const CONTACT_EMAIL = ""
+const CONTACT_EMAIL = "saxenakushagra170@gmail.com"
 const UPDATED = "5 November 2026"
 
 function Page({ title, children }: { title: string; children: ReactNode }) {

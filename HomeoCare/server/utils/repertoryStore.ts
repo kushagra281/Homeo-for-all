@@ -64,7 +64,7 @@ export interface RepertoryStore {
   /** children of a rubric; null = the chapters. */
   children(parentId: number | null, limit?: number): Promise<RepertoryNode[]>;
   /** Rubrics whose own path contains every word (for the search box of the Repertory page). */
-  searchText(words: string[], limit: number):   Promise<RepertoryNode[]>;
+  searchText(words: string[], limit: number, chapters?: string[]): Promise<RepertoryNode[]>;
   /**
    * Rubrics that hold ALL the included remedies (1-5, as abbreviations) and none of the excluded
    * ones, every included remedy at minGrade or higher. Narrowest rubric first.
@@ -197,9 +197,10 @@ export function supabaseRepertoryStore(source = DEFAULT_SOURCE): RepertoryStore 
       return { counts, total };
     },
 
-    async searchText(words, limit) {
+    async searchText(words, limit, chapters) {
       if (!words.length) return [];
       let req = db().from("repertory_rubrics").select(NODE_COLS).eq("source", source).gt("depth", 0);
+      if (chapters?.length) req = req.in("chapter", chapters);
       for (const w of words) req = req.ilike("full_path", `%${w}%`);
       const { data, error } = await req.order("depth", { ascending: true }).order("n_remedies", { ascending: false }).limit(limit);
       if (error) fail("search", error.message);

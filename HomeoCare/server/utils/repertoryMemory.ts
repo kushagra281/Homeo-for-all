@@ -76,8 +76,8 @@ export function memoryRepertoryStore(
       return { counts, total: rows.length };
     },
 
-    async searchText(words, limit) {
-      const hits = rows.filter((r) => r.depth > 0 && words.every((w) => lower.get(r.id)!.includes(w)));
+    async searchText(words, limit, chapters) {
+      const hits = rows.filter((r) => r.depth > 0 && (!chapters?.length || chapters.includes(r.chapter)) && words.every((w) => lower.get(r.id)!.includes(w)));
       hits.sort((a, b) => a.depth - b.depth || b.n_remedies - a.n_remedies || a.id - b.id);
       return hits.slice(0, limit).map(node);
     },

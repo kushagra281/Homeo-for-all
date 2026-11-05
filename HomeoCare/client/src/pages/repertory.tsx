@@ -657,8 +657,11 @@ function CaseVault({ saved, current, setCurrent, onOpen, onRestore, onSignIn }: 
   useEffect(() => { refresh() }, [])
   useEffect(() => { setTitle(current?.title || "") }, [current?.id])
   useEffect(() => {
-    if (!current) { setVisits([]); return }
-    caseStore.visits(current.id).then(r => setVisits(r.ok ? r.data : []))
+    setVisits([])                         // never show the previous case's follow-ups under the new title
+    if (!current) return
+    let stale = false                     // a slower earlier request must not overwrite a newer one
+    caseStore.visits(current.id).then(r => { if (!stale) setVisits(r.ok ? r.data : []) })
+    return () => { stale = true }
   }, [current?.id])
 
   const run = async (fn: () => Promise<void>) => { setBusy(true); setMsg(""); try { await fn() } finally { setBusy(false) } }

@@ -1,5 +1,6 @@
 -- Saved repertory cases (a practitioner's chosen rubrics, weights and options) with follow-up visits.
--- Run on the MAIN database (the one with auth.users). Safe to run twice.
+-- Run in the Supabase project where your users sign in (Authentication > Users lists them):
+-- rtfjnfepikhahzospnqq (the same project as the repertory data). Safe to run twice.
 -- Rows belong to the signed-in user and are only visible to that user (row level security).
 
 CREATE TABLE IF NOT EXISTS repertory_cases (
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS repertory_case_visits (
 
 CREATE INDEX IF NOT EXISTS repertory_cases_user_idx  ON repertory_cases (user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS repertory_visits_case_idx ON repertory_case_visits (case_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS repertory_visits_user_idx ON repertory_case_visits (user_id);
 
 -- A visit may only be filed under the user's own case, and nobody can fill the tables without limit.
 CREATE OR REPLACE FUNCTION repertory_limits() RETURNS trigger
@@ -52,9 +54,9 @@ ALTER TABLE repertory_case_visits ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Own cases"  ON repertory_cases;
 DROP POLICY IF EXISTS "Own visits" ON repertory_case_visits;
-CREATE POLICY "Own cases"  ON repertory_cases       FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
-CREATE POLICY "Own visits" ON repertory_case_visits FOR ALL TO authenticated USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid() AND EXISTS (SELECT 1 FROM repertory_cases c WHERE c.id = case_id AND c.user_id = auth.uid()));
+CREATE POLICY "Own cases"  ON repertory_cases       FOR ALL TO authenticated USING (user_id = (select auth.uid())) WITH CHECK (user_id = (select auth.uid()));
+CREATE POLICY "Own visits" ON repertory_case_visits FOR ALL TO authenticated USING (user_id = (select auth.uid()))
+    WITH CHECK (user_id = (select auth.uid()) AND EXISTS (SELECT 1 FROM repertory_cases c WHERE c.id = case_id AND c.user_id = (select auth.uid())));
 
 REVOKE ALL ON repertory_cases, repertory_case_visits FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON repertory_cases, repertory_case_visits TO authenticated;

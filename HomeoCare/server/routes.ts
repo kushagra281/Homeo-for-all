@@ -4,7 +4,6 @@
 
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { MedicalTerm } from "@shared/schema";
@@ -54,16 +53,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[Route] medical-terms:", error);
       res.status(500).json({ message: "Failed to load dictionary" });
-    }
-  });
-
-  // ── Questions ─────────────────────────────────────────────────
-  app.get("/api/questions/:bodySystem", async (req, res) => {
-    try {
-      const questions = await storage.getQuestionTree(req.params.bodySystem);
-      res.json(questions);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch questions" });
     }
   });
 

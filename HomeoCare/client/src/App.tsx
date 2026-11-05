@@ -1,36 +1,33 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
-import Remedies from "@/pages/remedies";
-import SymptomAnalysis from "@/pages/symptom-analysis";
-import PotencyGuidePage from "@/pages/potency-guide-page";
-import DiagnosticWizardPage from "@/pages/diagnostic-wizard-page";
-import AuthPage from "@/pages/auth-page";
+const SymptomAnalysis = lazy(() => import("@/pages/symptom-analysis"));
+const PotencyGuidePage = lazy(() => import("@/pages/potency-guide-page"));
+const AuthPage = lazy(() => import("@/pages/auth-page"));
 import NotFound from "@/pages/not-found";
-import ProfilePage from "@/pages/profile";
-import DictionaryPage from "@/pages/dictionary";
-import ModalitiesPage from "@/pages/modalities";
-import Community from "@/pages/community";
-import RepertoryPage from "@/pages/repertory";
+const ProfilePage = lazy(() => import("@/pages/profile"));
+const DictionaryPage = lazy(() => import("@/pages/dictionary"));
+const Community = lazy(() => import("@/pages/community"));
+const RepertoryPage = lazy(() => import("@/pages/repertory"));
 function Router() {
   return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-green-50"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" /></div>}>
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/dictionary" component={DictionaryPage} />
-      <Route path="/modalities" component={ModalitiesPage} />
       <Route path="/community" component={Community} />
       <Route path="/repertory" component={RepertoryPage} />
-      <Route path="/remedies/:category" component={Remedies} />
       <Route path="/symptom-analysis" component={SymptomAnalysis} />
       <Route path="/potency-guide" component={PotencyGuidePage} />
-      <Route path="/diagnostic/:bodySystem" component={DiagnosticWizardPage} />
       <Route component={NotFound} />
     </Switch>
+    </Suspense>
   );
 }
 function App() {

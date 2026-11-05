@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { saveSearchHistory, getHealthProfile } from "@/lib/supabase";
 import { checkReportFile, takePendingReports } from "@/lib/pendingReports";
 import { detectRedFlags, type RedFlag } from "@shared/redFlags";
-import LanguageMenu from "./language-menu";
+import AppHeader from "@/components/app-header";
 import { psychologySummary } from "@/lib/psychology";
 import { nextQuestion, plannedCount, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
 import { fetchNextQuestion, fetchExplanation, type AiExplanation } from "@/lib/aiCase";
@@ -512,20 +512,11 @@ export default function RemedyScorer({
 
   // ── PAGE HEADER ───────────────────────────────────────────────
   const PageHeader = () => (
-    <header className="bg-white border-b border-gray-100 shadow-sm mb-6 sticky top-0 z-10">
-      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        <button onClick={() => setLocation("/")} className="flex items-center gap-2 hover:opacity-80 transition">
-          <span className="text-2xl leading-none">🌿</span>
-          <span className="font-bold text-green-700 text-lg">HomeoWell</span>
-        </button>
-        <div className="flex items-center gap-2">
-          {activeCategory && (
-            <Badge className="bg-green-100 text-green-700 border-green-300">{activeCategory}</Badge>
-          )}
-          <LanguageMenu />
-        </div>
-      </div>
-    </header>
+    <div className="mb-6">
+      <AppHeader back={false} right={activeCategory ? (
+        <Badge className="bg-green-100 text-green-700 border-green-300">{activeCategory}</Badge>
+      ) : undefined} />
+    </div>
   );
 
   // ── QUESTIONNAIRE ─────────────────────────────────────────────

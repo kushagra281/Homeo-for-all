@@ -1,7 +1,9 @@
 // server/utils/supabase.ts
 // DATA ACCESS LAYER — manages TWO Supabase clients:
-//   mainDB()    → zlsinlcskirptxgqkzuw  (patients, profiles, history)
-//   scraperDB() → rtfjnfepikhahzospnqq  (rubrics×17755, rubric_remedies×23564, remedy_symptoms×17678)
+//   mainDB()    → SUPABASE_URL          (patients, history; in production this is the project users sign in to)
+//   scraperDB() → SCRAPER_SUPABASE_URL  (materia medica rubrics and the graded repertory)
+// Production note: the project rtfjnfepikhahzospnqq holds both the users (auth) and the scraped data.
+// The project zlsinlcskirptxgqkzuw is empty (0 users, all tables empty) and is not used.
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import {

@@ -18,7 +18,6 @@ server/utils/sections.ts           UI category -> section-name patterns
 server/utils/supabase.ts           all database access, ranking, caching
 server/utils/auth.ts, rateLimit.ts verified user id, per-IP limits
 server/websocket.ts                community chat at /ws/chat
-server/storage.ts                  in-memory remedy list used only by the browse/dictionary pages
 ```
 
 ## Search pipeline (`POST /api/remedies/score`)
@@ -32,12 +31,14 @@ server/storage.ts                  in-memory remedy list used only by the browse
    not pretend there are no results.
 
 ## Data
-Two Supabase projects:
-- **main** (`SUPABASE_URL`): `patients`, `search_history` (a generated `symptoms` table also exists there but is unused).
+Supabase projects (in production the users, history and the scraped data are in the same one,
+`rtfjnfepikhahzospnqq`; `zlsinlcskirptxgqkzuw` is empty and unused):
+- **main** (`SUPABASE_URL`): `patients`, `search_history`, and the saved repertory cases (`repertory_cases`, `repertory_case_visits`, see `docs/sql`).
 - **scraper** (`SCRAPER_SUPABASE_URL` / `SCRAPER_SUPABASE_KEY`): `remedies`, `remedy_sections`,
   `remedy_symptoms`, `rubrics`, `rubric_remedies`. Built by the `materia-medica-scraper` repo from
-  Boericke's and Kent's Materia Medica. These are materia medica texts, not a repertory: they carry
-  **no grades, potencies or doses** (every rubric link is grade 1).
+  Boericke's and Kent's Materia Medica. These are materia medica texts and carry
+  **no grades, potencies or doses** (every rubric link is grade 1). The graded repertory (Repertorium Publicum,
+  `repertory_*` tables) is read by the Repertory pages and, when `REPERTORY_ENGINE` is `on` or `hybrid`, by the search.
 
 Environment variables: see `.env.example`. `/api/health` shows which ones are set.
 

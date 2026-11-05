@@ -14,6 +14,7 @@ import repertoryRouter, { useRepertoryStoreForTests, MAX_CASE_RUBRICS } from "..
 import { DbUnavailableError } from "../utils/supabase";
 import { compareMethods } from "../services/repertorize";
 import { pickProfile } from "../services/remedyProfile";
+import { parseRelationships, resolveRemedy, resolveRelations } from "../services/remedyRelations";
 
 let n = 0;
 const t = async (name: string, fn: () => void | Promise<void>) => { await fn(); n++; console.log("ok  ", name); };
@@ -352,6 +353,33 @@ await t("routes: remedies list, by-remedy validation, compare, theme gate, unkno
   assert.equal((await post("/repertorize", { rubricIds: [3, 5, 8], coverTheme: "nonsense" })).body.rows.length, 4);
   assert.equal((await get("/remedy/Nope.")).status, 404);
   assert.equal((await get("/remedy/" + "x".repeat(40))).status, 400);
+});
+
+await t("relationships: labelled lists are lifted out of Boericke-style prose; short items only", () => {
+  const txt = "Antidotes: Camph; Ipec; Nit ac; Nux. Complementary: Bell; Rhus; Lycop; Silica. Calcar is useful after Sulphur where the pupils remain dilated. When Pulsatilla failed in school girls. Incompatible: Bry; Sulphur should not be given after Calc. Compare: Aqua calcar.--Lime-water--(1/2 teaspoonful in milk); and Calc brom (removes inflammatory products). Sulph (differs in being worse";
+  const r = parseRelationships(txt);
+  assert.deepEqual(r.antidotes, ["Camph", "Ipec", "Nit ac", "Nux"]);
+  assert.deepEqual(r.complementary, ["Bell", "Rhus", "Lycop", "Silica"]);       // the sentences after the list are not items
+  assert.deepEqual(r.incompatible, ["Bry"]);
+  assert.deepEqual(r.compare, ["Aqua calcar", "Calc brom", "Sulph"]);
+  assert.deepEqual(parseRelationships("no labels here at all"), {});
+  assert.deepEqual(parseRelationships("Follows well: Sep; Sulph. Followed by: Lyc."), { follows: ["Sep", "Sulph", "Lyc"] });
+  assert.deepEqual(parseRelationships("Compare: " + "x".repeat(10000)).compare, undefined);
+});
+
+await t("relationships: abbreviations resolve to one remedy, and an ambiguous word is left alone", () => {
+  const R = [{ abbrev: "Bell.", name: "Belladonna" }, { abbrev: "Lyc.", name: "Lycopodium Clavatum" }, { abbrev: "Nit-ac.", name: "Nitricum Acidum" },
+    { abbrev: "Rhus-t.", name: "Rhus Toxicodendron" }, { abbrev: "Rhus-v.", name: "Rhus Venenata" }, { abbrev: "Kali-c.", name: "Kali Carbonicum" }, { abbrev: "Kali-m.", name: "Kali Muriaticum" },
+    { abbrev: "Sulph.", name: "Sulphur" }, { abbrev: "Calc-br.", name: "Calcarea Bromata" }];
+  assert.equal(resolveRemedy("Bell", R)!.abbrev, "Bell.");
+  assert.equal(resolveRemedy("Lycop", R)!.abbrev, "Lyc.");
+  assert.equal(resolveRemedy("Nit ac", R)!.abbrev, "Nit-ac.");
+  assert.equal(resolveRemedy("Rhus", R)!.abbrev, "Rhus-t.");                  // the usual meaning
+  assert.equal(resolveRemedy("Kali", R), null);                                // could be either: not guessed
+  assert.equal(resolveRemedy("Calc brom", R)!.abbrev, "Calc-br.");
+  assert.equal(resolveRemedy("xy", R), null); assert.equal(resolveRemedy("Zincum", R), null);
+  const out = resolveRelations({ complementary: ["Sulph", "Kali"] }, R, "Sulph.");
+  assert.deepEqual(out.complementary, [{ token: "Sulph" }, { token: "Kali" }], "a remedy is not related to itself");
 });
 
 server.close();

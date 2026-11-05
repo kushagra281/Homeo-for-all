@@ -11,6 +11,7 @@ import { DbUnavailableError } from "../utils/supabase";
 import { repertoryStore, safeWords, type RepertoryStore } from "../utils/repertoryStore";
 import { repertorize, compareMethods, type Method, type SortBy, type Theme } from "../services/repertorize";
 import { remedyProfile } from "../services/remedyProfile";
+import { parseRelationships, resolveRelations } from "../services/remedyRelations";
 
 const router = Router();
 const readLimit = rateLimit({ name: "repertory", windowMs: 60_000, max: 120 });
@@ -188,7 +189,9 @@ router.get("/remedy/:abbrev", readLimit, async (req: Request, res: Response) => 
     if (!name) return res.status(404).json({ message: "unknown remedy" });
     const profile = await remedyProfile(name);
     if (!profile) return res.status(404).json({ message: "no materia medica text for this remedy yet", name });
-    res.json({ abbrev, ...profile });
+    const relText = profile.sections.find((x) => /^relationship/i.test(x.heading))?.content || "";
+    const remedies = Array.from(await store().remedyNames(), ([a, n]) => ({ abbrev: a, name: n }));
+    res.json({ abbrev, ...profile, relationships: resolveRelations(parseRelationships(relText), remedies, abbrev) });
   } catch (e) { fail(res, e, "remedy"); }
 });
 

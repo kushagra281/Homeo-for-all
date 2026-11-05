@@ -20,7 +20,10 @@ interface GridRow { abbrev: string; name: string; total: number; covered: number
 interface Compare { methods: Method[]; rows: Array<{ abbrev: string; name: string; covered: number; scores: Record<Method, number>; ranks: Record<Method, number>; best_rank: number }> }
 interface RemedyHit extends Node { grades: Record<string, number> }
 interface RemedyOpt { abbrev: string; name: string }
-interface Profile { abbrev: string; name: string; common_name: string; source: string; sections: Array<{ heading: string; content: string }> }
+type RelKind = "complementary" | "follows" | "antidotes" | "incompatible" | "compare"
+interface RelItem { token: string; abbrev?: string; name?: string }
+interface Profile { abbrev: string; name: string; common_name: string; source: string; sections: Array<{ heading: string; content: string }>; relationships?: Partial<Record<RelKind, RelItem[]>> }
+const REL_LABEL: Record<RelKind, string> = { complementary: "Complementary", follows: "Follows well", antidotes: "Antidotes", incompatible: "Incompatible", compare: "Compare" }
 interface Grid {
   rubrics: Array<{ id: number; full_path: string; n_remedies: number; weight: number; theme: Theme }>
   rows: GridRow[]; total_remedies: number; method: Method; min_grade: number
@@ -502,6 +505,7 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
 
       {sheet && (
         <RemedySheet abbrev={sheet} excluded={saved.exclude.includes(sheet)} onClose={() => setSheet(null)}
+          inGrid={new Set(data?.rows.map(r => r.abbrev))} onOpen={setSheet}
           onExclude={() => { patch({ exclude: saved.exclude.includes(sheet) ? saved.exclude : [...saved.exclude, sheet] }); setSheet(null) }} />
       )}
     </>
@@ -511,7 +515,7 @@ function CaseView({ saved, patch, grid, toggleId, onBrowse }: {
 const THEME_LABEL: Record<Theme, string> = { mental: "Mind", general: "General", particular: "Particular" }
 
 // ── A remedy: its materia medica text, and the choice to leave it out ──
-function RemedySheet({ abbrev, excluded, onClose, onExclude }: { abbrev: string; excluded: boolean; onClose: () => void; onExclude: () => void }) {
+function RemedySheet({ abbrev, excluded, inGrid, onOpen, onClose, onExclude }: { abbrev: string; excluded: boolean; inGrid: Set<string>; onOpen: (a: string) => void; onClose: () => void; onExclude: () => void }) {
   const { data, isLoading, error } = useQuery<Profile>({ queryKey: ["/api/repertory/remedy", encodeURIComponent(abbrev)], retry: false })
   const [open, setOpen] = useState<string | null>(null)
   return (
@@ -526,6 +530,21 @@ function RemedySheet({ abbrev, excluded, onClose, onExclude }: { abbrev: string;
         </div>
         {isLoading && <p className="text-sm text-gray-400 mt-3">Loading…</p>}
         {error && <p className="text-sm text-gray-500 mt-3">We have no materia medica text for this remedy yet.</p>}
+        {data?.relationships && Object.keys(data.relationships).length > 0 && (
+          <div className="mt-3 space-y-1.5" data-testid="relations">
+            {(Object.keys(REL_LABEL) as RelKind[]).filter(k => data.relationships?.[k]?.length).map(k => (
+              <div key={k} className="flex flex-wrap items-center gap-1">
+                <span className="text-xs text-gray-500 w-24 shrink-0">{REL_LABEL[k]}</span>
+                {data.relationships![k]!.map(it => it.abbrev
+                  ? <button key={it.token} onClick={() => onOpen(it.abbrev!)} title={it.name}
+                      className={`text-xs px-2 py-0.5 rounded-full border ${inGrid.has(it.abbrev) ? "border-green-400 bg-green-50 text-green-800" : "border-gray-200 text-gray-700"} hover:bg-green-100`}>
+                      {it.abbrev.replace(/\.$/, "")}</button>
+                  : <span key={it.token} className="text-xs px-2 py-0.5 rounded-full bg-gray-50 text-gray-400">{it.token}</span>)}
+              </div>
+            ))}
+            <p className="text-[11px] text-gray-400">Green = also in your grid. Read the full “Relationship” text below.</p>
+          </div>
+        )}
         {data && (
           <div className="mt-3 divide-y divide-gray-100">
             {data.sections.map(sec => (

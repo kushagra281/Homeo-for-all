@@ -243,6 +243,13 @@ await t("routes: chapters, children and search", async () => {
   assert.deepEqual(s.body.map((x: any) => x.id), [3]);
   assert.deepEqual((await get("/search?q=")).body, []);
   assert.deepEqual((await get("/search?q=%25%27%22")).body, []);
+  // chapter limits the search to those chapters
+  const inHead = await get("/search?q=motion&chapter=Head");
+  assert.deepEqual(inHead.body.map((x: any) => x.id).sort((x: number, y: number) => x - y), [9, 10]);
+  assert.deepEqual((await get("/search?q=motion&chapter=Mind")).body, []);
+  const both = await get("/search?q=pain&chapter=Mind,Head");   // "Head > pain" and its three sub-rubrics
+  assert.equal(both.body.length, 4);
+  assert.ok(both.body.every((x: any) => x.chapter === "Head"));
 });
 
 await t("routes: one rubric lists its remedies strongest first with names", async () => {

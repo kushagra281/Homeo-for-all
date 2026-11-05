@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { CategoryRubrics } from "@/pages/repertory"
 import { checkReportFile, setPendingReports } from "@/lib/pendingReports"
 
 const RUBRIC_CATEGORIES = [
@@ -280,6 +281,7 @@ export default function Home() {
               Browse all {cat.name} remedies with AI questions →
             </Button>
           </Card>
+          <CategoryRubrics category={cat.name} query={categoryQuery} />
         </main>
       </div>
     )

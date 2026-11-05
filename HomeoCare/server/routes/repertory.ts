@@ -98,11 +98,14 @@ router.get("/children/:id", readLimit, async (req: Request, res: Response) => {
   try { res.json(await store().children(id)); } catch (e) { fail(res, e, "children"); }
 });
 
-// GET /api/repertory/search?q=anxiety night
+// GET /api/repertory/search?q=anxiety night[&chapter=Mind,Head]  (chapter limits the search to those chapters)
 router.get("/search", readLimit, async (req: Request, res: Response) => {
   const words = safeWords(typeof req.query.q === "string" ? req.query.q : "");
   if (!words.length) return res.json([]);
-  try { res.json(await store().searchText(words, 60)); } catch (e) { fail(res, e, "search"); }
+  const chapters = typeof req.query.chapter === "string"
+    ? req.query.chapter.split(",").map((c) => c.trim()).filter((c) => c.length > 0 && c.length <= 40).slice(0, 8)
+    : [];
+  try { res.json(await store().searchText(words, 60, chapters)); } catch (e) { fail(res, e, "search"); }
 });
 
 // GET /api/repertory/rubric/:id -> one rubric with its remedies, strongest first

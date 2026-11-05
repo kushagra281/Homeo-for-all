@@ -19,13 +19,18 @@ const LABEL_RE = /(Antidotes?(?: by)?|Antidoted by|Complementary|Follows(?: well
 
 export type Relations = Partial<Record<RelKind, string[]>>;
 
-/** Splits at ';' and '.' that are not inside brackets. */
+/**
+ * Splits at ';' and at '.' that ends a sentence, outside brackets. A period followed by a lowercase letter is
+ * part of an abbreviation ("Nit. ac.", "Calc. brom."), not a boundary.
+ */
 function splitTop(s: string): string[] {
   const out: string[] = []; let depth = 0; let cur = "";
-  for (const ch of s) {
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
     if (ch === "(") depth++;
     if (ch === ")" && depth > 0) depth--;
-    if (depth === 0 && (ch === ";" || ch === ".")) { out.push(cur); cur = ""; } else cur += ch;
+    const abbrev = ch === "." && /^\s*[a-z]/.test(s.slice(i + 1));
+    if (depth === 0 && (ch === ";" || (ch === "." && !abbrev))) { out.push(cur); cur = ""; } else cur += ch;
   }
   out.push(cur);
   return out;
@@ -33,7 +38,7 @@ function splitTop(s: string): string[] {
 
 /** "Calc brom (removes ...)" -> "Calc brom"; prose and notes -> null. */
 function token(item: string): string | null {
-  const head = item.split("(")[0].split("--")[0].split(",")[0].trim().replace(/^and\s+/i, "");
+  const head = item.split("(")[0].split("--")[0].split(",")[0].replace(/\./g, " ").replace(/\s+/g, " ").trim().replace(/^and\s+/i, "");
   if (!/^[A-Za-z][A-Za-z '\-]{1,23}$/.test(head)) return null;
   const words = head.split(/\s+/);
   if (words.length > 3) return null;

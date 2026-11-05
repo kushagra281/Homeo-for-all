@@ -363,6 +363,11 @@ await t("relationships: labelled lists are lifted out of Boericke-style prose; s
   assert.deepEqual(r.incompatible, ["Bry"]);
   assert.deepEqual(r.compare, ["Aqua calcar", "Calc brom", "Sulph"]);
   assert.deepEqual(parseRelationships("no labels here at all"), {});
+  // abbreviations written with their own periods stay in one piece
+  const dotted = parseRelationships("Antidotes: Nit. ac.; Camph. Complementary: Calc. brom.; Sulph. Compare: Kali bich., Puls.");
+  assert.deepEqual(dotted.antidotes, ["Nit ac", "Camph"]);
+  assert.deepEqual(dotted.complementary, ["Calc brom", "Sulph"]);
+  assert.ok(dotted.compare && dotted.compare.includes("Kali bich"), JSON.stringify(dotted.compare));
   assert.deepEqual(parseRelationships("Follows well: Sep; Sulph. Followed by: Lyc."), { follows: ["Sep", "Sulph", "Lyc"] });
   assert.deepEqual(parseRelationships("Compare: " + "x".repeat(10000)).compare, undefined);
 });

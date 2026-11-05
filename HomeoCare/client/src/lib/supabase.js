@@ -32,6 +32,20 @@ export async function signIn(email, password) {
   return data
 }
 
+// Sends a reset link. The answer never says whether the email has an account.
+export async function requestPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`
+  })
+  if (error) throw error
+}
+
+// Used on /reset-password, after the emailed link has signed the person in for recovery.
+export async function updatePassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) throw error
+}
+
 export async function signOut() {
   await supabase.auth.signOut()
 }

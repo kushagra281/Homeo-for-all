@@ -7,6 +7,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 const SymptomAnalysis = lazy(() => import("@/pages/symptom-analysis"));
 const AuthPage = lazy(() => import("@/pages/auth-page"));
+const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
+const PrivacyPage = lazy(() => import("@/pages/legal").then(m => ({ default: m.PrivacyPage })));
+const TermsPage = lazy(() => import("@/pages/legal").then(m => ({ default: m.TermsPage })));
 import NotFound from "@/pages/not-found";
 const ProfilePage = lazy(() => import("@/pages/profile"));
 const Community = lazy(() => import("@/pages/community"));
@@ -17,6 +20,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/community" component={Community} />
       <Route path="/repertory" component={RepertoryPage} />

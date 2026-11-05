@@ -7,6 +7,8 @@ Supabase. This file describes the code as it is now.
 ```
 client/src/pages/home.tsx          landing page, category + free-text entry
 client/src/components/remedy-scorer.tsx   questionnaire, results, history  (calls POST /api/remedies/score)
+client/src/lib/report.ts, downloadReport.ts, shared/reportFile.ts   PDF report (built in the browser, jsPDF loaded on click): patient name, file name
+                                    "homeocare-report-<date> <name>.pdf", "PDF Report" button on the results page, download icon on each History entry
 shared/elements.ts                  element tags on result cards: periodic-table row = series, column = stage (names only, no meaning text)
 client/src/components/nav-drawer.tsx      the menu: Home, History, Profile, Privacy, Terms, Sign in/out
 client/src/pages/auth-page.tsx, reset-password.tsx   sign in / sign up / forgot password (Supabase Auth)
@@ -47,6 +49,9 @@ Supabase projects (in production the users, history and the scraped data are in 
 Pages that exist but are not linked in the menu: `/repertory` (browse the graded repertory, saved cases; needs
 `docs/sql/2026-11-repertory-cases.sql` for saved cases) and `/community` (anonymous chat, in-memory history).
 History is read 20 rows at a time (`getSearchHistory(offset)`, "Load more" in the UI).
+The PDF from History is shorter than the one on the results page: History saves only the complaints, the top three remedies with
+their match % and a few matched symptoms, so case-taking answers, dosage and better/worse are not in it. A name written only in
+Devanagari is not drawn in the PDF (built-in font is Latin only); it is still used in the file name.
 `docs/sql/2026-11-db-cleanup.sql` drops two duplicate indexes and speeds up five RLS policies (run by hand in the SQL editor).
 Password-reset links need the site's `/reset-password` URL in Supabase Auth > URL Configuration > Redirect URLs.
 

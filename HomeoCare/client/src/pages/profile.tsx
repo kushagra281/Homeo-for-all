@@ -6,7 +6,8 @@ import { getCurrentUser, getHealthProfile, saveHealthProfile, getSearchHistory, 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { Trash2, ChevronRight } from "lucide-react"
+import { Trash2, ChevronRight, Download } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
 
 // ── Pill selector component ──────────────────────────────────
 function PillGroup({ options, value, onChange }: {
@@ -71,6 +72,20 @@ function HistoryTab() {
     setHistory(prev => prev.filter(h => h.id !== id))
   }
 
+  // PDF of one saved consultation (the PDF code is loaded only when this is pressed).
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null)
+  const handlePdf = async (h: any, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPdfBusy(String(h.id))
+    try {
+      const { downloadHistoryReport } = await import("@/lib/downloadReport")
+      await downloadHistoryReport(h)
+    } catch (err) {
+      console.error("history pdf failed:", err)
+      toast({ title: "PDF could not be made", description: "Please try again.", variant: "destructive" })
+    } finally { setPdfBusy(null) }
+  }
+
   const formatSymptoms = (h: any) => {
     const syms = Array.isArray(h.symptoms) ? h.symptoms : []
     return syms.filter((s: string) =>
@@ -120,6 +135,12 @@ function HistoryTab() {
           </div>
           <div className="flex items-center gap-1.5 ml-2 shrink-0">
             <ChevronRight size={14} className="text-gray-400 group-hover:text-green-600" />
+            <button onClick={e => handlePdf(h, e)} disabled={pdfBusy === String(h.id)}
+              data-testid="profile-history-pdf"
+              aria-label="Download PDF of this entry" title="Download PDF"
+              className="text-green-600 hover:text-green-700 transition p-1 disabled:opacity-50">
+              <Download size={13} />
+            </button>
             <button onClick={e => handleDelete(h.id, e)}
               aria-label="Delete this entry"
               className="text-gray-300 hover:text-red-600 transition p-1">

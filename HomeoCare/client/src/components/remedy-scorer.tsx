@@ -657,12 +657,15 @@ export default function RemedyScorer({
     const topResults = scoreMutation.data.slice(0, 3);
     // jsPDF is loaded only when the button is pressed, so it does not slow the first page load.
     const downloadReport = async () => {
-      const { buildReport } = await import("@/lib/report");
+      const [{ buildReport }, { patientFor }, { reportFileName }] = await Promise.all([
+        import("@/lib/report"), import("@/lib/downloadReport"), import("@shared/reportFile"),
+      ]);
+      const patient = await patientFor(healthProfile);
       const doc = buildReport({
         symptoms,
         answers: answerLines(caseState),
         redFlags,
-        profile: healthProfile as any,
+        profile: patient as any,
         analysis: aiExplain.data,
         results: topResults.map((r: any) => ({
           name: r.remedy?.name || "",
@@ -675,7 +678,7 @@ export default function RemedyScorer({
           warnings: (r.safety_flags || []).map((f: any) => f.message),
         })),
       });
-      doc.save(`homeocare-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(reportFileName((patient as any)?.name));
     };
     // Beyond the top three: keep any remedy that matches a mental symptom (second-place, fourth, fifth ...).
     const keynoteResults = scoreMutation.data.slice(3).filter((r: any) => r.keynote_matched);

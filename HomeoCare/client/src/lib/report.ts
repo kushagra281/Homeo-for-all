@@ -8,8 +8,10 @@ export interface ReportInput {
   redFlags: Array<{ level: string; message: string }>;
   profile?: { name?: string; age?: number | string; gender?: string; chronic_conditions?: string } | null;
   analysis?: { overview: string; remedies: Array<{ name: string; why: string; against: string }>; ask_next: string[] } | null;
+  consultedOn?: string;   // a report made from History says when the consultation happened
+  healthNote?: string;    // free-text health history saved with that consultation
   results: Array<{
-    name: string; score: number; dosage?: string; why?: string;
+    name: string; score: number | null; dosage?: string; why?: string;
     matches: string[]; better: string[]; worse: string[]; warnings: string[];
   }>;
 }
@@ -31,18 +33,31 @@ export function buildReport(input: ReportInput): jsPDF {
   };
   const heading = (s: string) => { y += 6; need(30); text(s, 12, true, [22, 101, 52]); doc.setDrawColor(200).line(M, y - 8, W - M, y - 8); y += 8; };
 
+  const p = input.profile;
+  // The built-in font cannot draw letters of other scripts (e.g. Devanagari); they would print as "????".
+  // So only the Latin part of the name is printed ("आयुष K" -> "K"), and nothing if none is left.
+  // The file name still carries the whole name.
+  const patientName = String(p?.name ?? "").replace(/[^\x20-\x7E -ÿ]/g, "").replace(/\s+/g, " ").trim();
+
   text("HomeoCare - Case Report", 18, true, [22, 101, 52]);
+  if (patientName) text(`Patient: ${patientName}`, 13, true);
+  if (input.consultedOn) text(`Consultation on ${input.consultedOn}`, 9, false, [110, 110, 110]);
   text(`Prepared on ${new Date().toLocaleDateString("en-GB")}`, 9, false, [110, 110, 110]);
 
-  const p = input.profile;
-  if (p && (p.name || p.age || p.gender || p.chronic_conditions)) {
-    heading("Patient");
-    text([p.name, p.age ? `${p.age} yrs` : "", p.gender].filter(Boolean).join(", "));
+  if (p && (p.age || p.gender || p.chronic_conditions)) {
+    heading("Patient details");
+    const who = [p.age ? `${p.age} yrs` : "", p.gender].filter(Boolean).join(", ");
+    if (who) text(who);
     if (p.chronic_conditions) text(`Known conditions: ${p.chronic_conditions}`);
   }
 
   heading("Complaints");
   input.symptoms.forEach((s) => text(`- ${s}`));
+
+  if (input.healthNote) {
+    heading("Health history noted");
+    text(input.healthNote, 9, false, [60, 60, 60]);
+  }
 
   if (input.answers.length) {
     heading("Case-taking answers");
@@ -67,7 +82,7 @@ export function buildReport(input: ReportInput): jsPDF {
   heading("Top remedies");
   input.results.forEach((r, i) => {
     need(60);
-    text(`#${i + 1}  ${r.name}   (${r.score}% relative match)`, 12, true);
+    text(`#${i + 1}  ${r.name}${r.score == null ? "" : `   (${r.score}% relative match)`}`, 12, true);
     if (r.why) text(r.why, 9, false, [60, 60, 60], 12);
     if (r.matches.length) text(`Matched: ${r.matches.slice(0, 8).join("; ")}`, 9, false, [60, 60, 60], 12);
     if (r.better.length) text(`Better: ${r.better.join("; ")}`, 9, false, [60, 60, 60], 12);

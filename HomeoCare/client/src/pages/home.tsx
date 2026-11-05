@@ -5,8 +5,9 @@ import {
   Search, LogOut, User, Clock, ChevronRight,
   Paperclip, ArrowLeft, X, Trash2, Globe,
   Heart, Calendar, Mail, Edit3, Check, BookOpen,
-  Menu, LogIn
+  Menu, LogIn, Download
 } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
 import { getCurrentUser, signOut, getSearchHistory, HISTORY_PAGE, deleteHistoryItem, getHealthProfile, saveHealthProfile } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import NavDrawer from "@/components/nav-drawer"
@@ -124,6 +125,20 @@ export default function Home() {
     e.stopPropagation()
     await deleteHistoryItem(id)
     setHistory(p => p.filter(h => h.id !== id))
+  }
+
+  // PDF of one saved consultation (the PDF code is loaded only when this is pressed).
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null)
+  const handleHistoryPdf = async (h: any, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPdfBusy(String(h.id))
+    try {
+      const { downloadHistoryReport } = await import("@/lib/downloadReport")
+      await downloadHistoryReport(h)
+    } catch (err) {
+      console.error("history pdf failed:", err)
+      toast({ title: "PDF could not be made", description: "Please try again.", variant: "destructive" })
+    } finally { setPdfBusy(null) }
   }
 
   const handleSearch = (e?: React.FormEvent) => {
@@ -310,6 +325,14 @@ export default function Home() {
                     </div>
                     <div className="flex items-center gap-2 ml-3 shrink-0">
                       <ChevronRight size={16} className="text-gray-300 group-hover:text-green-500" />
+                      <button
+                        onClick={e => handleHistoryPdf(h, e)} disabled={pdfBusy === String(h.id)}
+                        data-testid="history-pdf"
+                        className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition disabled:opacity-50"
+                        title="Download PDF" aria-label="Download PDF of this entry"
+                      >
+                        <Download size={14} />
+                      </button>
                       <button
                         onClick={e => handleDeleteHistory(h.id, e)}
                         className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition"

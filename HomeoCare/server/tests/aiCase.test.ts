@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildExplainMessages, buildQuestionMessages, cleanPhrase, isRepeat, parseExplanation, parseNextQuestion,
-  sanitizeExplainInput, sanitizeInput, MAX_AI_QUESTIONS,
+  sanitizeExplainInput, sanitizeInput, cleanLifestyle, MAX_AI_QUESTIONS,
 } from "../services/aiCase";
 
 const t = (name: string, fn: () => void) => { fn(); console.log("ok  ", name); };
@@ -101,4 +101,46 @@ t("the explanation only keeps remedies the engine ranked", () => {
   assert.equal(out.ask_next.length, 3);
   assert.equal(parseExplanation("nothing", EX), null);
   assert.equal(parseExplanation(JSON.stringify({ remedies: [{ name: "Belladonna", why: "x" }] }), EX), null);
+});
+
+// ── general review and per-case do's and don'ts ─────────────────────
+t("the question prompt asks for the general review and handles hair loss", () => {
+  const sys = buildQuestionMessages(inputWith(3))[0].content.toLowerCase();
+  for (const w of ["digestion", "thirst", "sleep", "perspiration", "chilly or hot", "cravings", "hair"]) assert.ok(sys.includes(w), w);
+  assert.ok(sys.includes("general"), "general areas are required before done");
+});
+t("the explain prompt asks for a do and avoid list for this case", () => {
+  const sys = buildExplainMessages(EX)[0].content;
+  assert.ok(sys.includes('"lifestyle"') && sys.includes('"do"') && sys.includes('"avoid"'));
+});
+t("lifestyle lists are cleaned: medicines, doses, cures and the ranked remedy names are dropped", () => {
+  const out = cleanLifestyle([
+    "Eat protein-rich food such as dal and eggs",
+    "Take Arsenicum Album 30 every night",
+    "Take 500 mg iron tablets daily",
+    "This will cure the hair fall",
+    "Eat protein-rich food such as dal and EGGS",
+    "ok",
+    42,
+    "Sleep 7 to 8 hours at a fixed time",
+  ], ["arsenicum album"]);
+  assert.deepEqual(out, ["Eat protein-rich food such as dal and eggs", "Sleep 7 to 8 hours at a fixed time"]);
+  assert.deepEqual(cleanLifestyle("nope"), []);
+  assert.equal(cleanLifestyle(Array.from({ length: 12 }, (_, i) => `Habit number ${i} for daily life`)).length, 5);
+});
+t("the explanation carries the case's lifestyle lists, cleaned", () => {
+  const out = parseExplanation(JSON.stringify({
+    overview: "Hair fall with indigestion.",
+    remedies: [{ name: "Arsenicum Album", why: "Night worse." }],
+    lifestyle: {
+      do: ["Eat light dinner before 8 pm", "Take Arsenicum Album daily", "Chew food slowly"],
+      avoid: ["Spicy and fried food", "Tea on an empty stomach"],
+    },
+  }), EX)!;
+  assert.deepEqual(out.lifestyle, {
+    do: ["Eat light dinner before 8 pm", "Chew food slowly"],
+    avoid: ["Spicy and fried food", "Tea on an empty stomach"],
+  });
+  const none = parseExplanation(JSON.stringify({ overview: "x", remedies: [{ name: "Arsenicum Album", why: "y" }] }), EX)!;
+  assert.equal(none.lifestyle, undefined, "no lifestyle key when the model sent none");
 });

@@ -36,6 +36,26 @@ server/websocket.ts                community chat at /ws/chat
 5. If every query failed (database paused, wrong key) the route answers with an error - it does
    not pretend there are no results.
 
+## Case-taking (the interview before the search)
+Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
+- `client/src/lib/caseTaking.ts` is the built-in question bank. Topics are found from the typed words
+  (mind, head, hair, fever, stomach, ...); each topic has its own questions, and a GENERAL bank covers the whole patient
+  (thermal, thirst, digestion, bowels, desires, sleep, sweat, energy). Every option carries search `phrases`; the phrases
+  of the answers are what the keyword search receives, so an answer reaches the diagnosis.
+- `server/services/aiCase.ts` (`/api/remedies/next-question`) lets the AI ask the next question. Its prompt requires the
+  general areas before it may say "done". If the AI is off or fails, the built-in bank runs the whole interview.
+- General top-up: when the AI says done, the app asks the required general questions that nothing answered so far has
+  settled (`queueFor(state, { generalOnly: true })`, `generalLeft`). What the typed words, the built-in answers and the text of
+  the AI's own questions already cover (`inferCovers`) is not asked again. This is code, not prompt, so a skipped area cannot
+  slip through.
+
+## Do's and Don'ts (results page)
+`client/src/lib/lifestyle.ts` holds everyday guidance per topic (hair, stomach, head, skin, ...), chosen from the typed
+complaint (two topics at most are merged; nothing recognised gives a general list). When the AI explanation arrives it may
+carry its own `lifestyle` lists written for the case; `cleanLifestyle` drops anything that names a medicine, a dose, a cure,
+a diagnosis or a ranked remedy, and the page uses the AI list per side only when at least two items survive. It is habits only,
+never treatment, and the box says which of the two it is showing.
+
 ## Data
 Supabase projects (in production the users, history and the scraped data are in the same one,
 `rtfjnfepikhahzospnqq`; `zlsinlcskirptxgqkzuw` is empty and unused):
@@ -64,4 +84,4 @@ labelled as general guidance, not a prescription, and is the same for every reme
 
 ## Tests
 `npm test` - keyword extraction, the search pipeline (against a fake database), security
-(auth + rate limits). `npm run check` - TypeScript.
+(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, and the Do's and Don'ts lists. `npm run check` - TypeScript.

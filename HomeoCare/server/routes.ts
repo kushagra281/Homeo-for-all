@@ -4,9 +4,6 @@
 
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
-import type { MedicalTerm } from "@shared/schema";
 import remediesRouter from "./routes/remedies";
 import profileRouter  from "./routes/profile";
 import repertoryRouter from "./routes/repertory";
@@ -28,33 +25,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/remedies",  remediesRouter);
   app.use("/api/profile",   profileRouter);
   app.use("/api/repertory", repertoryRouter);
-
-  // ── Medical dictionary (used by the /dictionary page) ─────────
-  let medicalTerms: MedicalTerm[] | null = null;
-  app.get("/api/medical-terms", (_req, res) => {
-    try {
-      if (!medicalTerms) {
-        const file = ["attached_assets", "server/data", "data"]
-          .map((d) => join(process.cwd(), d, "homeopathic_medical_dictionary_1753724702324.json"))
-          .find(existsSync);
-        if (!file) return res.status(404).json({ message: "Dictionary data file not found" });
-        const raw = JSON.parse(readFileSync(file, "utf-8")) as any[];
-        medicalTerms = raw.map((t, i) => ({
-          id: String(t.id ?? i + 1),
-          term: String(t.term || ""),
-          definition: String(t.definition || ""),
-          category: String(t.category || "General"),
-          synonyms: Array.isArray(t.synonyms) ? t.synonyms : [],
-          relatedRemedies: Array.isArray(t.related_remedies) ? t.related_remedies : [],
-          translations: t.translations && typeof t.translations === "object" ? t.translations : {},
-        })).filter((t) => t.term);
-      }
-      res.json(medicalTerms);
-    } catch (error) {
-      console.error("[Route] medical-terms:", error);
-      res.status(500).json({ message: "Failed to load dictionary" });
-    }
-  });
 
   const httpServer = createServer(app);
   return httpServer;

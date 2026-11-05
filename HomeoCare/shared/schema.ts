@@ -45,16 +45,6 @@ export interface Remedy {
   symptom_mappings?: Record<string, number>;
 }
 
-export interface MedicalTerm {
-  id: string;
-  term: string;
-  definition: string;
-  category: string;
-  synonyms: string[];
-  relatedRemedies: string[];
-  translations?: Record<string, string>;
-}
-
 export interface InsertRemedy extends Omit<Remedy, "id"> {}
 
 export interface DiagnosticQuestion {

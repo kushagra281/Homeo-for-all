@@ -1,5 +1,5 @@
 import { useLocation } from "wouter"
-import { BookOpen, Clock, FolderOpen, Home as HomeIcon, Library, LogIn, LogOut, Pill, User, Users } from "lucide-react"
+import { Clock, Home as HomeIcon, LogIn, LogOut, User } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { signOut } from "@/lib/supabase"
 
@@ -12,19 +12,14 @@ interface Props {
   onHistory?: () => void
 }
 
-/** The ☰ drawer: every secondary page of the app, the same on every screen. */
+/** The ☰ drawer, the same on every screen. Repertory and Community pages still exist at /repertory and /community but are not linked here. */
 export default function NavDrawer({ open, onOpenChange, user, onHome, onHistory }: Props) {
   const [, setLocation] = useLocation()
   const go = (fn: () => void) => { onOpenChange(false); fn() }
   const items: { label: string; icon: any; run: () => void; testId: string; needsUser?: boolean }[] = [
     { label: "Home",             icon: HomeIcon,   testId: "menu-home",       run: onHome || (() => setLocation("/")) },
-    { label: "Repertory",        icon: BookOpen,   testId: "menu-repertory",  run: () => setLocation("/repertory") },
-    { label: "Search by remedy", icon: Pill,       testId: "menu-by-remedy",  run: () => setLocation("/repertory?tab=remedy") },
-    { label: "My cases",         icon: FolderOpen, testId: "menu-cases",      run: () => setLocation("/repertory?tab=case") },
     { label: "History",          icon: Clock,      testId: "menu-history",    run: onHistory || (() => setLocation("/?view=history")), needsUser: true },
     { label: "Profile",          icon: User,       testId: "menu-profile",    run: () => setLocation("/profile"), needsUser: true },
-    { label: "Dictionary",       icon: Library,    testId: "menu-dictionary", run: () => setLocation("/dictionary") },
-    { label: "Community",        icon: Users,      testId: "menu-community",  run: () => setLocation("/community") },
   ]
   const logout = async () => { await signOut(); setLocation("/auth") }
 

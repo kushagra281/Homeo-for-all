@@ -244,7 +244,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Cannot fall asleep", "sleeplessness"), o("Wakes at a fixed hour", "waking night"), o("Unrefreshing sleep", "sleep unrefreshing"), o("Vivid dreams", "dreams"), o("Nightmares", "dreams"), o("Restless, tossing", "restlessness night")] },
     { id: "sleep-why", topic: "sleep", multi: true, text: "What keeps you awake?", why: "The reason for sleeplessness points to the mental picture.",
       options: [o("Racing thoughts", "thinking"), o("Worry", "anxiety"), o("Pain or discomfort"), o("Heat in bed", "heat bed"), o("Noise", "noise"), o("No reason")] },
-    { id: "sleep-hour", topic: "sleep", multi: false, text: "At what time do you wake?", why: "Time of waking is a classical key.", covers: ["time"],
+    { id: "sleep-hour", topic: "sleep", multi: false, text: "At what time do you wake?", why: "Time of waking is a classical key.",
       options: [o("11 pm to 1 am", "waking midnight"), o("2 to 4 am", "waking 3 am"), o("Early morning, cannot sleep again", "waking early"), o("Varies")] },
   ],
   hair: [
@@ -316,12 +316,17 @@ const COVER_PATTERNS: Array<[string, RegExp]> = [
   ["desire", /craving|crave|desire|aversion|dislike|food prefer|favou?rite food|longing/i],
   ["energy", /energy|tired|fatigue|exhaust|weakness/i],
   // time of aggravation: asked about the time of day, or morning/evening/night named together or with worse/better
-  ["time", /what time|time of (?:the )?(?:day|night)|\b(?:morning|afternoon|evening|night|midnight)s?\b.{0,40}\b(?:morning|afternoon|evening|night|midnight)s?\b|\b(?:worse|better|aggravat\w*|relie\w*)\b.{0,50}\b(?:morning|afternoon|evening|night|midnight|daytime)\b|\b(?:morning|afternoon|evening|night|midnight|daytime)\b.{0,50}\b(?:worse|better|aggravat\w*)\b/i],
+  ["time", /\b(?:what time|time of (?:the )?(?:day|night))\b.{0,60}\b(?:worse|better|aggravat\w*|relie\w*|troubl\w*|bother\w*)\b|\b(?:worse|better|aggravat\w*|relie\w*|troubl\w*|bother\w*)\b.{0,60}\b(?:what time|time of (?:the )?(?:day|night))\b|\b(?:morning|afternoon|evening|night|midnight)s?\b.{0,40}\b(?:morning|afternoon|evening|night|midnight)s?\b|\b(?:worse|better|aggravat\w*|relie\w*)\b.{0,50}\b(?:morning|afternoon|evening|night|midnight|daytime)\b|\b(?:morning|afternoon|evening|night|midnight|daytime)\b.{0,50}\b(?:worse|better|aggravat\w*)\b/i],
   // motion or rest: a movement word next to worse/better/effect
   ["motion", /\b(?:worse|better|aggravat\w*|relie\w*|help\w*|affect\w*|brings? on|triggers?|eases|settles)\b.{0,50}\b(?:motion|movement|mov\w+|exertion|exercise|walking|climbing|rest|lying|sitting|standing|position|activity|effort)\b|\b(?:motion|movement|exertion|exercise|walking|climbing|rest|lying|position|activity|effort)\b.{0,50}\b(?:worse|better|aggravat\w*|relie\w*|help\w*|affect\w*|brings? on|triggers?)\b/i],
 ];
+// A question about when the complaint BEGAN ("What time did the palpitations begin?") is not about the time of
+// aggravation, so it does not settle the required time question unless it also asks what is worse or better.
+const ONSET = /\b(?:begin|began|begun|start(?:s|ed)?|onset|first (?:noticed?|appeared?)|since when|how long|ago)\b/i;
+const MODALITY = /\b(?:worse|better|aggravat\w*|relie\w*|troubl\w*|bother\w*)\b/i;
 export function inferCovers(text: string): string[] {
-  return COVER_PATTERNS.filter(([, re]) => re.test(text)).map(([k]) => k);
+  const onset = ONSET.test(text) && !MODALITY.test(text);
+  return COVER_PATTERNS.filter(([k, re]) => re.test(text) && !(k === "time" && onset)).map(([k]) => k);
 }
 
 // ── Choosing the next question ─────────────────────────────────────

@@ -73,6 +73,15 @@ t("time of day and motion are settled by what the AI asked", () => {
   assert.ok(inferCovers("Is it worse in the morning or at night?").includes("time"));
   assert.ok(inferCovers("Does walking or rest make it better or worse?").includes("motion"));
   assert.ok(inferCovers("Does lying down relieve the pain?").includes("motion"));
+  assert.ok(inferCovers("At what time is the pain worse?").includes("time"));
+  assert.ok(inferCovers("At what time of day do the symptoms become worse?").includes("time"));
+  assert.ok(inferCovers("Does it trouble you more in the morning or at night?").includes("time"));
+  // onset and waking questions are not about the time of aggravation (Codex finding on PR #54)
+  for (const q of ["What time did the palpitations begin?", "At what time did the hair fall start?", "What time of day does the cough start?",
+    "Did it start in the morning or at night?", "How long ago did it begin, in the morning or evening?", "What time do you wake at night?", "What time do you usually sleep?"]) {
+    assert.ok(!inferCovers(q).includes("time"), `${q} must not settle the time question`);
+  }
+  assert.ok(inferCovers("When did it begin and is it worse in the evening?").includes("time"), "an onset question that also asks what is worse still counts");
   assert.ok(!inferCovers("Where exactly is the pain?").includes("time"));
   assert.ok(!inferCovers("Do you have any family history of heart disease?").includes("motion"));
   const state: CaseState = { symptoms: ["x"], answers: { "ai-1": ["Evening"], "ai-2": ["Rest"] }, custom: {
@@ -80,6 +89,13 @@ t("time of day and motion are settled by what the AI asked", () => {
   } };
   const ids = queueFor(state, { generalOnly: true }).map((q) => q.id);
   assert.ok(!ids.includes("gen-time") && !ids.includes("gen-motion"), "an AI question on time and motion settles them");
+});
+
+t("an AI onset question leaves the required time question open, and the sleep hour does not settle it", () => {
+  const state: CaseState = { symptoms: ["palpitations"], answers: { "ai-1": ["2 weeks ago"] }, custom: { "ai-1": aiQ("ai-1", "What time did the palpitations begin?") } };
+  assert.ok(queueFor(state, { generalOnly: true }).map((q) => q.id).includes("gen-time"), "gen-time is still asked");
+  const sleep = interview(["cannot sleep"], {}, "Sleep");
+  assert.ok(sleep.asked.includes("sleep-hour") && sleep.asked.includes("gen-time"), "the sleep case still gets the time-of-aggravation question");
 });
 
 t("an emotional symptom is followed by psychology questions, not generic ones", () => {

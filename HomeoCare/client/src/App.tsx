@@ -11,6 +11,7 @@ const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
 const PrivacyPage = lazy(() => import("@/pages/legal").then(m => ({ default: m.PrivacyPage })));
 const TermsPage = lazy(() => import("@/pages/legal").then(m => ({ default: m.TermsPage })));
 import NotFound from "@/pages/not-found";
+import ErrorBoundary from "@/components/error-boundary";
 const ProfilePage = lazy(() => import("@/pages/profile"));
 const Community = lazy(() => import("@/pages/community"));
 const RepertoryPage = lazy(() => import("@/pages/repertory"));
@@ -37,7 +38,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <ErrorBoundary>
+          <Router />
+        </ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

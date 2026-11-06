@@ -15,6 +15,7 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const [forgot, setForgot] = useState(false)
   const [resetSent, setResetSent] = useState(false)
+  const [notice, setNotice] = useState("")
   const [form, setForm] = useState({ name: "", email: "", password: "" })
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export default function AuthPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
-    setError("")
+    setError(""); setNotice("")
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,7 +43,20 @@ export default function AuthPage() {
         await signIn(form.email, form.password)
       } else {
         if (!form.name.trim()) { setError("Name is required"); setLoading(false); return }
-        await signUp(form.email, form.password, form.name)
+        const res: any = await signUp(form.email, form.password, form.name)
+        // Supabase answers an already registered email with a user that has no identities (and no error).
+        if (Array.isArray(res?.user?.identities) && res.user.identities.length === 0) {
+          setIsLogin(true)
+          setError("An account with this email already exists. Please log in, or use Forgot password.")
+          return
+        }
+        // When the project asks for email confirmation there is no session yet: say so instead of sending the person
+        // to a home page that sends them straight back here.
+        if (!res?.session) {
+          setIsLogin(true)
+          setNotice("Account created. We have sent a confirmation link to your email. Open it, then log in here.")
+          return
+        }
       }
       setLocation("/")
     } catch (err: any) {
@@ -176,6 +190,12 @@ export default function AuthPage() {
           {resetSent && (
             <div data-testid="reset-sent" className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg">
               If an account exists for this email, a reset link is on its way. Check your inbox and spam folder.
+            </div>
+          )}
+
+          {notice && (
+            <div data-testid="signup-notice" className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg">
+              {notice}
             </div>
           )}
 

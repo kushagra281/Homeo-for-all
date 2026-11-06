@@ -39,15 +39,20 @@ server/websocket.ts                community chat at /ws/chat
 ## Case-taking (the interview before the search)
 Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
 - `client/src/lib/caseTaking.ts` is the built-in question bank. Topics are found from the typed words
-  (mind, head, hair, fever, stomach, ...); each topic has its own questions, and a GENERAL bank covers the whole patient
-  (thermal, thirst, digestion, bowels, desires, sleep, sweat, energy). Every option carries search `phrases`; the phrases
+  (mind, head, heart, hair, fever, stomach, ...); each topic has its own questions, and a GENERAL bank covers the whole patient
+  (thermal, time of day, motion or rest, thirst, digestion, bowels, desires, sleep, sweat, energy). The Heart category (or
+  words such as palpitations, chest pain, blood pressure; "heartburn" stays a stomach word) selects the heart topic,
+  whose questions include a warning to see a doctor at once for chest pain with sweating, breathlessness or pain
+  spreading to the arm or jaw. Every option carries search `phrases`; the phrases
   of the answers are what the keyword search receives, so an answer reaches the diagnosis.
-- `server/services/aiCase.ts` (`/api/remedies/next-question`) lets the AI ask the next question. Its prompt requires the
-  general areas before it may say "done". If the AI is off or fails, the built-in bank runs the whole interview.
+- `server/services/aiCase.ts` (`/api/remedies/next-question`) lets the AI ask the next question. It asks at most
+  `MAX_AI_QUESTIONS` (12), spends them on the complaint and its modalities first, and its prompt asks for the general
+  areas before it may say "done". If the AI is off or fails, the built-in bank runs the whole interview.
 - General top-up: when the AI says done, the app asks the required general questions that nothing answered so far has
   settled (`queueFor(state, { generalOnly: true })`, `generalLeft`). What the typed words, the built-in answers and the text of
   the AI's own questions already cover (`inferCovers`) is not asked again. This is code, not prompt, so a skipped area cannot
-  slip through.
+  slip through. Nine areas are required: temperature, time of day, motion or rest, thirst, digestion, bowels, desires,
+  sleep and sweat. So the AI stops at 12 and nothing important is lost: whatever it did not reach is asked by the app.
 - Budget: `MAX_QUESTIONS` (20) is room for the whole interview, not only for topic questions. The required general
   questions still open are reserved a place in it (`nextQuestion`), they come before the optional general ones, and the AI
   stops asking once `answers + generalLeft >= MAX_QUESTIONS`. A long mind-led case therefore ends with all required areas
@@ -55,8 +60,8 @@ Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
 
 ## Do's and Don'ts (results page)
 `client/src/lib/lifestyle.ts` holds everyday guidance per topic (hair, stomach, head, skin, ...), chosen from the typed
-complaint (two topics at most are merged; nothing recognised gives a general list). The heart is recognised in that file
-(palpitations, chest pain, blood pressure, or the Heart category), because the interview itself has no heart topic. When the AI explanation arrives it may
+complaint (two topics at most are merged; nothing recognised gives a general list). The heart is a topic like the others
+(palpitations, chest pain, blood pressure, or the Heart category); when two topics tie, the chosen category leads. When the AI explanation arrives it may
 carry its own `lifestyle` lists written for the case; `cleanLifestyle` drops anything that names a medicine, supplement, herb, cream,
 dose, cure, diagnosis or a ranked remedy, and keeps a "do" item only if it starts with a habit verb (Eat, Walk, Keep ...). It is a
 filter, not a guarantee. The page uses the AI list per side only when at least two items survive. It is habits only,

@@ -87,6 +87,11 @@ t("time of day and motion are settled by what the AI asked", () => {
     assert.ok(!inferCovers(q).includes("time"), `${q} must not settle the time question`);
   }
   assert.ok(inferCovers("When did it begin and is it worse in the evening?").includes("time"), "an onset question that also asks what is worse still counts");
+  // an onset question followed by an unrelated measurement or preference question is still only an onset question (Codex finding on PR #58)
+  for (const q of ["What time did the fever start? What was your maximum temperature?", "What time did the cough start? Which syrup works best?"]) {
+    assert.ok(!inferCovers(q).includes("time"), q);
+  }
+  assert.ok(inferCovers("What time did it start? Is it worse in the morning?").includes("time"), "the second sentence asks it");
   assert.ok(!inferCovers("Where exactly is the pain?").includes("time"));
   assert.ok(!inferCovers("Do you have any family history of heart disease?").includes("motion"));
   const state: CaseState = { symptoms: ["x"], answers: { "ai-1": ["Evening"], "ai-2": ["Rest"] }, custom: {

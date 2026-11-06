@@ -90,12 +90,22 @@ t("time of day and motion are settled by what the AI asked", () => {
   assert.ok(inferCovers("At what time is the pain worse?").includes("time"));
   assert.ok(inferCovers("At what time of day do the symptoms become worse?").includes("time"));
   assert.ok(inferCovers("Does it trouble you more in the morning or at night?").includes("time"));
+  // peak wording counts as asking when it is worse (Codex finding on PR #55)
+  for (const q of ["At what time of day is the pain at its worst?", "What time of day is it most severe?", "At what time does the pain peak?",
+    "What time of night are the symptoms strongest?", "When is the pain at its worst, morning or evening?"]) {
+    assert.ok(inferCovers(q).includes("time"), q);
+  }
   // onset and waking questions are not about the time of aggravation (Codex finding on PR #54)
   for (const q of ["What time did the palpitations begin?", "At what time did the hair fall start?", "What time of day does the cough start?",
     "Did it start in the morning or at night?", "How long ago did it begin, in the morning or evening?", "What time do you wake at night?", "What time do you usually sleep?"]) {
     assert.ok(!inferCovers(q).includes("time"), `${q} must not settle the time question`);
   }
   assert.ok(inferCovers("When did it begin and is it worse in the evening?").includes("time"), "an onset question that also asks what is worse still counts");
+  // an onset question followed by an unrelated measurement or preference question is still only an onset question (Codex finding on PR #58)
+  for (const q of ["What time did the fever start? What was your maximum temperature?", "What time did the cough start? Which syrup works best?"]) {
+    assert.ok(!inferCovers(q).includes("time"), q);
+  }
+  assert.ok(inferCovers("What time did it start? Is it worse in the morning?").includes("time"), "the second sentence asks it");
   assert.ok(!inferCovers("Where exactly is the pain?").includes("time"));
   assert.ok(!inferCovers("Do you have any family history of heart disease?").includes("motion"));
   const state: CaseState = { symptoms: ["x"], answers: { "ai-1": ["Evening"], "ai-2": ["Rest"] }, custom: {

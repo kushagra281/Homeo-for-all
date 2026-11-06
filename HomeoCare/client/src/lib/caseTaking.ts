@@ -157,7 +157,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
     { id: "head-where", topic: "head", multi: false, text: "Where is it?", why: "Side and place of the pain are strong guiding symptoms.",
       options: [o("Forehead", "forehead headache"), o("Temples", "temples headache"), o("Back of head", "occiput headache"), o("Top of head", "vertex headache"), o("Right side", "right headache"), o("Left side", "left headache"), o("Whole head")],
       skipIf: /forehead|temple|occiput|vertex|right side|left side/i },
-    { id: "head-worse", topic: "head", multi: true, text: "What makes the headache worse?", why: "Aggravations separate remedies that look alike.", covers: ["motion", "time", "temp"],
+    { id: "head-worse", topic: "head", multi: true, text: "What makes the headache worse?", why: "Aggravations separate remedies that look alike.", covers: ["motion", "time"],
       options: [worse("Light"), worse("Noise"), worse("Motion", "motion"), worse("Stooping", "stooping"), worse("Heat"), worse("Cold"), worse("Morning"), worse("Evening"), worse("Sun", "sun"), worse("Reading or screen", "eyestrain"), none()] },
     { id: "head-better", topic: "head", multi: true, text: "What makes it better?", why: "Ameliorations are as important as aggravations.", covers: ["better"],
       options: [better("Rest"), better("Pressure"), better("Cold applications", "cold"), better("Lying down"), better("Open air"), better("Darkness"), better("Sleep"), none()] },
@@ -206,7 +206,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Right", "throat right"), o("Left", "throat left"), o("Both equally"), o("Starts right, goes left", "throat right left")] },
     { id: "throat-disch", topic: "throat", multi: false, text: "What is the discharge like?", why: "The nature of discharge separates cold remedies.",
       options: [o("Watery, burning the lip", "coryza watery excoriating"), o("Thick yellow or green", "coryza yellow"), o("Bland and white", "coryza white"), o("Dry, no discharge", "dryness nose")] },
-    { id: "throat-drink", topic: "throat", multi: false, text: "Hot or cold drinks?", why: "Preference for warm or cold fluids is a general key.", covers: ["temp"],
+    { id: "throat-drink", topic: "throat", multi: false, text: "Hot or cold drinks?", why: "Preference for warm or cold fluids is a general key.",
       options: [better("Warm drinks", "warm drinks"), better("Cold drinks", "cold drinks"), o("No difference")] },
   ],
   skin: [
@@ -214,7 +214,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Red rash", "rash"), o("Blisters", "vesicles"), o("Dry and scaly", "dry scaly eruption"), o("Moist, oozing", "moist eruption"), o("Pimples", "pimples"), o("Cracks", "cracks")], skipIf: /rash|blister|vesic|scaly|oozing|pimple|crack/i },
     { id: "skin-sens", topic: "skin", multi: false, text: "What does it feel like?", why: "The sensation guides the choice strongly.",
       options: [o("Itching", "itching"), o("Burning", "burning skin"), o("Stinging", "stinging"), o("Painful", "painful skin"), o("No sensation")], skipIf: /itch|burn|sting|khujli/i },
-    { id: "skin-worse", topic: "skin", multi: true, text: "What makes it worse?", why: "Aggravations separate skin remedies.", covers: ["temp", "time"],
+    { id: "skin-worse", topic: "skin", multi: true, text: "What makes it worse?", why: "Aggravations separate skin remedies.", covers: ["time"],
       options: [worse("Heat or warmth", "warmth"), worse("Cold"), worse("Night"), worse("Scratching", "scratching"), worse("Washing", "washing"), worse("Bed warmth", "warmth bed"), none()] },
     { id: "skin-better", topic: "skin", multi: true, text: "What helps?", why: "What relieves itching or burning is a strong key.", covers: ["better"],
       options: [better("Cold applications", "cold"), better("Warm applications", "warmth"), better("Scratching", "scratching"), better("Open air"), none()] },
@@ -226,7 +226,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
       options: [o("Joint pain", "joint pain"), o("Muscle pain", "muscle pain"), o("Stiffness", "stiffness"), o("Swelling", "swelling joints"), o("Weakness", "weakness limbs"), o("Numbness", "numbness"), o("Shooting or tearing pain", "tearing pain")], skipIf: /joint pain|muscle pain|stiff|swell|numb|tearing/i },
     { id: "joint-motion", topic: "joints", multi: false, text: "How does motion affect it?", why: "Motion is the key modality of joint complaints.", covers: ["motion"],
       options: [o("Worse on first movement, better on continued", "worse first motion better continued motion"), o("Worse on any movement", "worse motion"), o("Better by rest", "better rest"), o("Worse by rest", "worse rest"), o("No relation")] },
-    { id: "joint-weather", topic: "joints", multi: true, text: "Effect of weather and warmth?", why: "Damp, cold and heat modalities are classical keys.", covers: ["temp"],
+    { id: "joint-weather", topic: "joints", multi: true, text: "Effect of weather and warmth?", why: "Damp, cold and heat modalities are classical keys.",
       options: [o("Worse by cold", "worse cold"), o("Worse in damp weather", "worse damp"), o("Worse before a storm", "worse storm"), o("Better by warmth", "better warmth"), o("Better by hot application", "better heat"), o("Worse by heat", "worse heat"), none()] },
     { id: "joint-where", topic: "joints", multi: true, text: "Where is it?", why: "Place and side of the pain matter.",
       options: [o("Neck", "neck pain"), o("Upper back", "back pain"), o("Lower back", "lumbar pain"), o("Shoulder", "shoulder pain"), o("Knee", "knee pain"), o("Hip or thigh", "hip pain"), o("Right side"), o("Left side")] },
@@ -264,7 +264,7 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
   female: [
     { id: "fem-main", topic: "female", multi: true, text: "What is the complaint?", why: "Tells which women's complaint leads.",
       options: [o("Irregular periods", "menses irregular"), o("Painful periods", "dysmenorrhoea"), o("Heavy bleeding", "menses profuse"), o("Scanty periods", "menses scanty"), o("White discharge", "leucorrhoea"), o("Menopause symptoms", "climacteric"), o("Mood change before periods", "mood menses")] },
-    { id: "fem-pain", topic: "female", multi: false, text: "How is the period pain?", why: "Nature of period pain is decisive.", covers: ["motion", "temp"],
+    { id: "fem-pain", topic: "female", multi: false, text: "How is the period pain?", why: "Nature of period pain is decisive.", covers: ["motion"],
       options: [o("Cramping, better bending double", "cramping better bending"), o("Better by warmth", "better warmth"), o("Better by pressure", "better pressure"), o("Worse by motion", "worse motion"), o("No pain")] },
     { id: "fem-blood", topic: "female", multi: false, text: "Colour of menstrual blood?", why: "Quality of blood guides the remedy.",
       options: [o("Bright red", "menses bright red"), o("Dark", "menses dark"), o("Clotted", "menses clotted"), o("Watery or pale", "menses pale")] },
@@ -274,6 +274,9 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
 };
 
 // ── General modalities: asked once, only if not already known ────────
+// Note on `covers: ["temp"]`: only the general thermal question and a typed or AI-asked "chilly or hot?" settle it.
+// A local modality ("worse from cold", "hot or cold drinks") says nothing about whether the PATIENT is chilly or hot,
+// so topic questions must not claim it (the patient Trials found the required question skipped in 19 of 66 cases).
 const GENERAL: CaseQuestion[] = [
   { id: "gen-temp", topic: "general", multi: false, text: "Are you generally chilly or too warm?", why: "Body heat is one of the most important general symptoms.", covers: ["temp"], required: true,
     options: [o("Chilly, wants warm clothes", "chilly"), o("Hot, wants open air", "hot"), o("Depends"), o("Cannot say")], skipIf: /chilly|warm blooded|hot patient|feel cold|feel hot|thand|garmi/i },

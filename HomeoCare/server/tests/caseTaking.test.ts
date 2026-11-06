@@ -68,6 +68,20 @@ t("heart answers reach the search as phrases", () => {
   for (const p of ["worse exertion", "worse emotion", "perspiration", "anxiety death", "high blood pressure"]) assert.ok(ph.includes(p), p);
 });
 
+t("a local modality never settles the general question: is the PATIENT chilly or hot", () => {
+  // the patient Trials found gen-temp skipped in 19 of 66 interviews because head, skin, joint, throat or period questions claimed it
+  for (const [typed, category] of [["headache", "Head"], ["itching skin", "Skin"], ["joint pain", "Hands, Legs & Back"], ["sore throat", "Throat"], ["painful periods", ""]] as const) {
+    const { asked } = interview([typed], {}, category);
+    assert.ok(asked.includes("gen-temp"), `${typed}: the chilly-or-hot question is still asked`);
+  }
+  // but what the patient says about being chilly or hot, or an AI question about it, does settle it
+  assert.ok(!interview(["joint pain, I am very chilly"], {}, "Hands, Legs & Back").asked.includes("gen-temp"));
+  const state: CaseState = { symptoms: ["joint pain"], answers: { "ai-1": ["Chilly"] }, custom: { "ai-1": aiQ("ai-1", "Are you generally chilly or too warm?") } };
+  assert.ok(!queueFor(state, { generalOnly: true }).map((q) => q.id).includes("gen-temp"));
+  // the local question is still asked and still read as a modality, it just does not count as the general one
+  assert.ok(interview(["headache"], {}, "Head").asked.includes("head-worse"));
+});
+
 t("time of day and motion are settled by what the AI asked", () => {
   assert.ok(inferCovers("At what time of day is it worse?").includes("time"));
   assert.ok(inferCovers("Is it worse in the morning or at night?").includes("time"));

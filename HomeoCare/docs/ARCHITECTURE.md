@@ -53,6 +53,9 @@ Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
   the AI's own questions already cover (`inferCovers`) is not asked again. This is code, not prompt, so a skipped area cannot
   slip through. Nine areas are required: temperature, time of day, motion or rest, thirst, digestion, bowels, desires,
   sleep and sweat. So the AI stops at 12 and nothing important is lost: whatever it did not reach is asked by the app.
+  A topic question settles a general area only when it asks the same thing: a local modality ("worse from cold", "hot or cold
+  drinks") does not settle "is the patient chilly or hot", and a question about when the complaint began does not settle the
+  time of aggravation.
 - Budget: `MAX_QUESTIONS` (20) is room for the whole interview, not only for topic questions. The required general
   questions still open are reserved a place in it (`nextQuestion`), they come before the optional general ones, and the AI
   stops asking once `answers + generalLeft >= MAX_QUESTIONS`. A long mind-led case therefore ends with all required areas

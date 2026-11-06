@@ -324,7 +324,7 @@ export default function ProfilePage() {
                       </Button>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">{photoBusy ? "Saving photo..." : "Only you can see it. It is kept small (256 px)."}</p>
+                  {photoBusy && <p className="text-xs text-gray-400 mt-2">Saving photo...</p>}
                 </div>
               </div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" data-testid="photo-input"

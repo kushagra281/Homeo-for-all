@@ -235,3 +235,28 @@ export function cleanLifestyle(list: unknown, remedyNames: string[], side: "do" 
   }
   return out;
 }
+
+// ── report photo reading ──────────────────────────────────────────
+// The vision model's JSON goes to the browser as it is, and the page puts every symptom on screen as text.
+// A model that answers with objects, numbers or one long string instead of a list of short texts used to
+// blank the whole page, so the reply is reduced to lists of short texts here.
+function textList(v: unknown, max: number, len: number): string[] {
+  const items = typeof v === "string" ? v.split(/[\n;,]/) : Array.isArray(v) ? v : [];
+  const out: string[] = [];
+  for (const x of items) {
+    const t = clip(x, len);
+    if (t.length < 2 || out.some((y) => y.toLowerCase() === t.toLowerCase())) continue;
+    out.push(t);
+    if (out.length === max) break;
+  }
+  return out;
+}
+
+export function cleanReportReply(parsed: unknown): { symptoms: string[]; conditions: string[]; summary: string } {
+  const p = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  return {
+    symptoms: textList(p.symptoms, 30, 200),
+    conditions: textList(p.conditions, 20, 120),
+    summary: clip(p.summary, 300) || "Report analyzed",
+  };
+}

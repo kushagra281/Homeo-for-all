@@ -510,6 +510,16 @@ export async function saveAvatar(userId: string, email: string, avatar: string |
   throw new Error(error.message);
 }
 
+/** Believable ranges of the number fields; a value outside them (or text) is saved as empty, not as it was typed. */
+const PROFILE_RANGE: Record<string, [number, number]> = { age: [0, 120], height_cm: [30, 260], weight_kg: [1, 500] };
+export function profileNumber(col: string, value: unknown): number | null {
+  const text = String(value ?? "").trim();
+  const n = Number(text);
+  const range = PROFILE_RANGE[col];
+  if (text === "" || !Number.isFinite(n) || !range || n < range[0] || n > range[1]) return null;
+  return col === "age" ? Math.round(n) : n;
+}
+
 export async function upsertProfileRow(userId: string, email: string, profile: Record<string, any>, accessToken?: string): Promise<void> {
   // Build safe profile object — only include columns that are not undefined/null empty
   const safeProfile: Record<string, any> = { id: userId, email, updated_at: new Date().toISOString() };
@@ -531,12 +541,8 @@ export async function upsertProfileRow(userId: string, email: string, profile: R
 
   // Number columns reject "" (an untouched form field) and text such as "35 yrs": send a number or null.
   for (const col of ["age", "height_cm", "weight_kg"]) {
-    if (col in safeProfile) {
-      const n = Number(String(safeProfile[col]).trim());
-      safeProfile[col] = String(safeProfile[col]).trim() !== "" && Number.isFinite(n) ? n : null;
-    }
+    if (col in safeProfile) safeProfile[col] = profileNumber(col, safeProfile[col]);
   }
-  if (typeof safeProfile.age === "number") safeProfile.age = Math.round(safeProfile.age);
 
   console.log("[DB] Upserting profile for userId:", userId, "columns:", Object.keys(safeProfile).length);
 

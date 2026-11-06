@@ -129,4 +129,4 @@ labelled as general guidance, not a prescription, and is the same for every reme
 
 ## Tests
 `npm test` - keyword extraction, the search pipeline (against a fake database), security
-(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, the Do's and Don'ts lists, the profile photo checks, bad request shapes and odd AI replies (`inputs.test.ts`), the community chat (`chat.test.ts`), and the patient simulator (personas, seeded noise, the interview it drives). `npm run check` - TypeScript.
+(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, the Do's and Don'ts lists, the profile photo checks, bad request shapes and odd AI replies (`inputs.test.ts`), the community chat (`chat.test.ts`), the profile number ranges (`profileNumbers.test.ts`), and the patient simulator (personas, seeded noise, the interview it drives). `npm run check` - TypeScript.

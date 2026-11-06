@@ -345,11 +345,11 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Height (cm)</label>
-                  <Input type="number" value={form.height_cm} onChange={e => set("height_cm", e.target.value)} placeholder="e.g. 170" />
+                  <Input type="number" value={form.height_cm} onChange={e => set("height_cm", e.target.value)} placeholder="e.g. 170" min="30" max="260" />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Weight (kg)</label>
-                  <Input type="number" value={form.weight_kg} onChange={e => set("weight_kg", e.target.value)} placeholder="e.g. 70" />
+                  <Input type="number" value={form.weight_kg} onChange={e => set("weight_kg", e.target.value)} placeholder="e.g. 70" min="1" max="500" />
                 </div>
               </div>
               <div className="mt-3">

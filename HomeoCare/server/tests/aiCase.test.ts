@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
   buildExplainMessages, buildQuestionMessages, cleanPhrase, isRepeat, parseExplanation, parseNextQuestion,
-  sanitizeExplainInput, sanitizeInput, cleanLifestyle, MAX_AI_QUESTIONS,
+  sanitizeExplainInput, sanitizeInput, cleanLifestyle, cleanReportReply, MAX_AI_QUESTIONS,
 } from "../services/aiCase";
 
 const t = (name: string, fn: () => void) => { fn(); console.log("ok  ", name); };
@@ -190,4 +190,18 @@ t("a model that recommends a medicine in its lifestyle lists never reaches the p
     },
   }), EX)!;
   assert.deepEqual(out.lifestyle, { do: ["Eat a light dinner before 8 pm", "Walk for 20 minutes daily"], avoid: ["Skipping breakfast", "Hot showers on the hair"] });
+});
+
+t("a report reply is reduced to short texts (objects and numbers used to blank the page)", () => {
+  const ok = cleanReportReply({ symptoms: ["headache", "fever"], conditions: ["diabetes"], summary: "Mild fever." });
+  assert.deepEqual(ok, { symptoms: ["headache", "fever"], conditions: ["diabetes"], summary: "Mild fever." });
+  const odd = cleanReportReply({ symptoms: [{ name: "headache" }, 5, null, " cough ", "COUGH", "x"], conditions: "diabetes; asthma", summary: { a: 1 } });
+  assert.deepEqual(odd.symptoms, ["cough"]);
+  assert.deepEqual(odd.conditions, ["diabetes", "asthma"]);
+  assert.equal(odd.summary, "Report analyzed");
+  assert.deepEqual(cleanReportReply({ symptoms: "headache, fever\nweakness" }).symptoms, ["headache", "fever", "weakness"]);
+  for (const bad of [null, undefined, 5, "text", [], [1, 2]]) assert.deepEqual(cleanReportReply(bad), { symptoms: [], conditions: [], summary: "Report analyzed" });
+  const big = cleanReportReply({ symptoms: Array.from({ length: 80 }, (_, i) => "symptom number " + i + "x".repeat(300)) });
+  assert.equal(big.symptoms.length, 30);
+  assert.ok(big.symptoms.every((x) => x.length <= 200));
 });

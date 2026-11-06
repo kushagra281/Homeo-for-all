@@ -78,7 +78,10 @@ class ChatServer {
     if (!cleanUsername) return;
     // Nobody may pose as the server's own announcements.
     if (/^(system|admin|moderator)$/i.test(cleanUsername)) return;
-    if (!this.users.has(userId) && this.users.size >= this.MAX_USERS) return;
+    // Joining twice would repeat the "joined" notice (one connection could flood the room and push the real
+    // messages out of the history), so a connection that is already in the chat is ignored.
+    if (this.users.has(userId)) return;
+    if (this.users.size >= this.MAX_USERS) return;
 
     // Store user
     this.users.set(userId, {

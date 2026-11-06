@@ -11,10 +11,11 @@ import { suggestPotency, potencyLine } from "../../shared/potency";
 import { splitMatches } from "../services/scoringService";
 import {
   buildExplainMessages, buildQuestionMessages, parseExplanation, parseNextQuestion,
-  sanitizeExplainInput, sanitizeInput,
+  cleanReportReply, sanitizeExplainInput, sanitizeInput,
 } from "../services/aiCase";
 
 const router = Router();
+const FILTER_KEYS = ["age_group", "gender", "condition_type", "symptom_location", "category", "potency"] as const;
 
 // Searching hits the database; report analysis calls a paid AI model.
 const searchLimit  = rateLimit({ name: "search",  windowMs: 60_000, max: 30 });
@@ -91,7 +92,7 @@ router.post("/explain", aiLimit, async (req, res) => {
 // Returns: SearchResult
 router.post("/score", searchLimit, async (req, res) => {
   try {
-    const { filters = {}, healthProfile } = req.body || {};
+    const rawFilters = req.body?.filters ?? {};
     const raw = req.body?.symptoms;
 
     if (!Array.isArray(raw) || raw.length === 0) {
@@ -105,9 +106,19 @@ router.post("/score", searchLimit, async (req, res) => {
     if (symptoms.length === 0) {
       return res.status(400).json({ message: "symptoms must be text" });
     }
-    if (typeof filters !== "object" || Array.isArray(filters)) {
+    if (typeof rawFilters !== "object" || Array.isArray(rawFilters)) {
       return res.status(400).json({ message: "filters must be an object" });
     }
+    // Only the known filters are used, and each must be text (a number or object here used to crash the search with a 500).
+    const filters: Record<string, string> = {};
+    for (const key of FILTER_KEYS) {
+      const v = (rawFilters as Record<string, unknown>)[key];
+      if (v === undefined || v === null || v === "") continue;
+      if (typeof v !== "string") return res.status(400).json({ message: `filter ${key} must be text` });
+      filters[key] = v.slice(0, 60);
+    }
+    const hp = req.body?.healthProfile;
+    const healthProfile = hp && typeof hp === "object" && !Array.isArray(hp) ? hp : undefined;
 
     console.log(
       `[Route] POST /score — ${symptoms.length} symptoms,`,
@@ -189,7 +200,7 @@ router.post("/analyze-report", analyzeLimit, async (req, res) => {
     if (mimeType !== undefined && !/^image\/(jpeg|png|webp|gif)$/.test(String(mimeType))) {
       return res.status(400).json({ message: "Only JPEG, PNG, WebP or GIF images can be analysed" });
     }
-    if (!hasGroqKey()) return res.status(500).json({ message: "GROQ_OPENAI_API not configured" });
+    if (!hasGroqKey()) return res.status(503).json({ message: "Reading reports is not available right now" });
 
     const reportMessages = [
       {
@@ -225,11 +236,7 @@ Return ONLY JSON (no markdown):
     }
     if (!parsed) throw lastError;
 
-    res.json({
-      symptoms:   parsed.symptoms   || [],
-      conditions: parsed.conditions || [],
-      summary:    parsed.summary    || "Report analyzed",
-    });
+    res.json(cleanReportReply(parsed));
   } catch (error: any) {
     console.error("[Route] analyze-report error:", error);
     res.status(500).json({ message: "Failed to analyze report" });

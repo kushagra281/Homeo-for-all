@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import { useLocation } from "wouter"
 import { ArrowLeft, Menu } from "lucide-react"
 import LanguageMenu from "@/components/language-menu"
+import HeaderAvatar from "@/components/user-avatar"
 import NavDrawer from "@/components/nav-drawer"
 import { getCurrentUser } from "@/lib/supabase"
 
@@ -15,7 +16,7 @@ interface Props {
   width?: string
 }
 
-/** The header every inner page shares: ☰ menu, leaf + name, Translate, Back. */
+/** The header every inner page shares: ☰ menu, leaf + name, Translate, profile photo, Back. */
 export default function AppHeader({ back = true, right, children, width = "max-w-4xl" }: Props) {
   const [, setLocation] = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -38,6 +39,7 @@ export default function AppHeader({ back = true, right, children, width = "max-w
         <div className="flex items-center gap-1.5">
           {right}
           <LanguageMenu />
+          <HeaderAvatar user={user} />
           {back && (
             <button onClick={() => setLocation("/")} data-testid="back-button"
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-100">

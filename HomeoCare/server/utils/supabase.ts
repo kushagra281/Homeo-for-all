@@ -480,7 +480,34 @@ export async function fetchProfile(userId: string, accessToken?: string): Promis
   const { data, error } = await userDB(accessToken).from("patients").select("*").eq("id", userId).single();
   if (error?.code === "PGRST116") return null;
   if (error) console.error("[DB] fetchProfile:", error.message);
-  return data || null;
+  if (!data) return null;
+  const { avatar_url: _photo, ...rest } = data as Record<string, any>;   // the photo has its own endpoint; keep this reply light
+  return rest;
+}
+
+// ── Profile photo (patients.avatar_url, a small data URL) ─────────
+export class AvatarColumnMissing extends Error {
+  constructor() { super("patients.avatar_url is missing"); }
+}
+const noAvatarColumn = (e: { message: string }) =>
+  e.message.includes("avatar_url") && /does not exist|Could not find/.test(e.message);
+
+export async function fetchAvatar(userId: string, accessToken?: string): Promise<string | null> {
+  const { data, error } = await userDB(accessToken).from("patients").select("avatar_url").eq("id", userId).maybeSingle();
+  if (error) {
+    if (noAvatarColumn(error)) return null;          // the column is not created yet: simply no photo
+    throw new Error(error.message);
+  }
+  return (data as any)?.avatar_url || null;
+}
+
+/** Saves the photo (null removes it). Throws AvatarColumnMissing until the column exists, so a save is never silently lost. */
+export async function saveAvatar(userId: string, email: string, avatar: string | null, accessToken?: string): Promise<void> {
+  const { error } = await userDB(accessToken).from("patients")
+    .upsert({ id: userId, email, avatar_url: avatar, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  if (!error) return;
+  if (noAvatarColumn(error)) throw new AvatarColumnMissing();
+  throw new Error(error.message);
 }
 
 export async function upsertProfileRow(userId: string, email: string, profile: Record<string, any>, accessToken?: string): Promise<void> {

@@ -7,7 +7,11 @@ import {
   fetchProfile,
   upsertProfileRow,
   fetchSearchHistory,
+  fetchAvatar,
+  saveAvatar,
+  AvatarColumnMissing,
 } from "../utils/supabase";
+import { parseAvatar } from "../../shared/avatar";
 import { requireUser } from "../utils/auth";
 
 const router = Router();
@@ -35,6 +39,40 @@ router.post("/save", async (req, res) => {
     res.status(500).json({ message: "Failed to save profile" });
   }
 });
+
+// ── Profile photo ─────────────────────────────────────────────────
+// GET    /api/profile/avatar   -> { avatar: "data:image/jpeg;base64,..." | null }
+// PUT    /api/profile/avatar   body { image: <small JPEG, PNG or WebP data URL> }
+// DELETE /api/profile/avatar
+router.get("/avatar", async (req, res) => {
+  try {
+    res.json({ avatar: await fetchAvatar(req.userId!, req.accessToken) });
+  } catch (error: any) {
+    console.error("[Route] avatar get:", error.message);
+    res.status(500).json({ message: "Failed to fetch photo" });
+  }
+});
+
+const storeAvatar = async (req: any, res: any, avatar: string | null) => {
+  try {
+    await saveAvatar(req.userId!, req.userEmail || "", avatar, req.accessToken);
+    res.json({ success: true, avatar });
+  } catch (error: any) {
+    if (error instanceof AvatarColumnMissing) {
+      return res.status(503).json({ code: "avatar_column_missing", message: "Photo storage is not set up yet" });
+    }
+    console.error("[Route] avatar save:", error.message);
+    res.status(500).json({ message: "Failed to save photo" });
+  }
+};
+
+router.put("/avatar", async (req, res) => {
+  const avatar = parseAvatar(req.body?.image);
+  if (!avatar) return res.status(400).json({ message: "Please choose a small JPEG, PNG or WebP photo" });
+  await storeAvatar(req, res, avatar);
+});
+
+router.delete("/avatar", async (req, res) => { await storeAvatar(req, res, null); });
 
 // ── GET /api/profile/history ──────────────────────────────────────
 router.get("/history", async (req, res) => {

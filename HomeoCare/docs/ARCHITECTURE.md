@@ -101,6 +101,21 @@ Potency, dose, age/gender suitability are not in the data. The result card shows
 suggestion (`shared/potency.ts`: acute, chronic, child, older adult; none when warning signs are present). It is
 labelled as general guidance, not a prescription, and is the same for every remedy of one result.
 
+## Trials (measuring the search)
+- **Direct** (`server/trials/run.ts`, `npm run trials:offline` for the in-memory repertory): the textbook symptom words of 68
+  classical cases go straight to the search. Shows how good the engine is when it is given ideal words.
+- **Patient** (`server/trials/simulate.ts`, `npm run trials:patient`, or the Trials workflow with mode = patient): a simulated patient
+  (`personas.ts`, 66 of the 68 cases) types everyday words, picks a category and answers the app's own built-in interview
+  (`nextQuestion`, `answerPhrases`: the same code the app runs); the request is built like `submitToAI`. Reported per case and in
+  total: direct, typed words only (patient skips the interview), perfect patient (confirms every true fact) and typical patient
+  (forgets a quarter of the facts, sometimes ticks a wrong box or skips; several seeded runs). Also lists true facts the interview
+  never offered (gaps in the question bank).
+  Offline: `REPERTORY_DUMP=<folder> npm run trials:patient` (graded repertory in memory, no database); `NO_CATEGORY=1` leaves out the
+  category (no chapter filter), `RUNS=5`, `ONLY=<regex>`, `VERBOSE=1` as in the file header.
+  Limits: it simulates the built-in bank (the app's fallback), not the AI's own questions; the persona facts are written from the
+  textbook picture of each remedy in the interview's vocabulary and must not be tuned to the engine's output; with ~60 cases a difference
+  of a few cases is not proof. AI synonyms are off offline, so lay-word numbers are lower than in production.
+
 ## Tests
 `npm test` - keyword extraction, the search pipeline (against a fake database), security
-(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, the Do's and Don'ts lists, and the profile photo checks. `npm run check` - TypeScript.
+(auth + rate limits), the case-taking interview and its general top-up, the AI prompts and parsers, the Do's and Don'ts lists, the profile photo checks, and the patient simulator (personas, seeded noise, the interview it drives). `npm run check` - TypeScript.

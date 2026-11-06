@@ -76,6 +76,11 @@ t("time of day and motion are settled by what the AI asked", () => {
   assert.ok(inferCovers("At what time is the pain worse?").includes("time"));
   assert.ok(inferCovers("At what time of day do the symptoms become worse?").includes("time"));
   assert.ok(inferCovers("Does it trouble you more in the morning or at night?").includes("time"));
+  // peak wording counts as asking when it is worse (Codex finding on PR #55)
+  for (const q of ["At what time of day is the pain at its worst?", "What time of day is it most severe?", "At what time does the pain peak?",
+    "What time of night are the symptoms strongest?", "When is the pain at its worst, morning or evening?"]) {
+    assert.ok(inferCovers(q).includes("time"), q);
+  }
   // onset and waking questions are not about the time of aggravation (Codex finding on PR #54)
   for (const q of ["What time did the palpitations begin?", "At what time did the hair fall start?", "What time of day does the cough start?",
     "Did it start in the morning or at night?", "How long ago did it begin, in the morning or evening?", "What time do you wake at night?", "What time do you usually sleep?"]) {

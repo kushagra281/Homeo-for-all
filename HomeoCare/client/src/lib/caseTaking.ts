@@ -306,6 +306,8 @@ const GENERAL: CaseQuestion[] = [
 ];
 
 // What an AI-written question already settles, read from its text (built-in questions list their `covers`).
+// Words that say a question is about what makes the complaint worse or better (including its peak: "at its worst").
+const MODALITY_WORDS = String.raw`(?:worse|worst|better|best|aggravat\w*|relie\w*|troubl\w*|bother\w*|most severe|peak\w*|strongest|maximum|most intense)`;
 const COVER_PATTERNS: Array<[string, RegExp]> = [
   ["digestion", /digest|appetite|acidity|heartburn|bloat|indigest|hunger/i],
   ["bowels", /stool|bowel|constipat|loose motion|diarrh/i],
@@ -316,14 +318,17 @@ const COVER_PATTERNS: Array<[string, RegExp]> = [
   ["desire", /craving|crave|desire|aversion|dislike|food prefer|favou?rite food|longing/i],
   ["energy", /energy|tired|fatigue|exhaust|weakness/i],
   // time of aggravation: asked about the time of day, or morning/evening/night named together or with worse/better
-  ["time", /\b(?:what time|time of (?:the )?(?:day|night))\b.{0,60}\b(?:worse|better|aggravat\w*|relie\w*|troubl\w*|bother\w*)\b|\b(?:worse|better|aggravat\w*|relie\w*|troubl\w*|bother\w*)\b.{0,60}\b(?:what time|time of (?:the )?(?:day|night))\b|\b(?:morning|afternoon|evening|night|midnight)s?\b.{0,40}\b(?:morning|afternoon|evening|night|midnight)s?\b|\b(?:worse|better|aggravat\w*|relie\w*)\b.{0,50}\b(?:morning|afternoon|evening|night|midnight|daytime)\b|\b(?:morning|afternoon|evening|night|midnight|daytime)\b.{0,50}\b(?:worse|better|aggravat\w*)\b/i],
+  ["time", new RegExp(
+    String.raw`\b(?:what time|time of (?:the )?(?:day|night))\b.{0,60}\b${MODALITY_WORDS}\b|\b${MODALITY_WORDS}\b.{0,60}\b(?:what time|time of (?:the )?(?:day|night))\b|` +
+    String.raw`\b(?:morning|afternoon|evening|night|midnight)s?\b.{0,40}\b(?:morning|afternoon|evening|night|midnight)s?\b|` +
+    String.raw`\b${MODALITY_WORDS}\b.{0,50}\b(?:morning|afternoon|evening|night|midnight|daytime)\b|\b(?:morning|afternoon|evening|night|midnight|daytime)\b.{0,50}\b${MODALITY_WORDS}\b`, "i")],
   // motion or rest: a movement word next to worse/better/effect
   ["motion", /\b(?:worse|better|aggravat\w*|relie\w*|help\w*|affect\w*|brings? on|triggers?|eases|settles)\b.{0,50}\b(?:motion|movement|mov\w+|exertion|exercise|walking|climbing|rest|lying|sitting|standing|position|activity|effort)\b|\b(?:motion|movement|exertion|exercise|walking|climbing|rest|lying|position|activity|effort)\b.{0,50}\b(?:worse|better|aggravat\w*|relie\w*|help\w*|affect\w*|brings? on|triggers?)\b/i],
 ];
 // A question about when the complaint BEGAN ("What time did the palpitations begin?") is not about the time of
 // aggravation, so it does not settle the required time question unless it also asks what is worse or better.
 const ONSET = /\b(?:begin|began|begun|start(?:s|ed)?|onset|first (?:noticed?|appeared?)|since when|how long|ago)\b/i;
-const MODALITY = /\b(?:worse|better|aggravat\w*|relie\w*|troubl\w*|bother\w*)\b/i;
+const MODALITY = new RegExp(String.raw`\b${MODALITY_WORDS}\b`, "i");
 export function inferCovers(text: string): string[] {
   const onset = ONSET.test(text) && !MODALITY.test(text);
   return COVER_PATTERNS.filter(([k, re]) => re.test(text) && !(k === "time" && onset)).map(([k]) => k);

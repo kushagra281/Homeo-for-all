@@ -1,0 +1,85 @@
+// Patients for the interview Trials (server/trials/simulate.ts).
+//
+// Each persona is one of the classical cases in cases.ts, played as a patient would: what they TYPE (everyday words,
+// like the home screen) and the chosen CATEGORY, plus the facts they would CONFIRM when the interview asks.
+// The facts ("picks") are written in the vocabulary of the interview's own options (their `phrases`), taken from the
+// textbook picture of the remedy (Boericke / Kent), NOT from what the engine returns. Do not tune them to make a
+// remedy come first: that would hide exactly what this measurement is for. A fact the interview never offers is a gap
+// in the question bank, and the report lists it.
+//
+// `n` is the 1-based position of the case in cases.ts; `of` must be the start of that case's name (checked by a test).
+export interface Persona { n: number; of: string; typed: string[]; category?: string; picks: string[] }
+
+const p = (n: number, of: string, typed: string, category: string, picks: string): Persona => ({
+  n, of, typed: typed.split("|").map((s) => s.trim()).filter(Boolean), category: category || undefined,
+  picks: picks.split(",").map((s) => s.trim()).filter(Boolean),
+});
+
+export const PERSONAS: Persona[] = [
+  p(1,  "Fright, anticipation", "anxiety before exams|loose motions from excitement", "Mind", "anxiety, fear, anxiety future, fear future, diarrhoea, desire sweets, hot, better open air"),
+  p(2,  "Restless, fear of death", "restless and anxious at night|afraid I will die", "Mind", "anxiety, restlessness, fear death, worse midnight, chilly, better warmth"),
+  p(3,  "Sudden fever", "sudden high fever after cold wind|scared and restless", "Fever", "sudden fever, heat fever, thirst, restlessness, fear death, worse midnight"),
+  p(4,  "Throbbing headache", "sudden throbbing headache|red hot face", "Head", "throbbing headache, flushed face, worse light, worse noise, worse motion, hot"),
+  p(5,  "Joint pain worse first motion", "joint pain and stiffness|worse when I start to move", "Hands, Legs & Back", "joint pain, stiffness, worse first motion better continued motion, worse damp, worse cold, better warmth, restlessness"),
+  p(6,  "Joint pain worse every motion", "joint pain|cannot bear any movement", "Hands, Legs & Back", "joint pain, worse motion, better rest, better pressure, thirst, irritability"),
+  p(7,  "Grief, weeps alone", "grief after a loss|sighing a lot", "Mind", "grief, weeping, mood, worse consolation, silent"),
+  p(8,  "Weepy, better open air", "weepy and clingy|my symptoms keep changing", "Mind", "weeping, mood, better consolation, sympathy, better open air, thirstless, hot, worse closed room, sensitive"),
+  p(9,  "Bruised sore feeling", "bruised sore body after a fall", "Hands, Legs & Back", "muscle pain, worse motion, better rest"),
+  p(10, "Chilly, constipation", "constipation, never feels clear|irritable and overworked", "Stomach", "constipation, stool unsatisfactory, irritability, anger, chilly, worse morning, desire spicy, waking 3 am, indigestion"),
+  p(11, "Dry cough tickling", "dry tickling cough|worse when I talk", "Respiration", "dry cough, tickling cough, cough cold air, cough night"),
+  p(12, "Burning acidity", "burning acidity|burning in the stomach", "Stomach", "acidity heartburn, burning pain, desire cold drinks, thirst, worse eating, fear"),
+  p(13, "Apis:", "red puffy swelling with stinging pain", "Skin", "stinging, better cold, worse warmth, thirstless, hot"),
+  p(14, "Sulphur:", "itching skin, worse in bed|burning skin", "Skin", "itching, burning skin, worse warmth bed, worse washing, hot, ravenous appetite, desire sweets, perspiration offensive, dry scaly eruption"),
+  p(15, "Lycopodium:", "bloating after eating a little|gas", "Stomach", "flatulence, indigestion, worse evening, desire sweets, desire warm, constipation, timid"),
+  p(16, "Sepia:", "I feel indifferent to my family|tired, bearing down feeling", "Mind", "indifferent, irritability, exhaustion, chilly, better motion, desire sour, alone, mood menses, weeping"),
+  p(17, "Calcarea carb:", "sweating of the head at night|tired and chilly", "", "chilly, perspiration head, perspiration night, weakness, exhaustion, desire sweets, fear, anxiety"),
+  p(18, "Silicea:", "wounds heal slowly and form pus|sweaty smelly feet", "Skin", "chilly, perspiration offensive, moist eruption, exhaustion, timid"),
+  p(19, "Hepar sulph:", "splinter like pain in the throat|very sensitive to cold air", "Throat", "sore throat, pain swallowing, chilly, irritability, better warm drinks, sensitive"),
+  p(20, "Mercurius:", "lot of saliva and foul breath|worse at night", "Throat", "sore throat, pain swallowing, tonsils, worse night, perspiration offensive, thirst, coryza yellow"),
+  p(21, "Chamomilla:", "child very irritable, wants to be carried|teething", "Mind", "irritability, anger, hot, worse night, sensitive, thirst"),
+  p(22, "Colocynthis:", "cutting colic pain in the abdomen|better bending double", "Stomach", "abdominal pain, cutting pain, colic better bending, better pressure, diarrhoea"),
+  p(23, "Magnesia phos:", "cramping shooting nerve pain|better with heat", "Hands, Legs & Back", "tearing pain, muscle pain, better heat, better warmth, better pressure, worse cold, chilly"),
+  p(24, "Gelsemium:", "weak and trembling|heavy drowsy eyelids|dull headache", "Head", "dull headache, occiput headache, weakness, thirstless, chilly, exhaustion, fear"),
+  p(25, "Ledum:", "puncture wound from a nail|better with cold", "Skin", "painful skin, better cold, worse warmth, chilly"),
+  p(26, "Hypericum:", "nerve injury with shooting pain", "Hands, Legs & Back", "tearing pain, numbness, joint pain, worse cold"),
+  p(27, "Ruta:", "sprain|bruised feeling in the bones|stiff", "Hands, Legs & Back", "joint pain, stiffness, worse rest, worse cold, worse damp, weakness limbs"),
+  p(28, "Cantharis:", "burning cutting pain while passing urine|constant urge", "Urinary System", "burning urination, urging urine, urine dark, thirst"),
+  p(29, "Berberis:", "stitching pain in the kidney area going to the groin", "Urinary System", "pain loins, burning urination, urine turbid, worse motion"),
+  p(30, "Lachesis:", "left sided sore throat|cannot bear anything tight on the neck", "Throat", "sore throat, pain swallowing, throat left, hot, tonsils"),
+  p(31, "Phytolacca:", "sore throat with dark red tonsils|pain going to the ear", "Throat", "sore throat, pain swallowing, tonsils, throat right, better cold drinks"),
+  p(32, "Drosera:", "barking spasmodic cough|worse after midnight", "Respiration", "spasmodic cough, barking cough, cough midnight, vomiting"),
+  p(33, "Ant tart:", "rattling mucus in the chest, cannot cough it up", "Respiration", "loose cough, expectoration white, wheezing, sit up breathing, worse lying breathing, thirstless"),
+  p(34, "Spongia:", "dry barking cough like croup", "Respiration", "dry cough, barking cough, wheezing, cough night, constriction chest"),
+  p(35, "Ipecac:", "constant nausea, vomiting does not relieve it", "Stomach", "nausea, vomiting, thirstless, worse eating"),
+  p(36, "Veratrum album:", "vomiting and diarrhoea together with cold sweat|very weak", "Stomach", "vomiting, diarrhoea, perspiration profuse, exhaustion, thirst, desire cold drinks, chilly"),
+  p(37, "Podophyllum:", "gushing painless diarrhoea in the morning", "Stomach", "diarrhoea, worse morning, thirst"),
+  p(38, "Aloe:", "diarrhoea, I feel the stool will pass with gas|piles", "Stomach", "diarrhoea, flatulence, hot, worse morning"),
+  p(39, "Aesculus:", "dry piles and backache", "Hands, Legs & Back", "lumbar pain, back pain, worse motion, constipation, weakness limbs"),
+  p(40, "Graphites:", "cracked skin oozing sticky honey like discharge", "Skin", "cracks, moist eruption, eruption folds, chilly, constipation"),
+  p(41, "Natrum mur:", "old grief I keep inside|headache from the sun", "Mind", "grief, silent, worse consolation, alone, desire salt, hot, worse sun, brooding, sensitive"),
+  p(42, "Staphysagria:", "suppressed anger after an insult", "Mind", "anger, irritability, silent, sensitive, brooding"),
+  p(43, "Causticum:", "hoarse voice with rawness in the chest", "Throat", "hoarseness, sore throat, chilly, better cold drinks"),
+  p(44, "Kali bichromicum:", "thick stringy sticky nasal discharge|sinusitis", "Throat", "obstruction nose, coryza yellow, worse morning, chilly"),
+  p(45, "Euphrasia:", "watery burning eyes|bland nasal discharge", "Throat", "coryza, coryza white, sneezing"),
+  p(46, "Allium cepa:", "streaming nose with burning discharge|bland tears", "Throat", "coryza, coryza watery excoriating, sneezing, better open air, worse closed room, hot"),
+  p(47, "Natrum sulph:", "asthma worse in damp weather", "Respiration", "wheezing, cough morning, constriction chest, worse damp"),
+  p(49, "Nitric acid:", "splinter like pains|cracks at the corners of the mouth|ulcers", "Skin", "cracks, painful skin, worse night, chilly, irritability, anger"),
+  p(50, "Cocculus:", "vertigo|nausea when travelling|lost sleep nursing someone", "Head", "vertigo, nausea, vomiting, weakness, sleeplessness, worse motion"),
+  p(51, "Cimicifuga:", "muscle pain and stiff neck|low mood", "Hands, Legs & Back", "muscle pain, neck pain, stiffness, worse cold, weeping, mood menses, restlessness"),
+  p(52, "Cactus:", "constricting chest pain|palpitations", "Heart", "palpitation, chest pain, worse lying, anxiety death, worse night"),
+  p(53, "Glonoin:", "throbbing headache after sun and heat", "Head", "throbbing headache, worse sun, worse heat, flushed face"),
+  p(54, "Iris versicolor:", "sick headache with sour vomiting", "Head", "nausea, vomiting, better motion, forehead headache"),
+  p(55, "Spigelia:", "left sided headache around the eye|palpitations", "Head", "left headache, temples headache, shooting headache, worse motion, palpitation"),
+  p(56, "Sanguinaria:", "right sided headache|burning palms", "Head", "right headache, occiput headache, throbbing headache, better sleep, better darkness, nausea"),
+  p(58, "Kali carb:", "stitching chest pain|wake up at 3 am|chilly", "Respiration", "chilly, waking 3 am, constriction chest, cough midnight, weakness"),
+  p(59, "China:", "weakness after loss of fluids|bloating", "Stomach", "flatulence, diarrhoea, exhaustion, worse eating"),
+  p(60, "Baptisia:", "high fever with stupor and a besotted look", "Fever", "gradual fever, heat fever, drowsiness, aching body, restlessness"),
+  p(61, "Eupatorium perf:", "influenza with deep bone aching", "Fever", "aching body, chill, headache, thirst, vomiting, morning fever"),
+  p(62, "Dulcamara:", "complaints after a damp cold change of weather", "Hands, Legs & Back", "joint pain, stiffness, worse damp, worse cold, diarrhoea"),
+  p(63, "Hyoscyamus:", "jealous|dry cough at night when lying down", "Respiration", "dry cough, cough lying, cough night, suspicious"),
+  p(64, "Stramonium:", "fear of the dark|wants light and company", "Mind", "fear, fear darkness, company, dread, anxiety company, restlessness"),
+  p(65, "Argentum nit:", "fear of heights|craves sweets|diarrhoea after sugar", "Stomach", "diarrhoea, desire sweets, worse eating, flatulence, hot, fear, anxiety, better open air"),
+  p(66, "Phosphorus:", "fear of thunderstorms|craves cold drinks|bleeds easily", "Mind", "fear, anxiety, desire cold drinks, thirst, sympathy, sensitive"),
+  p(67, "Arsenicum:", "burning pains better with heat|restless and anxious", "Mind", "anxiety, restlessness, fear death, chilly, worse midnight, better warmth"),
+  p(68, "Carbo veg:", "I want air|bloating and gas|collapse feeling", "Stomach", "flatulence, indigestion, better open air, exhaustion, worse eating"),
+];

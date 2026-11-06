@@ -6,6 +6,11 @@ on:
         description: "Use AI synonyms (needs the GROQ_API_KEY secret)"
         type: boolean
         default: false
+      mode:
+        description: "direct = textbook words straight to the search; patient = simulated patients go through the app's interview first"
+        type: choice
+        options: [direct, patient]
+        default: "direct"
       engine:
         description: "Search engine to measure (needs the repertory loaded for on / hybrid)"
         type: choice
@@ -20,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - run: npm ci
-      - run: npx tsx server/trials/run.ts
+      - run: npx tsx server/trials/${{ inputs.mode == 'patient' && 'simulate' || 'run' }}.ts
         env:
           SCRAPER_SUPABASE_URL: ${{ secrets.SCRAPER_SUPABASE_URL }}
           SCRAPER_SUPABASE_KEY: ${{ secrets.SCRAPER_SUPABASE_KEY }}

@@ -459,8 +459,10 @@ export default function RemedyScorer({
 
         if (response.ok) {
           const result = await response.json();
-          const found: string[]  = (result.symptoms   || []).filter(Boolean);
-          const conds: string[]  = (result.conditions || []).filter(Boolean);
+          // only texts are used, whatever the server sent (an object here would blank the page)
+          const texts = (v: unknown): string[] => (Array.isArray(v) ? v : []).filter((x): x is string => typeof x === "string" && x.trim() !== "");
+          const found: string[]  = texts(result.symptoms);
+          const conds: string[]  = texts(result.conditions);
           if (found.length) setSymptoms((prev) => [...prev, ...found.filter((x) => !prev.includes(x))]);
           if (conds.length) {
             setHistoryText((prev) => {
@@ -635,7 +637,8 @@ export default function RemedyScorer({
               )}
             </div>
 
-            <div className="flex items-center justify-between mt-4 gap-2">
+            {/* wraps on a narrow phone: three buttons in one row ran 45px past the screen edge */}
+            <div className="flex flex-wrap items-center justify-between mt-4 gap-2">
               {answeredCount > 0 && (
                 <Button variant="outline" size="sm" onClick={goBack}>← Back</Button>
               )}

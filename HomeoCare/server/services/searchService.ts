@@ -86,6 +86,16 @@ function cleanSymptoms(symptoms: string[]): string[] {
   );
 }
 
+/** Takes the general symptoms out of the full list: what is left is the complaint. Each general is removed once, from the end (where the app puts them). */
+export function splitGenerals(clean: string[], generals: string[]): { complaint: string[]; generals: string[] } {
+  const complaint = [...clean], found: string[] = [];
+  for (const g of generals) {
+    const at = complaint.lastIndexOf(g);
+    if (at >= 0) { complaint.splice(at, 1); found.push(g); }
+  }
+  return { complaint, generals: found };
+}
+
 // ── Patient history ───────────────────────────────────────────────
 // History does NOT add new remedies: it only re-orders remedies that already match the
 // complaint. A remedy that also appears under rubrics for the patient's existing conditions
@@ -221,10 +231,13 @@ export async function search(input: {
   filters: SearchFilters;
   healthProfile?: HealthProfile;
   healthHistory?: string;
+  /** The general symptoms (chilly, thirst, sleep...) that are also in `symptoms`; the rest of `symptoms` is the complaint. */
+  generals?: string[];
 }): Promise<SearchResult> {
   const { symptoms, filters, healthProfile, healthHistory } = input;
   const clean = cleanSymptoms(symptoms);
   if (!clean.length) return emptyResult("scraper");
+  const { complaint, generals: generalsClean } = splitGenerals(clean, cleanSymptoms(input.generals || []));
 
   // Optional AI help: extra search words for the patient's wording. {} when off, slow or failing.
   // Symptoms typed in another script (Devanagari...) have no Latin words to search: the AI turns them
@@ -256,7 +269,7 @@ export async function search(input: {
   const mode = repertoryMode();
   const repPromise = mode === "off"
     ? Promise.resolve(null)
-    : scoreWithRepertory(english.length ? [...clean, english.join(" ")] : clean, extra, sectionPats)
+    : scoreWithRepertory(english.length ? [...complaint, english.join(" ")] : complaint, extra, sectionPats, undefined, generalsClean)
         .catch((e: any) => { console.error("[Search] graded repertory failed:", e?.message || e); return null; });
 
   type Scored = {

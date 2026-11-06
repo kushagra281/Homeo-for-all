@@ -36,6 +36,14 @@ server/websocket.ts                community chat at /ws/chat
 5. If every query failed (database paused, wrong key) the route answers with an error - it does
    not pretend there are no results.
 
+Complaint and general symptoms (graded repertory): the request lists every symptom in `symptoms` and names the general ones again in
+`generals` (answers of the general question bank: chilly, thirst, sleep...). The server takes them out of the list again
+(`splitGenerals`), so the rest is the complaint (typed words, mind and topic answers). In the graded repertory the general
+symptoms count half (`generalWeight` 0.5), and the category the patient picked is a preference, not a wall: rubrics outside its chapter
+still count 0.75 and rank a little lower (`outsideChapter`). Without `generals` (older apps) everything is the complaint. Chosen with the patient
+simulator: typical patients found the remedy in the top 5 in 137 of 330 runs, against 113 with the strict filter and equal weights
+and 127 with no category at all.
+
 ## Case-taking (the interview before the search)
 Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
 - `client/src/lib/caseTaking.ts` is the built-in question bank. Topics are found from the typed words
@@ -109,7 +117,7 @@ labelled as general guidance, not a prescription, and is the same for every reme
   classical cases go straight to the search. Shows how good the engine is when it is given ideal words.
 - **Patient** (`server/trials/simulate.ts`, `npm run trials:patient`, or the Trials workflow with mode = patient): a simulated patient
   (`personas.ts`, 66 of the 68 cases) types everyday words, picks a category and answers the app's own built-in interview
-  (`nextQuestion`, `answerPhrases`: the same code the app runs); the request is built like `submitToAI`. Reported per case and in
+  (`nextQuestion`, `searchRequest`: the same code the app runs); the request is built by `searchRequest`, which `submitToAI` also uses. Reported per case and in
   total: direct, typed words only (patient skips the interview), perfect patient (confirms every true fact) and typical patient
   (forgets a quarter of the facts, sometimes ticks a wrong box or skips; several seeded runs). Also lists true facts the interview
   never offered (gaps in the question bank).

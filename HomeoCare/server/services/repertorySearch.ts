@@ -31,10 +31,13 @@ export async function scoreWithRepertory(
   extra: Record<string, string[]> | undefined,
   chapterPats: string[] | undefined,
   store: RepertoryStore = repertoryStore(),
+  generals: string[] = [],
 ): Promise<RepertoryOutcome | null> {
-  const units = unitKeywords(texts, extra);
+  // The complaint comes first; the general symptoms (chilly, thirst, sleep...) follow and count less (see findRubrics).
+  const complaint = unitKeywords(texts, extra);
+  const units = [...complaint, ...unitKeywords(generals, extra)];
   if (!units.length) return null;
-  const rubrics = await findRubrics(units, store, chapterPats);
+  const rubrics = await findRubrics(units, store, chapterPats, { complaintUnits: complaint.length });
   if (!rubrics.length) return null;
   const names = await store.remedyNames();
   const { remedies, contradictions } = scoreRemedies(toRubricMatches(rubrics), toScoringRows(rubrics, names));

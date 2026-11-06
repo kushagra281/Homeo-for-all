@@ -24,7 +24,7 @@ const dec = (u: URL) => decodeURIComponent(u.pathname + u.search.replace(/\+/g, 
 const touched = (name: string) => calls.some((c) => c.url.pathname.endsWith("/" + name));
 
 const { supabaseRepertoryStore } = await import("../utils/repertoryStore");
-const { search } = await import("../services/searchService");
+const { search, splitGenerals } = await import("../services/searchService");
 const { _clearCache } = await import("../utils/supabase");
 
 // ── old tables (same toy data as search-pipeline.test.ts) ────────
@@ -195,6 +195,13 @@ await t("a typo in REPERTORY_ENGINE means off", async () => {
   process.env.REPERTORY_ENGINE = "yes please"; handler = healthy;
   await search({ symptoms: SYMPTOMS, filters: {} });
   loud(); assert.ok(!calls.some((c) => c.url.pathname.includes("repertory_"))); mute();
+});
+
+await t("splitGenerals: each general is taken out once from the end; unknown ones are ignored", () => {
+  const all = ["headache", "worse light", "thirst", "worse light", "chilly"];
+  assert.deepEqual(splitGenerals(all, ["worse light", "chilly"]), { complaint: ["headache", "worse light", "thirst"], generals: ["worse light", "chilly"] });
+  assert.deepEqual(splitGenerals(all, ["nothing like it"]), { complaint: all, generals: [] });
+  assert.deepEqual(splitGenerals(all, []), { complaint: all, generals: [] });
 });
 
 loud();

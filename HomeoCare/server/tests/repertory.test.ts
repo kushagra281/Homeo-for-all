@@ -131,10 +131,27 @@ await t("findRubrics: dropAncestors removes a rubric whose sub-rubric is also ke
 });
 
 await t("findRubrics: chapter filter limits the search; no match gives an empty list", async () => {
-  const head = await findRubrics(unitKeywords(["pain"]), store, ["head"]);
+  const head = await findRubrics(unitKeywords(["pain"]), store, ["head"], { outsideChapter: 0 });
   assert.ok(head.length > 0 && head.every((r) => r.chapter === "Head"));
-  assert.deepEqual(await findRubrics(unitKeywords(["pain"]), store, ["mind"]), []);   // no pain rubrics in Mind
+  assert.deepEqual(await findRubrics(unitKeywords(["pain"]), store, ["mind"], { outsideChapter: 0 }), []);   // no pain rubrics in Mind
   assert.deepEqual(await findRubrics(unitKeywords(["xyzzyq"]), store), []);
+});
+
+await t("findRubrics: the chapter can be strict or only preferred, and a general symptom counts less", async () => {
+  const units = unitKeywords(["pain", "anxiety"]);   // the complaint (pain, picked chapter Head) and one general symptom
+  const strict = await findRubrics(units, store, ["head"], { complaintUnits: 1, outsideChapter: 0 });
+  assert.ok(strict.some((r) => r.chapter === "Head") && !strict.some((r) => r.chapter === "Mind"));   // strict: nothing outside Head
+  const soft = await findRubrics(units, store, ["head"], { complaintUnits: 1, generalWeight: 1, outsideChapter: 0.5 });
+  const rel = (list: typeof soft, chapter: string) => Math.max(...list.filter((r) => r.chapter === chapter).map((r) => r.relevance));
+  assert.ok(soft.some((r) => r.chapter === "Mind" && r.unit === 1));                  // soft: the Mind rubrics stay
+  const pain = await findRubrics(unitKeywords(["pain"]), store, ["head"], { outsideChapter: 0.5 });
+  assert.ok(pain.every((r) => r.chapter === "Head"));                                  // inside the chapter nothing is reduced
+  const mind = await findRubrics(unitKeywords(["anxiety"]), store, undefined, { generalWeight: 1 });
+  assert.ok(Math.abs(rel(soft, "Mind") - rel(await findRubrics(unitKeywords(["anxiety"]), store, ["head"], { outsideChapter: 0.5 }), "Mind")) < 1e-9);
+  assert.ok(rel(mind, "Mind") > rel(soft, "Mind") - 1e-9);                             // outside the chapter counts less than free
+  const light = await findRubrics(units, store, ["head"], { complaintUnits: 1, generalWeight: 0.5, outsideChapter: 0.5 });
+  assert.equal(rel(light, "Head"), rel(soft, "Head"));                                  // the complaint is untouched by the general weight
+  assert.ok(Math.abs(rel(light, "Mind") - rel(soft, "Mind") * 0.5) < 1e-9);             // the general is halved
 });
 
 await t("findRubrics: a symptom with many rubrics cannot out-vote one with a single rubric", async () => {

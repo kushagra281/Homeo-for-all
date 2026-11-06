@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  ALL_QUESTIONS, MAX_QUESTIONS, answerLines, answerPhrases, detectTopics, generalLeft, inferCovers, nextQuestion, psyAnswersOf, queueFor,
+  ALL_QUESTIONS, MAX_QUESTIONS, answerLines, answerPhraseGroups, answerPhrases, searchRequest, detectTopics, generalLeft, inferCovers, nextQuestion, psyAnswersOf, queueFor,
   type CaseQuestion, type CaseState,
 } from "../../client/src/lib/caseTaking";
 import { extractKeywords } from "../utils/keywords";
@@ -191,6 +191,22 @@ t("answers become search phrases, so they change the diagnosis", () => {
   });
   const p = answerPhrases(state);
   for (const want of ["throbbing headache", "worse light", "worse noise", "better pressure"]) assert.ok(p.includes(want), want);
+});
+
+t("the search request keeps the complaint apart from the general symptoms (and still lists everything once)", () => {
+  const state: CaseState = {
+    symptoms: ["headache", "🔍 Analyzing"], category: "Head",
+    answers: { "head-worse": ["Light"], "gen-temp": ["Chilly, wants warm clothes"] },
+  };
+  const g = answerPhraseGroups(state);
+  assert.ok(g.complaint.includes("worse light") && !g.general.includes("worse light"));
+  assert.ok(g.general.length > 0 && g.general.every((p) => !g.complaint.includes(p)));
+  const req = searchRequest(state);
+  assert.deepEqual(req.generals, g.general);
+  assert.deepEqual(req.symptoms, ["headache", ...g.complaint, ...g.general, "category: Head"]);   // the placeholder is gone, the category line is last
+  assert.deepEqual(req.filters, { symptom_location: "Head" });
+  assert.deepEqual(searchRequest({ symptoms: ["cough"], answers: {} }), { symptoms: ["cough"], generals: [], filters: {} });
+  assert.deepEqual([...answerPhrases(state)].sort(), [...g.complaint, ...g.general].sort());
 });
 
 t("psychology answers are searched and also shown in the mind summary", () => {

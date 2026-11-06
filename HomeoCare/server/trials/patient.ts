@@ -3,7 +3,7 @@
 // (remedy-scorer.tsx submitToAI), so the Trials can measure the whole path: typed words -> questions -> answers -> search.
 //
 // This simulates the BUILT-IN bank (the app's fallback when the AI is off). It does not simulate the AI's own questions.
-import { ALL_QUESTIONS, MAX_QUESTIONS, answerPhrases, nextQuestion, type CaseQuestion, type CaseState } from "../../client/src/lib/caseTaking";
+import { ALL_QUESTIONS, MAX_QUESTIONS, nextQuestion, searchRequest, type CaseQuestion, type CaseState } from "../../client/src/lib/caseTaking";
 import type { Persona } from "./personas";
 
 export interface Noise { forget: number; misclick: number; skip: number }
@@ -48,6 +48,7 @@ export interface Interview {
   state: CaseState;
   asked: string[];         // question ids, in order
   symptoms: string[];      // what the app sends to the search: typed words + answer phrases + category
+  generals: string[];      // the general-symptom phrases among them, named again so the search can weigh them differently
   filters: { symptom_location?: string };
   gaps: string[];          // facts the patient has that no asked question offered and the typed words do not already say
   unknown: string[];       // facts that exist nowhere in the question bank (a typo in the persona, or a missing option)
@@ -76,15 +77,10 @@ export function interview(persona: Persona, noise: Noise = PERFECT, run = 0): In
     asked.push(q.id);
   }
   // the search request, built like submitToAI in remedy-scorer.tsx
-  const symptoms = [
-    ...state.symptoms,
-    ...answerPhrases(state),
-    ...(persona.category ? [`category: ${persona.category}`] : []),
-  ].filter(Boolean);
+  const req = searchRequest(state);
   const offered = new Set(asked.flatMap((id) => (ALL_QUESTIONS.find((q) => q.id === id)?.options || []).flatMap((o) => o.phrases.map(norm))));
   return {
-    state, asked, symptoms,
-    filters: persona.category ? { symptom_location: persona.category } : {},
+    state, asked, symptoms: req.symptoms, generals: req.generals, filters: req.filters,
     gaps: [...facts].filter((f) => BANK_PHRASES.has(f) && !offered.has(f) && !stated(f, persona.typed)),
     unknown: [...facts].filter((f) => !BANK_PHRASES.has(f)),
   };

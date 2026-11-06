@@ -8,7 +8,7 @@
 
 import { themeOf } from "./repertorize";
 import { extractKeywords, groupMatches, normalizeRemedyName, type ExtractedKeywords, type KeywordGroup, type Modality } from "../utils/keywords";
-import type { RepertoryRubric, RepertoryStore } from "../utils/repertoryStore";
+import { chapterMatches, type RepertoryRubric, type RepertoryStore } from "../utils/repertoryStore";
 import type { RubricRemedyRow } from "./scoringService";
 import type { RubricMatch } from "./rubricService";
 
@@ -23,17 +23,30 @@ export interface EngineOptions {
   dropAncestors: boolean;
   /** Each symptom's rubrics together count like this many rubrics at most (keeps one wordy symptom from outweighing the rest). */
   unitCap: number;
+  /** The first this-many symptoms are the patient's complaint; the rest are general symptoms (chilly, thirst, sleep...). Default: all are the complaint. */
+  complaintUnits: number;
+  /** Weight of a general symptom's rubrics next to the complaint's (1 = equal). */
+  generalWeight: number;
+  /** The category the patient picked is a preference, not a wall: a rubric outside its chapter still counts this much (0 = strict filter). */
+  outsideChapter: number;
 }
 
 // Chosen with the offline Trials (server/trials/offline.ts, 68 textbook cases): keeping the broader parent
 // rubrics and ten rubrics per symptom clearly beat dropping parents / keeping three (Top 1/3/5: 34/45/53
 // against 26/40/46). The other options changed the result by a case or two, so they stay at plain values.
+// generalWeight and outsideChapter were chosen with the patient simulator (server/trials/simulate.ts, 66 patients x 5 runs):
+// with the category picked, a strict chapter filter and equal weights found the remedy in the top 5 for 113 of 330 typical
+// patients; general symptoms at 0.5 and a soft chapter (0.75 outside) found 137. Nearby values gave 134-142, so the exact
+// numbers do not matter much; a strict filter, or no category at all (127), was clearly worse.
 export const DEFAULT_OPTIONS: EngineOptions = {
   perUnit: 10,
   enough: 6,
   sizePenalty: 0.3,
   dropAncestors: false,
   unitCap: 6,
+  complaintUnits: Infinity,
+  generalWeight: 0.5,
+  outsideChapter: 0.75,
 };
 
 export interface RankedRepertoryRubric extends RepertoryRubric {
@@ -119,7 +132,7 @@ async function candidates(
 }
 
 function rankUnit(
-  unit: number, wk: Weighted, found: Map<number, RepertoryRubric>, o: EngineOptions,
+  unit: number, wk: Weighted, found: Map<number, RepertoryRubric>, o: EngineOptions, prefer?: string[],
 ): RankedRepertoryRubric[] {
   const kw = wk.kw;
   // the best a rubric can do is match the three most informative words of the symptom
@@ -134,10 +147,11 @@ function rankUnit(
     }
     if (!matched) continue;
     const modality = repertoryModality(path, kw.modalities);
+    const outside = prefer ? !chapterMatches(r.chapter, prefer) : false;
     ranked.push({
       ...r, unit, matched,
-      relevance: Math.min(1, weight / best),
-      _s: weight * 10 + inOwn * 2 + modality * 4 + Math.min(r.depth, 5) * 0.2 - Math.log1p(r.n_remedies) * 0.3,
+      relevance: Math.min(1, weight / best) * (outside ? o.outsideChapter : 1),
+      _s: weight * 10 + inOwn * 2 + modality * 4 + Math.min(r.depth, 5) * 0.2 - Math.log1p(r.n_remedies) * 0.3 - (outside ? 6 : 0),
     });
   }
   ranked.sort((a, b) => b._s - a._s || a.id - b.id);
@@ -169,7 +183,10 @@ export async function findRubrics(
     while (next < work.length) {
       const i = next++;
       const wk = await weigh(work[i], store);
-      perUnit[i] = rankUnit(i, wk, await candidates(wk, store, chapterPats, o), o);
+      const general = i >= o.complaintUnits;   // the general symptoms count less than the complaint
+      const soft = o.outsideChapter > 0 && chapterPats?.length ? chapterPats : undefined;   // soft: search everywhere, prefer the chapter
+      const ranked = rankUnit(i, wk, await candidates(wk, store, soft ? undefined : chapterPats, o), o, soft);
+      perUnit[i] = general && o.generalWeight !== 1 ? ranked.map((r) => ({ ...r, relevance: r.relevance * o.generalWeight })) : ranked;
     }
   }));
   const best = new Map<number, RankedRepertoryRubric>();

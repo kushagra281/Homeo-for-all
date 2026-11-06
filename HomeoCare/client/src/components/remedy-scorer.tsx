@@ -19,7 +19,7 @@ import { elementTags, elementTagLabel } from "@shared/elements";
 import AppHeader from "@/components/app-header";
 import { psychologySummary } from "@/lib/psychology";
 import { lifestyleFor } from "@/lib/lifestyle";
-import { nextQuestion, plannedCount, generalLeft, answerPhrases, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, MAX_QUESTIONS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
+import { nextQuestion, plannedCount, generalLeft, searchRequest, answerLines, psyAnswersOf, detectTopics, TOPIC_LABELS, MAX_QUESTIONS, type CaseState, type CaseQuestion } from "@/lib/caseTaking";
 import { fetchNextQuestion, fetchExplanation, type AiExplanation } from "@/lib/aiCase";
 
 // ── Safety flag component ─────────────────────────────────────────
@@ -275,6 +275,7 @@ export default function RemedyScorer({
   const scoreMutation = useMutation({
     mutationFn: async (data: {
       symptoms: string[];
+      generals?: string[];
       filters: any;
       healthProfile?: Record<string, any> | null;
       healthHistory?: string;
@@ -284,6 +285,7 @@ export default function RemedyScorer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symptoms:      data.symptoms,
+          generals:      data.generals,
           filters:       data.filters,
           healthProfile: data.healthProfile,
           healthHistory: data.healthHistory,
@@ -307,16 +309,9 @@ export default function RemedyScorer({
   });
 
   const submitToAI = (syms: string[], answers: Record<string, string[]>) => {
-    const allSymptoms = [
-      ...syms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
-      ...answerPhrases({ symptoms: syms, category: activeCategory, answers, custom: aiCustom }),   // every interview answer
-      ...(activeCategory ? [`category: ${activeCategory}`] : []),
-    ].filter(Boolean);
+    const { symptoms: allSymptoms, generals, filters: cleanFilters } = searchRequest({ symptoms: syms, category: activeCategory, answers, custom: aiCustom });
 
-    const cleanFilters: any = {};
-    if (activeCategory) cleanFilters.symptom_location = activeCategory;
-
-    scoreMutation.mutate({ symptoms: allSymptoms, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
+    scoreMutation.mutate({ symptoms: allSymptoms, generals, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
   };
 
   const useAi = !aiOff && !aiDone;

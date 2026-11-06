@@ -40,10 +40,10 @@ const rankOf = (top: string[], expect: string[]) => top.findIndex((n) => expect.
   const log = console.log, err = console.error, warn = console.warn;
   console.log = console.error = console.warn = () => {};   // silence the engine's own logging
   let noResult = 0;
-  const top5 = async (symptoms: string[], filters: { symptom_location?: string }) => {
+  const top5 = async (symptoms: string[], filters: { symptom_location?: string }, generals: string[] = []) => {
     if (ai) await new Promise((r) => setTimeout(r, 2500));   // stay under the model's request limit
     try {
-      const res = await search({ symptoms, filters });
+      const res = await search({ symptoms, filters, generals });
       return [...res.remedies, ...res.alternatives].slice(0, 5).map((r) => r.name);
     } catch (e: any) {
       // offline there is no scraper database: where the graded repertory finds nothing, production falls back to it
@@ -69,11 +69,11 @@ const rankOf = (top: string[], expect: string[]) => top.findIndex((n) => expect.
       // the patient skips the interview: only what was typed (and the category) is searched
       const typed = rankOf(await top5([...persona.typed, ...(persona.category ? [`category: ${persona.category}`] : [])], persona.category ? { symptom_location: persona.category } : {}), c.expect);
       const perfectIv = interview(persona, PERFECT);
-      const perfect = rankOf(await top5(perfectIv.symptoms, perfectIv.filters), c.expect);
+      const perfect = rankOf(await top5(perfectIv.symptoms, perfectIv.filters, perfectIv.generals), c.expect);
       const typicalRanks: number[] = [];   // added to the totals only when every run of the case finished (a failed search skips the whole case)
       for (let r = 0; r < runs; r++) {
         const iv = interview(persona, TYPICAL, r);
-        const rank = rankOf(await top5(iv.symptoms, iv.filters), c.expect);
+        const rank = rankOf(await top5(iv.symptoms, iv.filters, iv.generals), c.expect);
         typicalRanks.push(rank);
       }
       const found = typicalRanks.filter((r) => r >= 1).length;

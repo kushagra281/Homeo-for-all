@@ -464,6 +464,40 @@ export function answerPhrases(state: CaseState): string[] {
   return out;
 }
 
+/** The answers' phrases split in two: the complaint (topic and mind questions) and the general symptoms (chilly, thirst, sleep...). */
+export function answerPhraseGroups(state: CaseState): { complaint: string[]; general: string[] } {
+  const phrasesOf = (wantGeneral: boolean) => {
+    const out = new Set<string>();
+    for (const [id, labels] of Object.entries(state.answers)) {
+      const q = findQuestion(state, id);
+      if (!q || (q.topic === "general") !== wantGeneral) continue;
+      for (const label of labels) for (const p of q.options.find((x) => x.label === label)?.phrases || []) out.add(p);
+    }
+    return out;
+  };
+  const complaint = phrasesOf(false);
+  // a phrase that a complaint question also gave stays with the complaint
+  return { complaint: [...complaint], general: [...phrasesOf(true)].filter((p) => !complaint.has(p)) };
+}
+
+/**
+ * The body of a search request, built from the case: every symptom in one list (what is saved in the history), plus the
+ * general symptoms named again so the server can treat the complaint and the generals differently.
+ */
+export function searchRequest(state: CaseState): { symptoms: string[]; generals: string[]; filters: { symptom_location?: string } } {
+  const { complaint, general } = answerPhraseGroups(state);
+  return {
+    symptoms: [
+      ...state.symptoms.filter((s) => !s.startsWith("🔍")),   // "Analyzing..." placeholders are not symptoms
+      ...complaint,
+      ...general,
+      ...(state.category ? [`category: ${state.category}`] : []),
+    ].filter(Boolean),
+    generals: general,
+    filters: state.category ? { symptom_location: state.category } : {},
+  };
+}
+
 /** The psychology answers in the old format, for the "Mind and emotions considered" line. */
 export function psyAnswersOf(state: CaseState): PsyAnswers {
   const out: PsyAnswers = {};

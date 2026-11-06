@@ -117,6 +117,10 @@ router.post("/score", searchLimit, async (req, res) => {
       if (typeof v !== "string") return res.status(400).json({ message: `filter ${key} must be text` });
       filters[key] = v.slice(0, 60);
     }
+    // Optional: which of the symptoms are general symptoms (the rest is the complaint). Anything unreadable is ignored.
+    const generals = Array.isArray(req.body?.generals)
+      ? req.body.generals.filter((s: unknown): s is string => typeof s === "string").map((s: string) => s.slice(0, 300)).slice(0, 40)
+      : [];
     const hp = req.body?.healthProfile;
     const healthProfile = hp && typeof hp === "object" && !Array.isArray(hp) ? hp : undefined;
 
@@ -126,7 +130,7 @@ router.post("/score", searchLimit, async (req, res) => {
     );
 
     const healthHistory = typeof req.body?.healthHistory === "string" ? req.body.healthHistory.slice(0, 600) : undefined;
-    const result = await search({ symptoms, filters, healthProfile, healthHistory });
+    const result = await search({ symptoms, filters, healthProfile, healthHistory, generals });
     // Warning signs go with every result; the remedy ranking itself is not changed by them.
     const redFlags = detectRedFlags([...symptoms, healthHistory], healthProfile);
 

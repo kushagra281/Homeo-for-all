@@ -70,12 +70,14 @@ const rankOf = (top: string[], expect: string[]) => top.findIndex((n) => expect.
       const typed = rankOf(await top5([...persona.typed, ...(persona.category ? [`category: ${persona.category}`] : [])], persona.category ? { symptom_location: persona.category } : {}), c.expect);
       const perfectIv = interview(persona, PERFECT);
       const perfect = rankOf(await top5(perfectIv.symptoms, perfectIv.filters), c.expect);
-      let found = 0, typicalRanks: number[] = [];
+      const typicalRanks: number[] = [];   // added to the totals only when every run of the case finished (a failed search skips the whole case)
       for (let r = 0; r < runs; r++) {
         const iv = interview(persona, TYPICAL, r);
         const rank = rankOf(await top5(iv.symptoms, iv.filters), c.expect);
-        typicalRanks.push(rank); if (rank >= 1) found++; bump(total.typical, rank);
+        typicalRanks.push(rank);
       }
+      const found = typicalRanks.filter((r) => r >= 1).length;
+      for (const r of typicalRanks) bump(total.typical, r);
       n++; questions += perfectIv.asked.length;
       bump(total.direct, direct); bump(total.typed, typed); bump(total.perfect, perfect);
       for (const g of perfectIv.gaps) gaps.set(g, [...(gaps.get(g) || []), c.expect[0]]);

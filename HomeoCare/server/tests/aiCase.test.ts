@@ -104,6 +104,22 @@ t("the explanation only keeps remedies the engine ranked", () => {
 });
 
 // ── general review and per-case do's and don'ts ─────────────────────
+t("the AI stops at 12 and the prompt says what to spend them on", () => {
+  assert.equal(MAX_AI_QUESTIONS, 12);
+  const msgs = buildQuestionMessages(inputWith(3));
+  assert.ok(msgs[1].content.includes("Maximum questions: 12"));
+  const sys = msgs[0].content.toLowerCase();
+  for (const w of ["fixed number of questions", "time of day, motion or rest", "never ask one twice", "8 to 12 answers"]) assert.ok(sys.includes(w), w);
+  assert.ok(!sys.includes("10 to 14"));
+  assert.deepEqual(parseNextQuestion(GOOD, inputWith(12)), { done: true }, "the 13th question is never asked");
+  assert.equal(parseNextQuestion(GOOD, inputWith(11))?.done, false, "the 12th still is");
+});
+
+t("the question prompt covers heart complaints and the doctor warning", () => {
+  const sys = buildQuestionMessages(inputWith(3))[0].content.toLowerCase();
+  for (const w of ["heart complaints", "palpitations", "pain spreading to the arm or jaw", "doctor must be seen at once"]) assert.ok(sys.includes(w), w);
+});
+
 t("the question prompt asks for the general review and handles hair loss", () => {
   const sys = buildQuestionMessages(inputWith(3))[0].content.toLowerCase();
   for (const w of ["digestion", "thirst", "sleep", "perspiration", "chilly or hot", "cravings", "hair"]) assert.ok(sys.includes(w), w);

@@ -565,7 +565,7 @@ export default function RemedyScorer({
       );
     }
     const answeredCount = answerOrder.length;
-    const total = useAi ? 14 : aiDone ? answeredCount + Math.max(generalLeft(caseState), 1) : Math.max(plannedCount(caseState), answeredCount + 1);
+    const total = useAi ? 12 : aiDone ? answeredCount + Math.max(generalLeft(caseState), 1) : Math.max(plannedCount(caseState), answeredCount + 1);
     const progress = Math.min(95, (answeredCount / total) * 100);
     const topics = detectTopics(symptoms.filter((x) => !x.startsWith("🔍")), activeCategory);
     return (

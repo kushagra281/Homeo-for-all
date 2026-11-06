@@ -43,6 +43,7 @@ const TOPIC_PATTERNS: Array<[string, RegExp]> = [
   ["head", /head|migraine|sar\s*dard|sir\s*dard|temple|forehead|vertigo|dizz|chakkar/i],
   ["fever", /fever|bukhar|chill|shiver|temperature|sweat/i],
   ["stomach", /stomach|pet\b|abdom|nausea|vomit|acid|heartburn|bloat|gas\b|constipat|diarrh|loose motion|digest|appetite|indigest|ulti|kabz|dast|gastric|liver|colic|flatul/i],
+  ["heart", /heart(?!burn)|palpitat|cardi|angina|chest pain|blood pressure|hypertens|\bbp\b|dhadkan|flutter|\bdil\b/i],
   ["respiration", /cough|khansi|khasi|breath|asthma|wheez|sputum|phlegm|chest|saans|bronch/i],
   ["throat", /throat|gala\b|tonsil|cold\b|sneez|nose|nasal|sinus|jukam|zukam|hoarse|voice/i],
   ["skin", /skin|rash|itch|eczema|boil|pimple|acne|eruption|wart|hives|urticaria|khujli|daad|psoria|scab/i],
@@ -53,7 +54,7 @@ const TOPIC_PATTERNS: Array<[string, RegExp]> = [
 ];
 const CATEGORY_TOPIC: Record<string, string> = {
   "Mind": "mind", "Head": "head", "Fever": "fever", "Stomach": "stomach", "Respiration": "respiration",
-  "Skin": "skin", "Hands, Legs & Back": "joints", "Urinary System": "urinary", "Throat": "throat",
+  "Skin": "skin", "Hands, Legs & Back": "joints", "Urinary System": "urinary", "Throat": "throat", "Heart": "heart",
 };
 
 export function detectTopics(texts: string[], category = ""): string[] {
@@ -134,6 +135,21 @@ function mindQuestions(emotions: string[]): CaseQuestion[] {
 
 // ── Other topics ──────────────────────────────────────────────────
 const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
+  heart: [
+    { id: "heart-main", topic: "heart", multi: true, text: "What is the heart problem like?",
+      why: "The kind of trouble points to different remedies. Chest pain with sweating, breathlessness or pain spreading to the arm or jaw needs a doctor at once.",
+      options: [o("Palpitations: fast, thumping or skipped beats", "palpitation"), o("Chest pain or tightness", "chest pain"), o("Breathless on effort", "breathless exertion"), o("High blood pressure", "high blood pressure"), o("Fainting or dizziness", "fainting vertigo"), o("Swelling of the feet", "swelling feet")],
+      skipIf: /palpitat|chest pain|angina|blood pressure|hypertens|\bbp\b|dhadkan|faint|swelling/i },
+    { id: "heart-trigger", topic: "heart", multi: true, text: "What brings it on or makes it worse?", why: "What sets it off is one of the strongest guides.", covers: ["motion"],
+      options: [o("Effort or climbing stairs", "worse exertion"), o("Emotion or stress", "worse emotion"), o("Lying down", "worse lying"), o("At night", "worse night"), o("After meals", "worse eating"), o("After tea, coffee or smoking", "worse coffee"), o("Comes without any reason")] },
+    { id: "heart-better", topic: "heart", multi: true, text: "What helps?", why: "What relieves it is as important as what brings it on.", covers: ["better"],
+      options: [o("Rest", "better rest"), o("Lying down", "better lying"), o("Open air", "better open air"), o("Slow walking or movement", "better motion"), o("Nothing helps")] },
+    { id: "heart-with", topic: "heart", multi: true, text: "What comes along with it?",
+      why: "Accompanying symptoms complete the picture. Sweating with chest pain, or pain spreading to the left arm or jaw, needs a doctor at once.",
+      options: [o("Sweating", "perspiration"), o("Anxiety or fear of dying", "anxiety death"), o("Breathlessness", "dyspnoea"), o("Dizziness or fainting", "vertigo fainting"), o("Pain spreading to the left arm or jaw", "pain left arm"), o("Nausea", "nausea"), o("Cold hands and feet", "coldness extremities"), o(NONE)] },
+    { id: "heart-health", topic: "heart", multi: true, text: "Do you have any of these?", why: "These change how the complaint is understood.",
+      options: [o("Known high blood pressure", "high blood pressure"), o("Heart disease or heart surgery"), o("High cholesterol"), o("Diabetes"), o("Thyroid problem"), o("On long-term medicines"), o(NONE)] },
+  ],
   head: [
     { id: "head-type", topic: "head", multi: false, text: "What is the pain like?", why: "The kind of pain separates headache remedies.",
       options: [o("Throbbing", "throbbing headache"), o("Pressing", "pressing headache"), o("Burning", "burning headache"), o("Shooting", "shooting headache"), o("Dull ache", "dull headache"), o("Band-like", "band headache")],
@@ -261,9 +277,9 @@ const TOPIC_BANKS: Record<string, CaseQuestion[]> = {
 const GENERAL: CaseQuestion[] = [
   { id: "gen-temp", topic: "general", multi: false, text: "Are you generally chilly or too warm?", why: "Body heat is one of the most important general symptoms.", covers: ["temp"], required: true,
     options: [o("Chilly, wants warm clothes", "chilly"), o("Hot, wants open air", "hot"), o("Depends"), o("Cannot say")], skipIf: /chilly|warm blooded|hot patient|feel cold|feel hot|thand|garmi/i },
-  { id: "gen-time", topic: "general", multi: false, text: "At what time is the whole complaint worse?", why: "Time of aggravation is a classical modality.", covers: ["time"],
+  { id: "gen-time", topic: "general", multi: false, text: "At what time is the whole complaint worse?", why: "Time of aggravation is a classical modality.", covers: ["time"], required: true,
     options: [worse("Morning"), worse("Afternoon"), worse("Evening"), worse("Night"), worse("After midnight", "midnight"), o("No fixed time")], skipIf: /morning|afternoon|evening|night|midnight|subah|shaam|raat/i },
-  { id: "gen-motion", topic: "general", multi: false, text: "Motion or rest?", why: "Whether movement helps or hurts is a core modality.", covers: ["motion"],
+  { id: "gen-motion", topic: "general", multi: false, text: "Motion or rest?", why: "Whether movement helps or hurts is a core modality.", covers: ["motion"], required: true,
     options: [o("Better by motion", "better motion"), o("Worse by motion", "worse motion"), o("Better by rest", "better rest"), o("No effect")], skipIf: /motion|movement|rest\b|walking/i },
   { id: "gen-thirst", topic: "general", multi: false, text: "How is your thirst?", why: "Thirst is a general symptom that separates similar remedies.", covers: ["thirst"], required: true,
     options: [o("Very thirsty", "thirst"), o("Thirstless", "thirstless"), o("Normal")], skipIf: /thirst|pyaas/i },
@@ -299,6 +315,10 @@ const COVER_PATTERNS: Array<[string, RegExp]> = [
   ["sweat", /sweat|perspir/i],
   ["desire", /craving|crave|desire|aversion|dislike|food prefer|favou?rite food|longing/i],
   ["energy", /energy|tired|fatigue|exhaust|weakness/i],
+  // time of aggravation: asked about the time of day, or morning/evening/night named together or with worse/better
+  ["time", /what time|time of (?:the )?(?:day|night)|\b(?:morning|afternoon|evening|night|midnight)s?\b.{0,40}\b(?:morning|afternoon|evening|night|midnight)s?\b|\b(?:worse|better|aggravat\w*|relie\w*)\b.{0,50}\b(?:morning|afternoon|evening|night|midnight|daytime)\b|\b(?:morning|afternoon|evening|night|midnight|daytime)\b.{0,50}\b(?:worse|better|aggravat\w*)\b/i],
+  // motion or rest: a movement word next to worse/better/effect
+  ["motion", /\b(?:worse|better|aggravat\w*|relie\w*|help\w*|affect\w*|brings? on|triggers?|eases|settles)\b.{0,50}\b(?:motion|movement|mov\w+|exertion|exercise|walking|climbing|rest|lying|sitting|standing|position|activity|effort)\b|\b(?:motion|movement|exertion|exercise|walking|climbing|rest|lying|position|activity|effort)\b.{0,50}\b(?:worse|better|aggravat\w*|relie\w*|help\w*|affect\w*|brings? on|triggers?)\b/i],
 ];
 export function inferCovers(text: string): string[] {
   return COVER_PATTERNS.filter(([, re]) => re.test(text)).map(([k]) => k);

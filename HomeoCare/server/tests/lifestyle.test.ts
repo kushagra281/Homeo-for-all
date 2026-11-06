@@ -48,6 +48,9 @@ t("heart complaints and the Heart category get a heart list, not the general one
   }
   assert.deepEqual(lifestyleFor(["tiredness"], "Heart").topics, ["heart"]);
   assert.deepEqual(lifestyleFor(["hair loss"], "Heart").topics[0], "hair", "typed words win over the category");
+  assert.deepEqual(lifestyleFor(["Palpitations", "Acidity after meal"], "Heart").topics, ["heart", "stomach"], "a tie goes to the chosen category");
+  assert.deepEqual(lifestyleFor(["Palpitations", "Acidity after meal"]).topics.sort(), ["heart", "stomach"]);
+  assert.equal(lifestyleFor(["heartburn and acidity"]).topics[0], "stomach", "heartburn is a stomach complaint, not a heart one");
   const { lifestyle } = lifestyleFor(["palpitations"]);
   assert.ok(lifestyle.do.some((x) => /salt/i.test(x)) && lifestyle.avoid.some((x) => /smok/i.test(x)));
   assert.ok(lifestyle.do.some((x) => /doctor/i.test(x)), "a warning to see a doctor for chest pain");
@@ -68,7 +71,7 @@ t("every list topic is recognised from a sample word", () => {
   };
   assert.deepEqual([...LIFESTYLE_TOPICS].sort(), Object.keys(sample).sort(), "a sample word for every list");
   for (const [topic, word] of Object.entries(sample)) {
-    if (topic !== "heart") assert.ok(detectTopics([word]).includes(topic), `${word} -> ${topic}`);   // the heart is recognised in lifestyle.ts itself
+    assert.ok(detectTopics([word]).includes(topic), `${word} -> ${topic}`);
     assert.equal(lifestyleFor([word]).topics[0], topic, `${word} -> ${topic}`);
     const { lifestyle } = lifestyleFor([word]);
     assert.ok(lifestyle.do.length >= 4 && lifestyle.avoid.length >= 4, topic);

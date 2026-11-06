@@ -20,6 +20,13 @@ function interview(symptoms: string[], pick: Record<string, string[]> = {}, cate
   return { state, asked };
 }
 
+// An AI-written question as the app stores it while the interview runs.
+const aiQ = (id: string, text: string): CaseQuestion =>
+  ({ id, topic: "ai", text, why: "", multi: false, options: [{ label: "Yes", phrases: [] }, { label: "No", phrases: [] }] });
+
+// The general areas every case must cover before the interview can end.
+const REQUIRED = ["gen-temp", "gen-thirst", "gen-digestion", "gen-bowels", "gen-desire", "gen-sleep", "gen-sweat", "gen-time", "gen-motion"];
+
 t("topics are read from the symptoms, English and Hinglish", () => {
   assert.equal(detectTopics(["I feel anxiety and fear at night"])[0], "mind");
   assert.equal(detectTopics(["sar dard aur chakkar"])[0], "head");
@@ -28,6 +35,51 @@ t("topics are read from the symptoms, English and Hinglish", () => {
   assert.equal(detectTopics(["pain in knee joint"])[0], "joints");
   assert.deepEqual(detectTopics(["nothing recognisable"]), []);
   assert.equal(detectTopics([], "Skin")[0], "skin");   // the category button also sets the topic
+});
+
+t("the heart is its own topic: words, the Heart category, and heartburn staying a stomach complaint", () => {
+  for (const w of ["palpitations", "chest pain on climbing stairs", "high blood pressure", "dhadkan tez", "heart disease"]) {
+    assert.equal(detectTopics([w])[0], "heart", w);
+  }
+  assert.equal(detectTopics(["heartburn and acidity"])[0], "stomach", "heartburn is not a heart complaint");
+  assert.ok(!detectTopics(["heartburn"]).includes("heart"));
+  assert.equal(detectTopics(["tiredness"], "Heart")[0], "heart", "the Heart category sets the topic");
+  // the case from the app: a Heart-category case with an acidity word keeps heart first, stomach second
+  assert.deepEqual(detectTopics(["Palpitations", "Acidity after meal"], "Heart").slice(0, 2), ["heart", "stomach"]);
+});
+
+t("a heart case gets heart questions (with a doctor warning), then the general review", () => {
+  const { asked, state } = interview(["palpitations"], {}, "Heart");
+  for (const id of ["heart-trigger", "heart-better", "heart-with", "heart-health"]) assert.ok(asked.includes(id), `${id} is asked`);
+  assert.ok(!asked.includes("heart-main"), "palpitations already says the main complaint");
+  assert.ok(asked.indexOf("heart-trigger") < asked.indexOf("gen-temp"), "the heart comes before the general review");
+  const warn = ALL_QUESTIONS.filter((q) => q.id === "heart-with");
+  assert.ok(warn.length === 1 && /doctor/i.test(warn[0].why), "chest pain with sweating needs a doctor at once");
+  assert.ok(asked.length <= MAX_QUESTIONS && generalLeft(state) === 0);
+  // a heart case with no typed detail is asked what the problem is
+  assert.ok(interview(["tiredness"], {}, "Heart").asked.includes("heart-main"));
+});
+
+t("heart answers reach the search as phrases", () => {
+  const state: CaseState = { symptoms: ["palpitations"], category: "Heart", answers: {
+    "heart-trigger": ["Effort or climbing stairs", "Emotion or stress"], "heart-with": ["Sweating", "Anxiety or fear of dying"], "heart-health": ["Known high blood pressure"],
+  } };
+  const ph = answerPhrases(state);
+  for (const p of ["worse exertion", "worse emotion", "perspiration", "anxiety death", "high blood pressure"]) assert.ok(ph.includes(p), p);
+});
+
+t("time of day and motion are settled by what the AI asked", () => {
+  assert.ok(inferCovers("At what time of day is it worse?").includes("time"));
+  assert.ok(inferCovers("Is it worse in the morning or at night?").includes("time"));
+  assert.ok(inferCovers("Does walking or rest make it better or worse?").includes("motion"));
+  assert.ok(inferCovers("Does lying down relieve the pain?").includes("motion"));
+  assert.ok(!inferCovers("Where exactly is the pain?").includes("time"));
+  assert.ok(!inferCovers("Do you have any family history of heart disease?").includes("motion"));
+  const state: CaseState = { symptoms: ["x"], answers: { "ai-1": ["Evening"], "ai-2": ["Rest"] }, custom: {
+    "ai-1": aiQ("ai-1", "At what time of day is the pain worse?"), "ai-2": aiQ("ai-2", "Does movement or rest make it worse?"),
+  } };
+  const ids = queueFor(state, { generalOnly: true }).map((q) => q.id);
+  assert.ok(!ids.includes("gen-time") && !ids.includes("gen-motion"), "an AI question on time and motion settles them");
 });
 
 t("an emotional symptom is followed by psychology questions, not generic ones", () => {
@@ -163,10 +215,6 @@ t("a mixed complaint asks which emotion leads and covers every emotion named", (
 });
 
 // ── hair loss and the general review ────────────────────────────────
-// An AI-written question as the app stores it while the interview runs.
-const aiQ = (id: string, text: string): CaseQuestion =>
-  ({ id, topic: "ai", text, why: "", multi: false, options: [{ label: "Yes", phrases: [] }, { label: "No", phrases: [] }] });
-
 t("hair complaints are recognised, English and Hinglish", () => {
   assert.equal(detectTopics(["hair loss"])[0], "hair");
   assert.equal(detectTopics(["Hairloss", "Dandruff"])[0], "hair");
@@ -178,7 +226,7 @@ t("hair complaints are recognised, English and Hinglish", () => {
 t("a hair complaint gets hair questions, then the general review", () => {
   const { asked } = interview(["hair loss"]);
   assert.ok(asked.includes("hair-pattern") && asked.includes("hair-onset") && asked.includes("hair-health"));
-  for (const id of ["gen-digestion", "gen-bowels", "gen-sleep", "gen-sweat", "gen-desire", "gen-temp", "gen-thirst"]) {
+  for (const id of REQUIRED) {
     assert.ok(asked.includes(id), `${id} is part of the interview`);
   }
 });
@@ -203,13 +251,13 @@ t("what the AI already asked is not asked again in the general top-up", () => {
   };
   const ids = queueFor(state, { generalOnly: true }).map((q) => q.id);
   assert.ok(!ids.includes("gen-sleep") && !ids.includes("gen-thirst") && !ids.includes("gen-digestion"));
-  assert.deepEqual(ids.sort(), ["gen-bowels", "gen-desire", "gen-sweat", "gen-temp"], "asking about digestion does not settle the bowels");
-  assert.equal(generalLeft(state), 4);
+  assert.deepEqual(ids.sort(), ["gen-bowels", "gen-desire", "gen-motion", "gen-sweat", "gen-temp", "gen-time"], "asking about digestion does not settle the bowels");
+  assert.equal(generalLeft(state), 6);
 });
 
 t("a top-up question the AI skipped is still asked, and the top-up ends when all are settled", () => {
   const state: CaseState = { symptoms: ["hair loss"], answers: {}, custom: {} };
-  assert.equal(generalLeft(state), 7, "nothing covered: all seven required areas");
+  assert.equal(generalLeft(state), REQUIRED.length, "nothing covered: every required area is open");
   const seen: string[] = [];
   for (let i = 0; i < 10; i++) {
     const q = nextQuestion(state, { generalOnly: true });
@@ -217,7 +265,7 @@ t("a top-up question the AI skipped is still asked, and the top-up ends when all
     seen.push(q.id);
     state.answers[q.id] = [q.options[0].label];
   }
-  assert.deepEqual(seen.sort(), ["gen-bowels", "gen-desire", "gen-digestion", "gen-sleep", "gen-sweat", "gen-temp", "gen-thirst"]);
+  assert.deepEqual(seen.sort(), [...REQUIRED].sort());
   assert.equal(generalLeft(state), 0);
 });
 
@@ -230,7 +278,7 @@ t("a skipped AI question settles nothing, and the top-up works past the normal q
   const q = nextQuestion({ symptoms: ["x"], answers: many });
   assert.ok(q && q.required, "past the cap only a required general question can still come");
   const allRequired: Record<string, string[]> = { ...many };
-  for (const id of ["gen-temp", "gen-thirst", "gen-digestion", "gen-bowels", "gen-desire", "gen-sleep", "gen-sweat"]) allRequired[id] = ["Normal"];
+  for (const id of REQUIRED) allRequired[id] = ["Normal"];
   assert.equal(nextQuestion({ symptoms: ["x"], answers: allRequired }), null, "the full interview stops at the cap once the required ones are done");
 });
 
@@ -265,12 +313,12 @@ t("a long mind-led case still reaches every required general question, inside th
 
 t("required general questions come before the optional ones, and optional ones are the first to go", () => {
   const ids = queueFor({ symptoms: ["x"], answers: {} }).map((q) => q.id);
-  const lastRequired = Math.max(...ids.map((id, i) => (id.startsWith("gen-") && ["gen-temp", "gen-thirst", "gen-digestion", "gen-bowels", "gen-desire", "gen-sleep", "gen-sweat"].includes(id) ? i : -1)));
-  const firstOptional = Math.min(...ids.map((id, i) => (["gen-time", "gen-motion", "gen-air", "gen-energy"].includes(id) ? i : 999)));
+  const lastRequired = Math.max(...ids.map((id, i) => (REQUIRED.includes(id) ? i : -1)));
+  const firstOptional = Math.min(...ids.map((id, i) => (["gen-air", "gen-energy"].includes(id) ? i : 999)));
   assert.ok(lastRequired < firstOptional);
   // nearly at the cap: a topic question gives way to a required one
   const many: Record<string, string[]> = {};
-  for (let i = 0; i < MAX_QUESTIONS - 7; i++) many[`ai-${i}`] = ["Yes"];
+  for (let i = 0; i < MAX_QUESTIONS - REQUIRED.length; i++) many[`ai-${i}`] = ["Yes"];
   const q = nextQuestion({ symptoms: ["anxiety"], answers: many });
-  assert.ok(q && q.required, "13 answered and 7 required still open: the next one is a required one");
+  assert.ok(q && q.required, "only the required ones fit under the cap: the next one is a required one");
 });

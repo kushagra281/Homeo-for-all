@@ -243,16 +243,19 @@ const take = (a: string[], b: string[], max = 6): string[] => {
   return out;
 };
 
-// The case-taking engine has no heart topic (its questions are general ones), so the heart is recognised here.
-const HEART = /heart|palpitat|cardi|angina|chest pain|blood pressure|hypertens|\bbp\b|dhadkan|dil\b/i;
-
 /** The topics of the complaint (from what was typed; the chosen category only when nothing typed says more). */
 export function lifestyleTopics(symptoms: string[], category = ""): string[] {
   const typed = symptoms.filter((s) => !s.startsWith("🔍"));
   const found = detectTopics(typed);
-  if (typed.some((s) => HEART.test(s))) found.unshift("heart");
-  if (!found.length) found.push(...(category === "Heart" ? ["heart"] : detectTopics([], category)));
-  return [...new Set(found)].filter((t) => BY_TOPIC[t]);
+  const chosen = detectTopics([], category)[0];
+  if (!found.length) return (chosen ? [chosen] : []).filter((t) => BY_TOPIC[t]);
+  // the typed words decide; the chosen category only breaks a tie between topics the words name equally often
+  const count = (t: string) => typed.filter((s) => detectTopics([s]).includes(t)).length;
+  if (chosen && found.includes(chosen) && found[0] !== chosen && count(chosen) >= count(found[0])) {
+    found.splice(found.indexOf(chosen), 1);
+    found.unshift(chosen);
+  }
+  return found.filter((t) => BY_TOPIC[t]);
 }
 
 /** Do's and don'ts for the complaint: the first topic leads, a second adds a few items, nothing found gives the general list. */

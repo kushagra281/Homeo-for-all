@@ -25,6 +25,10 @@ export interface EngineOptions {
   unitCap: number;
   /** The first this-many symptoms are the patient's complaint; the rest are general symptoms (chilly, thirst, sleep...). Default: all are the complaint. */
   complaintUnits: number;
+  /** The first this-many symptoms are what the patient typed; the questions' answers follow, up to complaintUnits. */
+  typedUnits: number;
+  /** Weight of the rubrics of a question's answer next to the typed words (1 = equal). */
+  answerWeight: number;
   /** Weight of a general symptom's rubrics next to the complaint's (1 = equal). */
   generalWeight: number;
   /** The category the patient picked is a preference, not a wall: a rubric outside its chapter still counts this much (0 = strict filter). */
@@ -45,7 +49,9 @@ export const DEFAULT_OPTIONS: EngineOptions = {
   dropAncestors: false,
   unitCap: 6,
   complaintUnits: Infinity,
-  generalWeight: 0.5,
+  typedUnits: Infinity,
+  answerWeight: 0.3,
+  generalWeight: 0.3,
   outsideChapter: 0.75,
 };
 
@@ -186,7 +192,8 @@ export async function findRubrics(
       const general = i >= o.complaintUnits;   // the general symptoms count less than the complaint
       const soft = o.outsideChapter > 0 && chapterPats?.length ? chapterPats : undefined;   // soft: search everywhere, prefer the chapter
       const ranked = rankUnit(i, wk, await candidates(wk, store, soft ? undefined : chapterPats, o), o, soft);
-      perUnit[i] = general && o.generalWeight !== 1 ? ranked.map((r) => ({ ...r, relevance: r.relevance * o.generalWeight })) : ranked;
+      const unitWeight = general ? o.generalWeight : i >= o.typedUnits ? o.answerWeight : 1;
+      perUnit[i] = unitWeight !== 1 ? ranked.map((r) => ({ ...r, relevance: r.relevance * unitWeight })) : ranked;
     }
   }));
   const best = new Map<number, RankedRepertoryRubric>();

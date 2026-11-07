@@ -48,6 +48,7 @@ export interface Interview {
   state: CaseState;
   asked: string[];         // question ids, in order
   symptoms: string[];      // what the app sends to the search: typed words + answer phrases + category
+  answers: string[];       // the complaint-question phrases among them
   generals: string[];      // the general-symptom phrases among them, named again so the search can weigh them differently
   filters: { symptom_location?: string };
   gaps: string[];          // facts the patient has that no asked question offered and the typed words do not already say
@@ -80,7 +81,7 @@ export function interview(persona: Persona, noise: Noise = PERFECT, run = 0): In
   const req = searchRequest(state);
   const offered = new Set(asked.flatMap((id) => (ALL_QUESTIONS.find((q) => q.id === id)?.options || []).flatMap((o) => o.phrases.map(norm))));
   return {
-    state, asked, symptoms: req.symptoms, generals: req.generals, filters: req.filters,
+    state, asked, symptoms: req.symptoms, answers: req.answers, generals: req.generals, filters: req.filters,
     gaps: [...facts].filter((f) => BANK_PHRASES.has(f) && !offered.has(f) && !stated(f, persona.typed)),
     unknown: [...facts].filter((f) => !BANK_PHRASES.has(f)),
   };

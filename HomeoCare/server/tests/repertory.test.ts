@@ -154,6 +154,15 @@ await t("findRubrics: the chapter can be strict or only preferred, and a general
   assert.ok(Math.abs(rel(light, "Mind") - rel(soft, "Mind") * 0.5) < 1e-9);             // the general is halved
 });
 
+await t("findRubrics: what the questions added counts less than what the patient typed", async () => {
+  const units = unitKeywords(["pain", "anxiety"]);   // typed: pain; added by a question: anxiety
+  const equal = await findRubrics(units, store, undefined, { typedUnits: 1, complaintUnits: 2, answerWeight: 1 });
+  const light = await findRubrics(units, store, undefined, { typedUnits: 1, complaintUnits: 2, answerWeight: 0.4 });
+  const rel = (list: typeof equal, unit: number) => Math.max(...list.filter((r) => r.unit === unit).map((r) => r.relevance));
+  assert.equal(rel(light, 0), rel(equal, 0));                                          // the typed symptom is untouched
+  assert.ok(Math.abs(rel(light, 1) - rel(equal, 1) * 0.4) < 1e-9);                     // the answer is scaled
+});
+
 await t("findRubrics: a symptom with many rubrics cannot out-vote one with a single rubric", async () => {
   const many = Array.from({ length: 10 }, (_, i) => R(100 + i, null, "Back", `s${i}`, `Back > pain > s${i}`, 2, { "Bry.": 1 }));
   const s = memoryRepertoryStore([...ROWS, ...many], NAMES);

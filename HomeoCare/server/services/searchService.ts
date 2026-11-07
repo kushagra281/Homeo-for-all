@@ -249,7 +249,7 @@ export async function search(input: {
   const hasLatin = clean.some((s) => /[a-z]{3}/.test(s));
   const [extra, english] = await Promise.all([
     hasLatin ? expandSymptoms(clean) : Promise.resolve({}),
-    translateSymptoms(clean),
+    translateSymptoms(typed),   // only what the patient typed: the questions' phrases are English and must not come back at full weight
   ]);
   // Joined with spaces (not commas) so a modality word stays with what it modifies:
   // "headache worse night" keeps worse -> night.

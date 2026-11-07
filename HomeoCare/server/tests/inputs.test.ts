@@ -68,10 +68,10 @@ const server = app.listen(0, async () => {
     log("ok   /score: missing, null or empty filters, unknown filter keys and a non-object profile are fine");
 
     for (const generals of ["chilly", 5, { a: 1 }, [1, null, "chilly"], null]) {
-      const r = await post("/api/remedies/score", { symptoms: ["headache worse at night", "chilly"], generals });
+      const r = await post("/api/remedies/score", { symptoms: ["headache worse at night", "chilly"], generals, answers: generals });
       assert.equal(r.status, 200, `generals ${JSON.stringify(generals)} must not break the search, got ${r.status}`);
     }
-    log("ok   /score: an unreadable generals list is ignored, never a 500");
+    log("ok   /score: an unreadable generals or answers list is ignored, never a 500");
 
     // the report reader
     const report = (reply: string) => { modelReply = reply; return post("/api/remedies/analyze-report", { imageBase64: "AAAA", mimeType: "image/png" }); };

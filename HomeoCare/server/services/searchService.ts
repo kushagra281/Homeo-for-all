@@ -233,11 +233,14 @@ export async function search(input: {
   healthHistory?: string;
   /** The general symptoms (chilly, thirst, sleep...) that are also in `symptoms`; the rest of `symptoms` is the complaint. */
   generals?: string[];
+  /** The phrases that the case-taking questions added (also in `symptoms`); what is left is what the patient typed. */
+  answers?: string[];
 }): Promise<SearchResult> {
   const { symptoms, filters, healthProfile, healthHistory } = input;
   const clean = cleanSymptoms(symptoms);
   if (!clean.length) return emptyResult("scraper");
-  const { complaint, generals: generalsClean } = splitGenerals(clean, cleanSymptoms(input.generals || []));
+  const { complaint: rest, generals: generalsClean } = splitGenerals(clean, cleanSymptoms(input.generals || []));
+  const { complaint: typed, generals: answersClean } = splitGenerals(rest, cleanSymptoms(input.answers || []));
 
   // Optional AI help: extra search words for the patient's wording. {} when off, slow or failing.
   // Symptoms typed in another script (Devanagari...) have no Latin words to search: the AI turns them
@@ -269,7 +272,7 @@ export async function search(input: {
   const mode = repertoryMode();
   const repPromise = mode === "off"
     ? Promise.resolve(null)
-    : scoreWithRepertory(english.length ? [...complaint, english.join(" ")] : complaint, extra, sectionPats, undefined, generalsClean)
+    : scoreWithRepertory(english.length ? [...typed, english.join(" ")] : typed, extra, sectionPats, undefined, generalsClean, answersClean)
         .catch((e: any) => { console.error("[Search] graded repertory failed:", e?.message || e); return null; });
 
   type Scored = {

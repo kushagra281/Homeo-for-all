@@ -482,9 +482,10 @@ export function answerPhraseGroups(state: CaseState): { complaint: string[]; gen
 
 /**
  * The body of a search request, built from the case: every symptom in one list (what is saved in the history), plus the
- * general symptoms named again so the server can treat the complaint and the generals differently.
+ * answer phrases (`answers`: the complaint questions, `generals`: the general questions) named again, so the server can
+ * weigh what the patient typed, what the questions added, and the general symptoms differently.
  */
-export function searchRequest(state: CaseState): { symptoms: string[]; generals: string[]; filters: { symptom_location?: string } } {
+export function searchRequest(state: CaseState): { symptoms: string[]; answers: string[]; generals: string[]; filters: { symptom_location?: string } } {
   const { complaint, general } = answerPhraseGroups(state);
   return {
     symptoms: [
@@ -493,6 +494,7 @@ export function searchRequest(state: CaseState): { symptoms: string[]; generals:
       ...general,
       ...(state.category ? [`category: ${state.category}`] : []),
     ].filter(Boolean),
+    answers: complaint,
     generals: general,
     filters: state.category ? { symptom_location: state.category } : {},
   };

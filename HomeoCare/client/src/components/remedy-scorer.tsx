@@ -275,6 +275,7 @@ export default function RemedyScorer({
   const scoreMutation = useMutation({
     mutationFn: async (data: {
       symptoms: string[];
+      answers?: string[];
       generals?: string[];
       filters: any;
       healthProfile?: Record<string, any> | null;
@@ -285,6 +286,7 @@ export default function RemedyScorer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symptoms:      data.symptoms,
+          answers:       data.answers,
           generals:      data.generals,
           filters:       data.filters,
           healthProfile: data.healthProfile,
@@ -309,9 +311,9 @@ export default function RemedyScorer({
   });
 
   const submitToAI = (syms: string[], answers: Record<string, string[]>) => {
-    const { symptoms: allSymptoms, generals, filters: cleanFilters } = searchRequest({ symptoms: syms, category: activeCategory, answers, custom: aiCustom });
+    const { symptoms: allSymptoms, answers: answerList, generals, filters: cleanFilters } = searchRequest({ symptoms: syms, category: activeCategory, answers, custom: aiCustom });
 
-    scoreMutation.mutate({ symptoms: allSymptoms, generals, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
+    scoreMutation.mutate({ symptoms: allSymptoms, answers: answerList, generals, filters: cleanFilters, healthProfile, healthHistory: historyText.trim() });
   };
 
   const useAi = !aiOff && !aiDone;

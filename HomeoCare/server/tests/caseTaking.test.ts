@@ -203,9 +203,10 @@ t("the search request keeps the complaint apart from the general symptoms (and s
   assert.ok(g.general.length > 0 && g.general.every((p) => !g.complaint.includes(p)));
   const req = searchRequest(state);
   assert.deepEqual(req.generals, g.general);
+  assert.deepEqual(req.answers, g.complaint);
   assert.deepEqual(req.symptoms, ["headache", ...g.complaint, ...g.general, "category: Head"]);   // the placeholder is gone, the category line is last
   assert.deepEqual(req.filters, { symptom_location: "Head" });
-  assert.deepEqual(searchRequest({ symptoms: ["cough"], answers: {} }), { symptoms: ["cough"], generals: [], filters: {} });
+  assert.deepEqual(searchRequest({ symptoms: ["cough"], answers: {} }), { symptoms: ["cough"], answers: [], generals: [], filters: {} });
   assert.deepEqual([...answerPhrases(state)].sort(), [...g.complaint, ...g.general].sort());
 });
 

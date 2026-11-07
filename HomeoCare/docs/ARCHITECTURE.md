@@ -36,13 +36,16 @@ server/websocket.ts                community chat at /ws/chat
 5. If every query failed (database paused, wrong key) the route answers with an error - it does
    not pretend there are no results.
 
-Complaint and general symptoms (graded repertory): the request lists every symptom in `symptoms` and names the general ones again in
-`generals` (answers of the general question bank: chilly, thirst, sleep...). The server takes them out of the list again
-(`splitGenerals`), so the rest is the complaint (typed words, mind and topic answers). In the graded repertory the general
-symptoms count half (`generalWeight` 0.5), and the category the patient picked is a preference, not a wall: rubrics outside its chapter
-still count 0.75 and rank a little lower (`outsideChapter`). Without `generals` (older apps) everything is the complaint. Chosen with the patient
-simulator: typical patients found the remedy in the top 5 in 137 of 330 runs, against 113 with the strict filter and equal weights
-and 127 with no category at all.
+What the patient typed, what the questions added, and the general symptoms (graded repertory): the request lists every symptom in
+`symptoms` and names the question phrases again in `answers` (complaint questions) and `generals` (the general bank: chilly,
+thirst, sleep...). The server takes them out of the list again (`splitGenerals`), so the rest is what the patient typed. The typed
+words count fully; answers and generals count 0.3 each (`answerWeight`, `generalWeight`), because one answer becomes several
+broad phrases ("Fear" -> fear, anxiety, dread) that used to out-vote the patient's own specific words ("fear of heights").
+The category the patient picked is a preference, not a wall: rubrics outside its chapter still count 0.75 and rank a little
+lower (`outsideChapter`). If nothing was typed the answers count fully. Without `answers`/`generals` (older apps) everything
+is typed. Chosen with the patient simulator (66 patients x 5 runs, top 5): typical patients 113/330 with a strict filter and equal
+weights, 137 after the soft category (#62), 172 with answers and generals at 0.3. Answers at weight 0 gave 173: with this
+question bank the interview adds little beyond what the patient typed; it mainly must not do harm.
 
 ## Case-taking (the interview before the search)
 Two layers, one flow (`client/src/components/remedy-scorer.tsx`):

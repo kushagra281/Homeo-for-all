@@ -32,12 +32,18 @@ export async function scoreWithRepertory(
   chapterPats: string[] | undefined,
   store: RepertoryStore = repertoryStore(),
   generals: string[] = [],
+  answers: string[] = [],
 ): Promise<RepertoryOutcome | null> {
-  // The complaint comes first; the general symptoms (chilly, thirst, sleep...) follow and count less (see findRubrics).
-  const complaint = unitKeywords(texts, extra);
-  const units = [...complaint, ...unitKeywords(generals, extra)];
+  // What the patient typed comes first, then what the questions added, then the general symptoms (chilly, thirst, sleep...); the last two count less (see findRubrics).
+  const typedUnits = unitKeywords(texts, extra);
+  const answerUnits = unitKeywords(answers, extra);
+  const generalUnits = unitKeywords(generals, extra);
+  const units = [...typedUnits, ...answerUnits, ...generalUnits];
   if (!units.length) return null;
-  const rubrics = await findRubrics(units, store, chapterPats, { complaintUnits: complaint.length });
+  const rubrics = await findRubrics(units, store, chapterPats, {
+    typedUnits: typedUnits.length, complaintUnits: typedUnits.length + answerUnits.length,
+    ...(typedUnits.length ? {} : { answerWeight: 1 }),   // nothing typed: the answers are the complaint
+  });
   if (!rubrics.length) return null;
   const names = await store.remedyNames();
   const { remedies, contradictions } = scoreRemedies(toRubricMatches(rubrics), toScoringRows(rubrics, names));

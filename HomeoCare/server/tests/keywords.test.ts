@@ -27,9 +27,11 @@ t("modality direction scoring", () => {
   assert.equal(modalityScore("anxiety; better at night", m), -1);
   assert.equal(modalityScore("anxiety, night", m), 0);          // no direction word → neutral
 });
-t("negation: 'no thirst' / 'none' / severity are not searched", () => {
-  const k = keys(["fever with chills", "no thirst", "None", "Nothing", "Mild"]);
+t("negation: 'none' / severity are not searched, and 'no thirst' is not searched as thirst", () => {
+  const k = keys(["fever with chills", "no pain", "None", "Nothing", "Mild"]);
   assert.deepEqual(k.sort(), ["chill", "fever"].sort());
+  // "no thirst" is a symptom of its own in the repertory (Stomach > thirstless), not the word "thirst"
+  assert.deepEqual(keys(["no thirst"]), ["thirstless"]);
 });
 t("no more first-10 truncation: 13 distinct words, 12 kept by default, all kept with a higher cap", () => {
   const input = ["throbbing headache on right side worse from light and noise", "nausea and vomiting with dizziness", "restless sleep with anxiety at night", "Temples", "Rest"];
@@ -111,7 +113,7 @@ t("patient wording reaches the old text: 'desire cold drinks' finds 'Thirst for 
 t("broad words do not drag in unrelated symptoms ('loose tooth' is not diarrhoea, 'stool' is not 'motion')", () => {
   const loose = extractKeywords(["loose tooth"]).groups.find((g) => g.key === "loose")!;
   assert.ok(!groupMatches("diarrhoea; watery stools", loose));
-  const stool = extractKeywords(["hard stool"]).groups.find((g) => g.key === "stool")!;
+  const stool = extractKeywords(["offensive stool"]).groups.find((g) => g.key === "stool")!;
   assert.ok(!groupMatches("worse from motion", stool));
 });
 t("synonym lists stay within the 7-variant cap and never drop the patient's own word", () => {

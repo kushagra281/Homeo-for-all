@@ -4,16 +4,21 @@
 //   Live database (as run.ts):  SCRAPER_SUPABASE_URL / SCRAPER_SUPABASE_KEY, optional REPERTORY_ENGINE=off|on|hybrid
 //   Offline (no database):      REPERTORY_DUMP=<folder with rubrics.ndjson + remedies.ndjson>   (uses the graded repertory)
 //   RUNS=5 (typical patients per case), ONLY=<regex on case name>, VERBOSE=1 (print the search words of every patient),
-//   NO_CATEGORY=1 (patients do not pick a category, so no chapter filter: shows what the category costs or gains)
+//   NO_CATEGORY=1 (patients do not pick a category, so no chapter filter: shows what the category costs or gains),
+//   PERSONAS=heldout (the same patients typing in other everyday words)
 //
 // Four columns per case: direct, typed words only (the patient skips the interview), perfect patient (confirms every true
 // fact) and typical patient (forgets, misclicks, skips; RUNS different seeded patients, shown as how many found the
 // remedy in the top 5).
 import { appendFileSync } from "node:fs";
 import { CASES } from "./cases";
-import { PERSONAS } from "./personas";
+import { PERSONAS as FIRST_SET } from "./personas";
+import { heldoutPersonas } from "./personasHeldout";
 import { PERFECT, TYPICAL, interview } from "./patient";
 import { remedyMatches } from "./match";
+
+// PERSONAS=heldout: the same patients typing in other everyday words (personasHeldout.ts)
+const PERSONAS = process.env.PERSONAS === "heldout" ? heldoutPersonas(FIRST_SET) : FIRST_SET;
 
 const rankOf = (top: string[], expect: string[]) => top.findIndex((n) => expect.some((w) => remedyMatches(n, w))) + 1;   // 0 = not in top 5
 

@@ -1,4 +1,5 @@
 import { canonicalRemedyName } from "./remedyAliases";
+import { rewriteLay } from "./layPhrases";
 // server/utils/keywords.ts
 // KEYWORD EXTRACTION — turns patient symptom text into searchable keyword groups.
 //
@@ -46,6 +47,8 @@ const STOP = new Set([
   "days","weeks","months","years","day","week","month","year","time","times","often","lately","sometimes",
   "left","right","side","sided","mild","moderate","severe","unbearable","none","nothing","something","anything",
   "specific","pattern","change","type","kind","lot","little","bit","really","also","still","always","never",
+  // everyday verbs and adverbs that say nothing about the symptom ("keeps getting", "cannot bear")
+  "cannot","gets","getting","keep","keeps","slightest","badly","whenever","becomes","become","seem","seems","start","starts",
 ]);
 
 const NEGATORS = new Set(["no", "not", "without", "denies", "absent", "lack", "lacks"]);
@@ -243,6 +246,24 @@ const SYNONYMS: Record<string, string[]> = {
   indifferent:  ["indifference", "apathy"],
   oversensitive:["sensitive", "hypersens"],
   miscarriage:  ["abortion", "miscarr"],
+  // ── Words for movement and body parts the repertory writes differently ──
+  // (the stemmer leaves words of four letters alone, so "eyes" would never meet the chapter "Eye")
+  movement:     ["motion", "moving"],
+  move:         ["motion", "moving"],
+  moving:       ["motion"],
+  eyes:         ["eye"],
+  ears:         ["ear"],
+  legs:         ["leg"],
+  arms:         ["arm"],
+  hands:        ["hand"],
+  feet:         ["foot"],
+  toes:         ["toe"],
+  lips:         ["lip"],
+  nails:        ["nail"],
+  knees:        ["knee"],
+  hips:         ["hip"],
+  cheeks:       ["cheek"],
+  tonsils:      ["tonsil"],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -309,7 +330,7 @@ export function extractKeywords(symptoms: string[], maxGroups = 12, extra?: Reco
   const modalities: Modality[] = [];
 
   for (const phrase of symptoms) {
-    for (const clause of phrase.toLowerCase().split(/[,;.\n]+/)) {
+    for (const clause of phrase.toLowerCase().split(/[,;.\n]+/).map(rewriteLay)) {
       let dir: "worse" | "better" | null = null;
       let negate = false;
 

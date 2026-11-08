@@ -20,6 +20,7 @@ server/routes/profile.ts           /api/profile/me | save | history       (needs
 server/services/searchService.ts   the search pipeline (below)
 server/services/scoringService.ts  scores remedies from rubric rows
 server/utils/keywords.ts           patient text -> keyword groups (stemming, synonyms, worse/better, negation)
+server/utils/layPhrases.ts          everyday phrases -> the repertory's wording ("cannot bear movement" -> "motion agg."), applied before keywords
 server/utils/sections.ts           UI category -> section-name patterns
 server/utils/supabase.ts           all database access, ranking, caching
 server/utils/auth.ts, rateLimit.ts verified user id, per-IP limits
@@ -28,7 +29,9 @@ server/websocket.ts                community chat at /ws/chat
 
 ## Search pipeline (`POST /api/remedies/score`)
 1. `extractKeywords` turns the symptoms into keyword groups (variants + old Boericke/Kent vocabulary)
-   and modalities ("worse at night"). Negated words ("no thirst") are dropped.
+   and modalities ("worse at night"). Negated words ("no thirst") are dropped. Before the words are taken, each clause goes
+   through `rewriteLay` (`layPhrases.ts`): an everyday phrase that has a standard repertory wording is rewritten to it
+   ("short tempered" -> irritability, "burning when I pee" -> urination burning, "cannot lie still" -> restlessness).
 2. `searchScraperRubrics` finds matching rubrics in the scraper database and ranks them by how many
    keywords they contain (Kent lecture prose counts for less than a precise Boericke line).
 3. `getRemediesForRubricIds` loads the remedies of those rubrics; `scoreRemedies` ranks them.
@@ -46,6 +49,26 @@ lower (`outsideChapter`). If nothing was typed the answers count fully. Without 
 is typed. Chosen with the patient simulator (66 patients x 5 runs, top 5): typical patients 113/330 with a strict filter and equal
 weights, 137 after the soft category (#62), 172 with answers and generals at 0.3. Answers at weight 0 gave 173: with this
 question bank the interview adds little beyond what the patient typed; it mainly must not do harm.
+
+### Everyday words -> repertory words (`server/utils/layPhrases.ts`)
+A patient writes "cannot bear any movement"; the repertory says "motion agg.". Word by word, "cannot", "bear" and "movement" land
+on rubrics about cruelty and hurrying, so ~90 rules (plain data: [phrase pattern, repertory wording]) rewrite a clause BEFORE the keywords
+are taken. Every target word was checked against the graded repertory's own vocabulary (Repertorium Publicum, 74,480 rubrics).
+Rules fire only on a phrase with one clear meaning, never name a remedy or a diagnosis, are applied once top to bottom (negative
+forms first: "cannot lie still" is restlessness, not "better at rest"), and never re-match another rule's output. A phrase the patient denies ("no burning when I pee") is left as written, so the
+negation keeps working. The repertory's
+own phrases ("damp weather", "loss of sleep", "sensitive to touch", "cold applications") are deliberately left alone.
+Measured with the patient simulator (66 patients, top 5, offline, AI synonyms off), before -> after:
+
+| | Direct (regression check) | Typed words only | Perfect patient | Typical patient (5 runs) |
+|---|---|---|---|---|
+| Set A (wording the rules were written against) | 51 -> 52 | 38 -> 45 | 37 -> 38 | 172 -> 192 of 330 |
+| Held-out set B (same patients, different everyday words, written BEFORE the rules) | 51 -> 52 | 30 -> 39 | 36 -> 38 | 153 -> 165 of 330 |
+
+Set B is the honest number: its wording was fixed before the dictionary existed, so the gain there is not tuning to the test.
+`PERSONAS=heldout` runs it (`server/trials/personasHeldout.ts`). The simulator measures agreement with the textbook picture of
+each remedy, not whether the remedy is right for a real patient. Tried and left out: dropping query words that no rubric contains
+(neutral: B 165 -> 167 typical, perfect -1), and generalising modalities (no gain).
 
 ## Case-taking (the interview before the search)
 Two layers, one flow (`client/src/components/remedy-scorer.tsx`):
@@ -125,7 +148,8 @@ labelled as general guidance, not a prescription, and is the same for every reme
   (forgets a quarter of the facts, sometimes ticks a wrong box or skips; several seeded runs). Also lists true facts the interview
   never offered (gaps in the question bank).
   Offline: `REPERTORY_DUMP=<folder> npm run trials:patient` (graded repertory in memory, no database); `NO_CATEGORY=1` leaves out the
-  category (no chapter filter), `RUNS=5`, `ONLY=<regex>`, `VERBOSE=1` as in the file header.
+  category (no chapter filter), `RUNS=5`, `ONLY=<regex>`, `VERBOSE=1`, `PERSONAS=heldout` (the same patients in different everyday
+  words, see layPhrases above) as in the file header.
   Limits: it simulates the built-in bank (the app's fallback), not the AI's own questions; the persona facts are written from the
   textbook picture of each remedy in the interview's vocabulary and must not be tuned to the engine's output; with ~60 cases a difference
   of a few cases is not proof. AI synonyms are off offline, so lay-word numbers are lower than in production.

@@ -55,7 +55,8 @@ A patient writes "cannot bear any movement"; the repertory says "motion agg.". W
 on rubrics about cruelty and hurrying, so ~90 rules (plain data: [phrase pattern, repertory wording]) rewrite a clause BEFORE the keywords
 are taken. Every target word was checked against the graded repertory's own vocabulary (Repertorium Publicum, 74,480 rubrics).
 Rules fire only on a phrase with one clear meaning, never name a remedy or a diagnosis, are applied once top to bottom (negative
-forms first: "cannot lie still" is restlessness, not "better at rest"), and never re-match another rule's output. The repertory's
+forms first: "cannot lie still" is restlessness, not "better at rest"), and never re-match another rule's output. A phrase the patient denies ("no burning when I pee") is left as written, so the
+negation keeps working. The repertory's
 own phrases ("damp weather", "loss of sleep", "sensitive to touch", "cold applications") are deliberately left alone.
 Measured with the patient simulator (66 patients, top 5, offline, AI synonyms off), before -> after:
 

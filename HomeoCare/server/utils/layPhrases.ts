@@ -85,7 +85,7 @@ const RULES: Rule[] = [
   ["(?:keeps?|keep|constantly|always|again and again|every few minutes|very often) (?:feeling |having |getting )?(?:the )?(?:need|urge|desire|call) to (?:pee|urinate|pass urine|pass water|go to the toilet)|(?:constant|frequent|continuous|continual|repeated) (?:urination|peeing)|(?:cannot|cant) hold (?:my )?(?:urine|water)", "urination frequent"],
   ["\\bpee\\b|peeing|\\bpiss\\w*|passing (?:urine|water)|micturition|urinating|urinate", "urination"],
   ["(?:watery|runny|liquid) (?:motions?|stools?|bowels?|potty)", "diarrhea watery"],
-  ["(?:loose|soft) (?:motions?|stools?|bowels?|potty)|running stomach|the runs|stomach upset|upset stomach|loose and watery|bowel upset", "diarrhea"],
+  ["(?:loose|soft) (?:motions?|stools?|bowels?|potty)|running stomach|the runs|loose and watery", "diarrhea"],
   ["(?:hard|dry|difficult|painful|knotty|ball like|pellet like|lumpy)(?: dry)? (?:stools?|motions?|potty)|stools? (?:is |are )?(?:hard|dry|difficult|painful)|(?:cannot|cant|can not|unable to|difficult to|hard to|trouble|difficulty|straining to|strain to)(?: properly| fully| completely| well)? (?:pass|clear|empty|evacuate|move)(?: my| the)? (?:stools?|bowels?|motions?|potty)(?: properly| fully| completely| well| easily)?|never (?:feel|feels)(?: clear| empty| fully| satisfied)|incomplete (?:evacuation|motion)|(?:stool|bowels?) (?:does not|doesnt|not)(?: properly)? (?:clear|come|pass)|no urge (?:to (?:pass|go)|for stool)", "constipation"],
   ["(?:frequent|constant|continual|repeated|useless|ineffectual|ineffective|fruitless|persistent|strong) (?:urge|urging|desire|call)(?: for| to)?(?: pass)?(?: stools?| motions?| bowels?)? but (?:very |only )?(?:little|nothing|scanty|small|no result)(?: (?:comes|passes|results|is passed))?", "urging ineffectual"],
   ["(?:useless|ineffectual|ineffective|fruitless) (?:urge|urging|desire|call)", "urging ineffectual"],
@@ -114,7 +114,8 @@ const RULES: Rule[] = [
   ["drool\\w*|dribbl\\w+|(?:excessive|profuse|too much|a lot of|lot of|copious|increased) (?:saliva|salivation|spit)|saliva (?:flows|dripping|running|pours)|(?:mouth )?(?:fills|waters) with saliva|wet(?:s|ting)? (?:the )?pillow", "salivation"],
   ["(?:mouth|oral) (?:ulcers?|sores?)|(?:ulcers?|sores?|blisters?|canker sores?)(?: in| inside| on) (?:the |my )?(?:mouth|tongue|gums|cheeks?)|canker sores?|aphth\\w+", "mouth ulcers"],
   ["cracks?(?: at| in| on| around) (?:the )?(?:corners?|edges?|sides?) of (?:the |my )?(?:mouth|lips)|(?:corners?|edges?) of (?:the |my )?(?:mouth|lips)(?: (?:crack\\w*|sore|split))?|cracked (?:lips|mouth corners)|angular cheilitis|split lips|chapped lips|dry lips", "cracked lips corners mouth"],
-  ["(?:tickle|tickling|itch|itching|scratch|scratchy|irritation)(?: in| at| of)? (?:the |my )?(?:throat|windpipe|larynx)(?: (?:that )?(?:makes?|causes?|leads? to|triggers?) (?:me )?(?:to )?(?:cough\\w*))?", "throat tickling cough"],
+  ["(?:tickle|tickling|itch|itching|scratch|scratchy|irritation)(?: in| at| of)? (?:the |my )?(?:throat|windpipe|larynx) (?:that )?(?:makes?|causes?|leads? to|triggers?) (?:me )?(?:to )?cough\\w*", "throat tickling cough"],
+  ["scratchy throat|(?:scratch\\w*|scratchiness) (?:in|of) (?:the |my )?throat", "throat scratching"],
   ["(?:(?:chest|lungs?) (?:is |are )?(?:full|congested|rattling|rattles)(?: of| with)? (?:phlegm|mucus|catarrh)?|rattl\\w+(?: in)?(?: the)? (?:chest|lungs?)|(?:phlegm|mucus|catarrh) (?:that )?(?:rattles|will not come up|does not come up|cannot be (?:brought|coughed) up|stuck)|(?:cannot|cant|unable to|difficult to|hard to) (?:cough up|bring up|expel|expectorate) (?:the )?(?:phlegm|mucus|catarrh)?|loose rattling cough)(?: but nothing (?:comes|will come|comes out|comes up) up)?", "rattling expectoration difficult"],
   ["(?:out of breath|short of breath|shortness of breath|breathless\\w*|difficulty breathing|trouble breathing|difficult to breathe|hard to breathe|cannot breathe|cant breathe|gasping|air hunger|suffocat\\w+|smothering)", "dyspnea"],
   ["heart (?:is )?(?:racing|pounding|pounds|beating (?:fast|hard|rapidly|loudly|irregularly)|fluttering|flutters|thumping|skipping|jumping|galloping|hammering)|(?:racing|pounding|fast|rapid|irregular|fluttering|skipping) (?:heart|heartbeat|pulse)|heart (?:flutters?|skips?)|heartbeat (?:is )?(?:fast|rapid|irregular|strong)|feel (?:my )?heart(?:beat)?", "palpitation"],
@@ -125,11 +126,23 @@ const RULES: Rule[] = [
 
 const COMPILED: Array<[RegExp, string]> = RULES.map(([pattern, out]) => [new RegExp(`\\b(?:${pattern})\\b`, "g"), out]);
 
+// A phrase the patient DENIES ("no burning when I pee") is left as it is: the keyword step then drops the word after the
+// "no" as before. Rewritten, the negation would stick to the first word of the new wording only and the rest would be searched.
+// (The rules have no capture groups, so the second argument of the replace callback is the match offset.)
+const DENIAL = new Set(["no", "not", "without", "never", "nor", "neither", "none", "nothing", "denies", "absent", "lack", "lacks"]);
+
 /** One clause of the patient's words with every known everyday phrase put into the repertory's wording. */
 export function rewriteLay(clause: string): string {
   let t = ` ${clause.toLowerCase().replace(/['’`]/g, "").replace(/\s+/g, " ").trim()} `;
-  for (const [rx, out] of COMPILED) t = t.replace(rx, ` ${out} `);
+  for (const [rx, out] of COMPILED) {
+    t = t.replace(rx, (m: string, at: number, whole: string) => {
+      const prev = whole.slice(0, at).trimEnd().split(" ").pop() ?? "";
+      return DENIAL.has(prev) ? m : ` ${out} `;
+    });
+  }
   return t.replace(/\s+/g, " ").trim();
 }
 
 export const LAY_RULE_COUNT = COMPILED.length;
+/** For the tests: the rule patterns as written. */
+export const LAY_RULE_PATTERNS: string[] = RULES.map(([pattern]) => pattern);

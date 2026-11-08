@@ -1,6 +1,6 @@
 // Run: npx tsx server/tests/layPhrases.test.ts   (no database needed)
 import assert from "node:assert/strict";
-import { rewriteLay, LAY_RULE_COUNT } from "../utils/layPhrases";
+import { rewriteLay, LAY_RULE_COUNT, LAY_RULE_PATTERNS } from "../utils/layPhrases";
 import { extractKeywords } from "../utils/keywords";
 
 let n = 0; const t = (name: string, fn: () => void) => { fn(); n++; console.log("ok  ", name); };
@@ -51,6 +51,24 @@ t("it is wired into the keyword step: the patient's phrase reaches the repertory
   const m = extractKeywords(["cannot bear any movement"]).modalities;
   assert.deepEqual(m.map((x) => `${x.dir}:${x.key}`), ["worse:motion"]);
   assert.ok(keys(["short tempered"]).includes("irritability"));
+});
+t("a denied symptom is not rewritten into a positive one ('no burning when I pee')", () => {
+  assert.ok(rw("no burning when i pee").startsWith("no burning"), rw("no burning when i pee"));   // "burning" stays behind its "no"
+  assert.ok(!rw("without burning when i pee").includes("urination burning"));
+  assert.equal(rw("burning when i pee"), "urination burning");
+  assert.equal(rw("no appetite"), "appetite diminished");        // the rule's own words include the "no"
+  const k = extractKeywords(["no burning when I pee"]).groups.map((g) => g.key);
+  assert.ok(!k.includes("burn") && !k.includes("burning"), k.join());
+});
+t("a rewrite does not add a symptom the patient did not name", () => {
+  assert.equal(rw("scratchy throat"), "throat scratching");        // not 'cough'
+  assert.ok(!rw("itching in the throat").includes("cough"));
+  assert.ok(rw("tickle in the throat that makes me cough").includes("throat tickling cough"));
+  assert.ok(!rw("upset stomach").includes("diarrhea"));
+  assert.ok(rw("loose motions").includes("diarrhea"));
+});
+t("no rule has a capture group (the negation guard reads the match offset)", () => {
+  for (const src of LAY_RULE_PATTERNS) assert.equal(new RegExp(`${src}|`).exec("")!.length, 1, src.slice(0, 60));
 });
 t("rule list is non-trivial and every rule compiles", () => {
   assert.ok(LAY_RULE_COUNT > 60, String(LAY_RULE_COUNT));
